@@ -1,0 +1,21 @@
+{
+  "name": "doc-key",
+  "version": "1.0.0",
+  "description": "Doc Key - Document Management System",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "echo 'Run in separate terminals:' && echo 'Terminal 1: npm run dev:backend' && echo 'Terminal 2: npm run dev:frontend'",
+    "build:backend": "echo 'Backend is Node.js - no build needed'",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:frontend",
+    "backend:start": "node backend/src/index.js",
+    "frontend:start": "npm --prefix frontend run preview"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
+}
