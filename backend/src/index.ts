@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 
 import documentRoutes from './routes/documents';
+import monitorRoutes from './routes/monitors';
+import invoiceRoutes from './routes/invoices';
 
 dotenv.config();
 
@@ -15,6 +17,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api', documentRoutes);
+app.use('/api', monitorRoutes);
+app.use('/api', invoiceRoutes);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {

@@ -1,92 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
+import invoiceService from '../services/invoiceService';
 
 export default function InvoiceHome({ onNavigate = () => {} }: any) {
   const [invoices, setInvoices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
 
-  // Sample invoice documents data
-  const sampleInvoices = [
-    {
-      id: 'INV-001',
-      invoiceId: 'INV-001/2024',
-      customer: 'ABC Corporation',
-      invoiceNo: 'INV-2024-001',
-      invoiceDate: '2024-03-15',
-      dueDate: '2024-04-15',
-      amount: 45000.00,
-      status: 'Paid',
-      itemCount: 5,
-      lastUpdated: '2024-03-20',
-      color: 'green'
-    },
-    {
-      id: 'INV-002',
-      invoiceId: 'INV-002/2024',
-      customer: 'XYZ Industries',
-      invoiceNo: 'INV-2024-002',
-      invoiceDate: '2024-03-18',
-      dueDate: '2024-04-18',
-      amount: 62000.00,
-      status: 'Pending',
-      itemCount: 8,
-      lastUpdated: '2024-03-19',
-      color: 'yellow'
-    },
-    {
-      id: 'INV-003',
-      invoiceId: 'INV-003/2024',
-      customer: 'Global Traders',
-      invoiceNo: 'INV-2024-003',
-      invoiceDate: '2024-03-10',
-      dueDate: '2024-04-10',
-      billTo: 'Global Traders HQ',
-      shipTo: 'Phuket Warehouse',
-      paymentMethod: 'Bank Transfer',
-      amount: 28500.00,
-      status: 'Paid',
-      itemCount: 3,
-      lastUpdated: '2024-03-15',
-      color: 'green',
-      items: [
-        {
-          id: '1',
-          description: 'AGP - Wall Stud',
-          quantity: '400',
-          unitPrice: '45.00',
-          total: '18000.00'
-        },
-        {
-          id: '2',
-          description: 'AGP - Wall Track',
-          quantity: '300',
-          unitPrice: '35.00',
-          total: '10500.00'
-        }
-      ]
-    },
-    {
-      id: 'INV-004',
-      invoiceId: 'INV-004/2024',
-      customer: 'Summit Trading',
-      invoiceNo: 'INV-2024-004',
-      invoiceDate: '2024-03-19',
-      dueDate: '2024-04-19',
-      amount: 38000.00,
-      status: 'Overdue',
-      itemCount: 6,
-      lastUpdated: '2024-03-20',
-      color: 'red'
-    }
-  ];
-
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      setInvoices(sampleInvoices);
-      setIsLoading(false);
-    }, 500);
+    const fetchInvoices = async () => {
+      setIsLoading(true);
+      try {
+        const response = await invoiceService.getAll();
+        setInvoices(response.data.data || []);
+      } catch (error) {
+        alert('Failed to load invoices from API');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchInvoices();
   }, []);
 
   const handleAddInvoice = () => {
@@ -99,8 +33,12 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
 
   const handleDeleteInvoice = (invoice) => {
     if (window.confirm(`🗑️ Delete Invoice: ${invoice.invoiceId}?\n\nCustomer: ${invoice.customer}\n\nThis action cannot be undone.`)) {
-      setInvoices(invoices.filter(i => i.id !== invoice.id));
-      alert('✅ Invoice deleted successfully!');
+      invoiceService.delete(invoice.invoiceNo).then(() => {
+        setInvoices(invoices.filter((i: any) => i.invoiceNo !== invoice.invoiceNo));
+        alert('✅ Invoice deleted successfully!');
+      }).catch(() => {
+        alert('Failed to delete invoice');
+      });
     }
   };
 
@@ -193,7 +131,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
               {invoices.map((invoice) => (
                 <div
-                  key={invoice.id}
+                  key={invoice.invoiceNo}
                   className={`${darkMode ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-50'} border-2 ${getColorClass(invoice.color)} rounded-lg overflow-hidden transition-all`}
                 >
                   {/* Card Header */}

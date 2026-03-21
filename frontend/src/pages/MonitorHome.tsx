@@ -1,102 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
+import monitorService from '../services/monitorService';
 
 export default function MonitorHome({ onNavigate = () => {} }: any) {
   const [monitors, setMonitors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
 
-  // Sample monitor documents data
-  const sampleMonitors = [
-    {
-      id: 'MON-001',
-      monitorId: 'MON-001/2024',
-      customer: 'ABC Corporation',
-      poNo: 'PO-2024-001',
-      poDate: '2024-03-01',
-      issuedDate: '2024-03-15',
-      destination: 'Bangkok, Thailand',
-      totalQuantity: 150.50,
-      totalSales: 45000.00,
-      status: 'Active',
-      itemCount: 5,
-      lastUpdated: '2024-03-20',
-      color: 'blue'
-    },
-    {
-      id: 'MON-002',
-      monitorId: 'MON-002/2024',
-      customer: 'XYZ Industries',
-      poNo: 'PO-2024-002',
-      poDate: '2024-03-05',
-      issuedDate: '2024-03-18',
-      destination: 'Chiang Mai, Thailand',
-      totalQuantity: 200.00,
-      totalSales: 62000.00,
-      status: 'Active',
-      itemCount: 8,
-      lastUpdated: '2024-03-19',
-      color: 'green'
-    },
-    {
-      id: 'MON-003',
-      monitorId: 'MON-003/2024',
-      customer: 'Uniplaster Marketing Sdn. Bhd.',
-      poNo: 'PO-202603/0002',
-      poDate: '2026-03-13',
-      issuedDate: '2026-03-19',
-      requestDate: '',
-      destination: 'Chemor, Perak',
-      deliveredTo: '',
-      paymentTerm: '30 Days from Delivery Date',
-      totalQuantity: 700.00,
-      totalSales: 6868.00,
-      status: 'Completed',
-      itemCount: 2,
-      lastUpdated: '2026-03-19',
-      color: 'purple',
-      items: [
-        {
-          id: '0275',
-          product: 'AGP - Wall Stud',
-          packing: 'Packing : 51mm x 0.50 bmt x 3000 mm (TS5150)',
-          quantity: '400.000',
-          price: '10.18',
-          total: '4072.00'
-        },
-        {
-          id: '0274',
-          product: 'AGP - Wall Track',
-          packing: 'Packing : 51mm x 0.50 bmt x 3000 mm (TT5150)',
-          quantity: '300.000',
-          price: '9.32',
-          total: '2796.00'
-        }
-      ]
-    },
-    {
-      id: 'MON-004',
-      monitorId: 'MON-004/2024',
-      customer: 'Summit Trading',
-      poNo: 'PO-2024-004',
-      poDate: '2024-03-08',
-      issuedDate: '2024-03-19',
-      destination: 'Singapore',
-      totalQuantity: 120.00,
-      totalSales: 38000.00,
-      status: 'Active',
-      itemCount: 6,
-      lastUpdated: '2024-03-20',
-      color: 'cyan'
-    }
-  ];
-
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      setMonitors(sampleMonitors);
-      setIsLoading(false);
-    }, 500);
+    const fetchMonitors = async () => {
+      setIsLoading(true);
+      try {
+        const response = await monitorService.getAll();
+        setMonitors(response.data.data || []);
+      } catch (error) {
+        alert('Failed to load monitors from API');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMonitors();
   }, []);
 
   const handleAddMonitor = () => {
@@ -104,14 +28,17 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
   };
 
   const handleEditMonitor = (monitor) => {
-    alert(`✏️ Edit Monitor: ${monitor.monitorId}\n\nCustomer: ${monitor.customer}\n\nNavigating to form...`);
-    onNavigate('key-monitor');
+    onNavigate('key-monitor', monitor);
   };
 
   const handleDeleteMonitor = (monitor) => {
     if (window.confirm(`🗑️ Delete Monitor Document: ${monitor.monitorId}?\n\nCustomer: ${monitor.customer}\n\nThis action cannot be undone.`)) {
-      setMonitors(monitors.filter(m => m.id !== monitor.id));
-      alert('✅ Monitor document deleted successfully!');
+      monitorService.delete(monitor.monitorId).then(() => {
+        setMonitors(monitors.filter((m: any) => m.monitorId !== monitor.monitorId));
+        alert('✅ Monitor document deleted successfully!');
+      }).catch(() => {
+        alert('Failed to delete monitor');
+      });
     }
   };
 
@@ -203,7 +130,7 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
               {monitors.map((monitor) => (
                 <div
-                  key={monitor.id}
+                  key={monitor.monitorId}
                   className={`${darkMode ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-50'} border-2 ${getColorClass(monitor.color)} rounded-lg overflow-hidden transition-all`}
                 >
                   {/* Card Header */}

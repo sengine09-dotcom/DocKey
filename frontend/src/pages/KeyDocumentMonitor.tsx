@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout/Layout';
+import monitorService from '../services/monitorService';
 
 export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData = null }: any) {
   const [darkMode, setDarkMode] = useState(true);
@@ -413,8 +414,29 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
               <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
                 <button
                   type="button"
-                  onClick={() => {
-                    alert('💾 Monitor document saved successfully!');
+                  onClick={async () => {
+                    const monitorId =
+                      header.monitorId?.trim() || `M${Date.now().toString().slice(-9)}`;
+
+                    const payload = {
+                      header: {
+                        ...header,
+                        monitorId,
+                        totalQuantity,
+                        totalSales,
+                        status: 'Active',
+                        vat: 0,
+                      },
+                      items,
+                    };
+
+                    try {
+                      await monitorService.save(payload);
+                      alert('💾 Monitor document saved successfully!');
+                      setHeader((prev) => ({ ...prev, monitorId }));
+                    } catch (error) {
+                      alert('Failed to save monitor document');
+                    }
                   }}
                   className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
                 >

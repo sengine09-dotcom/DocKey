@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout/Layout';
+import invoiceService from '../services/invoiceService';
 
 export default function KeyInvoice({ onNavigate = () => {}, initialData = null }: any) {
   const [darkMode, setDarkMode] = useState(true);
@@ -367,8 +368,32 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
                 <button
                   type="button"
-                  onClick={() => {
-                    alert('💾 Invoice saved successfully!');
+                  onClick={async () => {
+                    const invoiceNo =
+                      header.invoiceNo?.trim() ||
+                      header.invoiceId?.trim() ||
+                      `I${Date.now().toString().slice(-7)}`;
+
+                    const payload = {
+                      header: {
+                        ...header,
+                        invoiceNo,
+                        invoiceId: invoiceNo,
+                        total,
+                        totalQuantity,
+                        vat: 0,
+                        statusOnline: 1,
+                      },
+                      items,
+                    };
+
+                    try {
+                      await invoiceService.save(payload);
+                      alert('💾 Invoice saved successfully!');
+                      setHeader((prev) => ({ ...prev, invoiceNo, invoiceId: invoiceNo }));
+                    } catch (error) {
+                      alert('Failed to save invoice');
+                    }
                   }}
                   className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
                 >
