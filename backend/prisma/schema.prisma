@@ -46,3 +46,51 @@ model MonitorDetail {
   @@index([idMonitor])
   @@map("tblMonitorDetail")
 }
+
+model Invoice {
+  invoiceNo      String          @id @map("InvoiceNo") @db.VarChar(8)
+  codeNo         String?         @map("CodeNo") @db.VarChar(20)
+  idMonitor      String          @map("IDMonitor") @db.VarChar(8)
+  isCancel       String?         @map("isCancel") @db.VarChar(1)
+  invDate        DateTime?       @map("InvDate")
+  poNo           String?         @map("PoNo") @db.VarChar(50)
+  doNo           String?         @map("DoNo") @db.VarChar(255)
+  customerId     String?         @map("CustomerID") @db.VarChar(10)
+  agentId        String?         @map("AgentID") @db.VarChar(5)
+  supplierId     String?         @map("SupplierID") @db.VarChar(3)
+  termId         String?         @map("TermID") @db.VarChar(10)
+  transportId    String?         @map("TransportID") @db.VarChar(10)
+  period         Int?            @map("Period")
+  destinationId  String?         @map("DestinationID") @db.VarChar(10)
+  eUserId        String?         @map("eUserID") @db.VarChar(10)
+  totalContainer Decimal?        @map("TotalContainer") @db.Decimal(18, 0)
+  totalAmount    Decimal?        @map("TotalAmount") @db.Decimal(19, 4)
+  totalQuantity  Decimal?        @map("TotalQuantity") @db.Decimal(18, 2)
+  comRate        Decimal?        @map("ComRate") @db.Decimal(19, 4)
+  remark         String?         @map("Remark") @db.VarChar(255)
+  vat            Int             @map("Vat")
+  statusOnline   Int             @map("StatusOnline")
+  invoiceDetails InvoiceDetail[]
+
+  @@map("tblInvoice")
+}
+
+model InvoiceDetail {
+  iid        Int      @id @default(autoincrement()) @map("IID")
+  invoiceNo  String   @map("InvoiceNo") @db.VarChar(8)
+  item       String?  @map("Item") @db.VarChar(2)
+  productId  String   @map("ProductID") @db.VarChar(5)
+  quantity   Decimal? @map("Quantity") @db.Decimal(18, 3)
+  weight     Decimal? @map("Weight") @db.Decimal(18, 3)
+  price      Decimal? @map("Price") @db.Decimal(10, 3)
+  unitId     String?  @map("UnitID") @db.VarChar(3)
+  total      Decimal? @map("Total") @db.Decimal(18, 3)
+  supplierId String?  @map("SupplierID") @db.VarChar(10)
+  comRate    Decimal? @map("ComRate") @db.Decimal(18, 2)
+  bag        Int?     @map("Bag")
+
+  invoice Invoice @relation(fields: [invoiceNo], references: [invoiceNo], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([invoiceNo])
+  @@map("tblInvoiceDetail")
+}
