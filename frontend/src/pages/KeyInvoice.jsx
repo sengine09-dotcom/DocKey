@@ -1,27 +1,28 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout/Layout';
 
-export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
+export default function KeyInvoice({ onNavigate = () => {} }) {
   const [darkMode, setDarkMode] = useState(true);
 
   const [header, setHeader] = useState({
-    monitorId: '',
-    issuedDate: '',
+    invoiceId: '',
+    invoiceDate: '',
     customer: '',
-    poNo: '',
-    poDate: '',
-    requestDate: '',
-    destination: '',
-    deliveredTo: '',
-    paymentTerm: '30 Days from Delivery Date',
+    invoiceNo: '',
+    dueDate: '',
+    billTo: '',
+    shipTo: '',
+    paymentMethod: 'Bank Transfer',
   });
 
   const [items, setItems] = useState([
-    { id: '', product: '', packing: '', quantity: '', price: '', total: '' },
+    { id: '', description: '', quantity: '', unitPrice: '', total: '' },
   ]);
 
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
-  const totalSales = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+  const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+  const tax = subtotal * 0.1;
+  const total = subtotal + tax;
 
   const handleHeaderChange = (field, value) => {
     setHeader((prev) => ({ ...prev, [field]: value }));
@@ -32,9 +33,9 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
       const next = [...prev];
       const updated = { ...next[index], [field]: value };
 
-      if (field === 'quantity' || field === 'price') {
+      if (field === 'quantity' || field === 'unitPrice') {
         const qty = field === 'quantity' ? value : updated.quantity;
-        const price = field === 'price' ? value : updated.price;
+        const price = field === 'unitPrice' ? value : updated.unitPrice;
         const qtyNum = parseFloat(qty) || 0;
         const priceNum = parseFloat(price) || 0;
         updated.total = qtyNum && priceNum ? (qtyNum * priceNum).toFixed(2) : '';
@@ -48,7 +49,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
   const addItemRow = () => {
     setItems((prev) => [
       ...prev,
-      { id: '', product: '', packing: '', quantity: '', price: '', total: '' },
+      { id: '', description: '', quantity: '', unitPrice: '', total: '' },
     ]);
   };
 
@@ -61,7 +62,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
       darkMode={darkMode}
       setDarkMode={setDarkMode}
       onNavigate={onNavigate}
-      currentPage="key-monitor"
+      currentPage="key-invoice"
     >
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="max-w-5xl mx-auto px-6 py-10">
@@ -76,26 +77,26 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                 darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-900'
               }`}
             >
-              Individual Customer Monitoring
+              Invoice Management
             </div>
 
             <div className="px-6 py-6 space-y-4 text-xs">
-              {/* Top row: Monitor ID / Issued Date */}
+              {/* Top row: Invoice ID / Invoice Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Monitor ID :</span>
+                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice ID :</span>
                   <input
                     className={`flex-1 border px-2 py-1 text-xs ${
                       darkMode
                         ? 'bg-gray-900 border-gray-600 text-gray-100'
                         : 'bg-white border-gray-300 text-gray-900'
                     }`}
-                    value={header.monitorId}
-                    onChange={(e) => handleHeaderChange('monitorId', e.target.value)}
+                    value={header.invoiceId}
+                    onChange={(e) => handleHeaderChange('invoiceId', e.target.value)}
                   />
                 </div>
                 <div className="flex items-center gap-2 justify-end">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Issued Date :</span>
+                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice Date :</span>
                   <input
                     type="date"
                     className={`border px-2 py-1 text-xs ${
@@ -103,8 +104,8 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                         ? 'bg-gray-900 border-gray-600 text-gray-100'
                         : 'bg-white border-gray-300 text-gray-900'
                     }`}
-                    value={header.issuedDate}
-                    onChange={(e) => handleHeaderChange('issuedDate', e.target.value)}
+                    value={header.invoiceDate}
+                    onChange={(e) => handleHeaderChange('invoiceDate', e.target.value)}
                   />
                 </div>
               </div>
@@ -123,22 +124,22 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                 />
               </div>
 
-              {/* PO row */}
+              {/* Invoice row */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Po No :</span>
+                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice No :</span>
                   <input
                     className={`flex-1 border px-2 py-1 text-xs ${
                       darkMode
                         ? 'bg-gray-900 border-gray-600 text-gray-100'
                         : 'bg-white border-gray-300 text-gray-900'
                     }`}
-                    value={header.poNo}
-                    onChange={(e) => handleHeaderChange('poNo', e.target.value)}
+                    value={header.invoiceNo}
+                    onChange={(e) => handleHeaderChange('invoiceNo', e.target.value)}
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Po Date :</span>
+                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Due Date :</span>
                   <input
                     type="date"
                     className={`flex-1 border px-2 py-1 text-xs ${
@@ -146,59 +147,44 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                         ? 'bg-gray-900 border-gray-600 text-gray-100'
                         : 'bg-white border-gray-300 text-gray-900'
                     }`}
-                    value={header.poDate}
-                    onChange={(e) => handleHeaderChange('poDate', e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                    Request Date :
-                  </span>
-                  <input
-                    type="date"
-                    className={`flex-1 border px-2 py-1 text-xs ${
-                      darkMode
-                        ? 'bg-gray-900 border-gray-600 text-gray-100'
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
-                    value={header.requestDate}
-                    onChange={(e) => handleHeaderChange('requestDate', e.target.value)}
+                    value={header.dueDate}
+                    onChange={(e) => handleHeaderChange('dueDate', e.target.value)}
                   />
                 </div>
               </div>
 
-              {/* Destination */}
+              {/* Bill To */}
               <div className="flex items-center gap-2">
-                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Destination :</span>
+                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Bill To :</span>
                 <input
                   className={`flex-1 border px-2 py-1 text-xs ${
                     darkMode
                       ? 'bg-gray-900 border-gray-600 text-gray-100'
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
-                  value={header.destination}
-                  onChange={(e) => handleHeaderChange('destination', e.target.value)}
+                  value={header.billTo}
+                  onChange={(e) => handleHeaderChange('billTo', e.target.value)}
                 />
               </div>
 
-              {/* Delivered to */}
+              {/* Ship To */}
               <div className="flex items-center gap-2">
-                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Delivered to :</span>
+                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Ship To :</span>
                 <input
                   className={`flex-1 border px-2 py-1 text-xs ${
                     darkMode
                       ? 'bg-gray-900 border-gray-600 text-gray-100'
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
-                  value={header.deliveredTo}
-                  onChange={(e) => handleHeaderChange('deliveredTo', e.target.value)}
+                  value={header.shipTo}
+                  onChange={(e) => handleHeaderChange('shipTo', e.target.value)}
                 />
               </div>
 
-              {/* Payment Term */}
+              {/* Payment Method */}
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                  Payment Term :
+                  Payment Method :
                 </span>
                 <input
                   className={`flex-1 border px-2 py-1 text-xs ${
@@ -206,8 +192,8 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                       ? 'bg-gray-900 border-gray-600 text-gray-100'
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
-                  value={header.paymentTerm}
-                  onChange={(e) => handleHeaderChange('paymentTerm', e.target.value)}
+                  value={header.paymentMethod}
+                  onChange={(e) => handleHeaderChange('paymentMethod', e.target.value)}
                 />
               </div>
 
@@ -218,15 +204,14 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                 } pt-3`}
               >
                 <div
-                  className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] font-semibold px-2 py-1 ${
+                  className={`grid grid-cols-[60px,2fr,100px,100px,110px,40px] text-[11px] font-semibold px-2 py-1 ${
                     darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-900'
                   }`}
                 >
                   <div>Item</div>
-                  <div>ID</div>
-                  <div>Product</div>
+                  <div>Description</div>
                   <div>Quantity</div>
-                  <div>Price</div>
+                  <div>Unit Price</div>
                   <div>Total</div>
                   <div></div>
                 </div>
@@ -234,7 +219,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                 {items.map((item, idx) => (
                   <div
                     key={idx}
-                    className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] px-2 py-1 border-b ${
+                    className={`grid grid-cols-[60px,2fr,100px,100px,110px,40px] text-[11px] px-2 py-1 border-b ${
                       darkMode ? 'border-gray-700' : 'border-gray-200'
                     }`}
                   >
@@ -246,30 +231,9 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                             ? 'bg-gray-900 border-gray-600 text-gray-100'
                             : 'bg-white border-gray-300 text-gray-900'
                         }`}
-                        value={item.id}
-                        onChange={(e) => handleItemChange(idx, 'id', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <input
-                        className={`w-full border px-1 py-0.5 ${
-                          darkMode
-                            ? 'bg-gray-900 border-gray-600 text-gray-100'
-                            : 'bg-white border-gray-300 text-gray-900'
-                        }`}
-                        placeholder="Product"
-                        value={item.product}
-                        onChange={(e) => handleItemChange(idx, 'product', e.target.value)}
-                      />
-                      <input
-                        className={`w-full border px-1 py-0.5 text-[10px] italic ${
-                          darkMode
-                            ? 'bg-gray-900 border-gray-600 text-gray-300'
-                            : 'bg-white border-gray-300 text-gray-700'
-                        }`}
-                        placeholder="Packing"
-                        value={item.packing}
-                        onChange={(e) => handleItemChange(idx, 'packing', e.target.value)}
+                        placeholder="Item description"
+                        value={item.description}
+                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
                       />
                     </div>
                     <div>
@@ -293,8 +257,8 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                             ? 'bg-gray-900 border-gray-600 text-gray-100'
                             : 'bg-white border-gray-300 text-gray-900'
                         }`}
-                        value={item.price}
-                        onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
+                        value={item.unitPrice}
+                        onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
                       />
                     </div>
                     <div>
@@ -340,29 +304,21 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                 <div className="flex justify-end gap-16">
                   <div className="flex gap-2">
                     <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                      Total Quantity (MT) :
+                      Subtotal :
                     </span>
                     <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>
-                      {totalQuantity.toFixed(2)}
+                      {subtotal.toFixed(2)}
                     </span>
                   </div>
                 </div>
                 <div className="flex justify-end gap-16">
                   <div className="flex gap-2">
                     <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                      Total Sales :
+                      Tax (10%) :
                     </span>
                     <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>
-                      {totalSales.toFixed(2)}
+                      {tax.toFixed(2)}
                     </span>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-16">
-                  <div className="flex gap-2">
-                    <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                      Add GST @ 0% :
-                    </span>
-                    <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>0.00</span>
                   </div>
                 </div>
                 <div className="flex justify-end gap-16 font-semibold">
@@ -371,7 +327,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                       Total Amount Due :
                     </span>
                     <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>
-                      {totalSales.toFixed(2)}
+                      {total.toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -382,7 +338,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                 <button
                   type="button"
                   onClick={() => {
-                    alert('💾 Monitor document saved successfully!');
+                    alert('💾 Invoice saved successfully!');
                   }}
                   className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
                 >
@@ -393,7 +349,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                   type="button"
                   onClick={() => {
                     if (window.confirm('❌ Cancel? Any unsaved changes will be lost.')) {
-                      onNavigate('monitor-home');
+                      onNavigate('invoice-home');
                     }
                   }}
                   className="flex items-center gap-2 px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
@@ -404,7 +360,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                 <button
                   type="button"
                   onClick={() => {
-                    alert('🖨️ Print Monitor Document\n\nOpening print dialog...');
+                    alert('🖨️ Print Invoice\n\nOpening print dialog...');
                     window.print();
                   }}
                   className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
@@ -420,5 +376,3 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
     </Layout>
   );
 }
-
-

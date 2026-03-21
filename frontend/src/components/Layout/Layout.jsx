@@ -14,11 +14,15 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
-    { id: 'documents', label: 'Documents', icon: '📄', href: '/documents' },
-    { id: 'monitor', label: 'Monitor', icon: '🖥️', href: '/monitor' },
+    { id: 'documents', label: 'Documents', icon: '📄', href: '/documents', hasSubmenu: true },
     { id: 'reports', label: 'Reports', icon: '📈', href: '/reports' },
     { id: 'upload', label: 'Upload', icon: '⬆️', href: '/upload' },
     { id: 'settings', label: 'Settings', icon: '⚙️', href: '/settings' },
+  ];
+
+  const documentSubmenu = [
+    { id: 'monitor-home', label: 'Monitor', icon: '🖥️', href: '/monitor' },
+    { id: 'invoice-home', label: 'Invoice', icon: '📋', href: '/invoice' },
   ];
 
   const handleMenuClick = (id) => {
@@ -27,10 +31,14 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('dashboard');
     } else if (id === 'documents') {
       onNavigate('documents');
-    } else if (id === 'monitor') {
-      onNavigate('monitor');
+    } else if (id === 'monitor-home') {
+      onNavigate('monitor-home');
+    } else if (id === 'invoice-home') {
+      onNavigate('invoice-home');
     } else if (id === 'key-monitor') {
       onNavigate('key-monitor');
+    } else if (id === 'key-invoice') {
+      onNavigate('key-invoice');
     } else if (id === 'reports') {
       alert('📈 Reports - Coming Soon!');
     } else if (id === 'upload') {
@@ -73,7 +81,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   handleMenuClick(item.id);
                 }}
                 className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 group ${
-                  currentPage === item.id
+                  currentPage === item.id || (item.id === 'documents' && (currentPage === 'monitor-home' || currentPage === 'key-monitor' || currentPage === 'invoice-home' || currentPage === 'key-invoice'))
                     ? darkMode
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'bg-blue-600 text-white shadow-md'
@@ -89,7 +97,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 {sidebarOpen && (
                   <span className="font-medium whitespace-nowrap text-sm">{item.label}</span>
                 )}
-                {sidebarOpen && currentPage === item.id && (
+                {sidebarOpen && (currentPage === item.id || (item.id === 'documents' && (currentPage === 'monitor-home' || currentPage === 'key-monitor' || currentPage === 'invoice-home' || currentPage === 'key-invoice'))) && (
                   <div className="ml-auto w-1 h-6 bg-white rounded-full"></div>
                 )}
               </a>
@@ -97,33 +105,24 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
               {/* Submenu under Documents */}
               {item.id === 'documents' && sidebarOpen && (
                 <div className="space-y-1">
-                  <button
-                    onClick={() => handleMenuClick('key-monitor')}
-                    className={`ml-12 mt-1 flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium ${
-                      currentPage === 'key-monitor'
-                        ? darkMode
-                          ? 'bg-blue-700 text-white'
-                          : 'bg-blue-100 text-blue-900'
-                        : darkMode
-                        ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                  >
-                    <span className="text-sm">🖥️</span>
-                    <span>Monitor</span>
-                  </button>
-
-                  <button
-                    onClick={() => alert('Invoice - Coming Soon!')}
-                    className={`ml-12 flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium ${
-                      darkMode
-                        ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                  >
-                    <span className="text-sm">📄</span>
-                    <span>Invoice</span>
-                  </button>
+                  {documentSubmenu.map((submenu) => (
+                    <button
+                      key={submenu.id}
+                      onClick={() => handleMenuClick(submenu.id)}
+                      className={`ml-12 mt-1 w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                        currentPage === submenu.id || currentPage === 'key-monitor' && submenu.id === 'monitor-home' || currentPage === 'key-invoice' && submenu.id === 'invoice-home'
+                          ? darkMode
+                            ? 'bg-blue-700 text-white'
+                            : 'bg-blue-100 text-blue-900'
+                          : darkMode
+                          ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="text-sm">{submenu.icon}</span>
+                      <span>{submenu.label}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -171,7 +170,14 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 flex items-center justify-between shadow-sm relative`}>
           <div className="flex items-center gap-3">
             <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-              {menuItems.find(m => m.id === currentPage)?.label || 'Dashboard'}
+              {(() => {
+                let label = menuItems.find(m => m.id === currentPage)?.label || '';
+                if (!label && currentPage === 'monitor-home') label = '🖥️ Monitor';
+                if (!label && currentPage === 'key-monitor') label = '🖥️ Individual Customer Monitoring';
+                if (!label && currentPage === 'invoice-home') label = '📋 Invoice Management';
+                if (!label && currentPage === 'key-invoice') label = '📋 Invoice Management';
+                return label || 'Dashboard';
+              })()}
             </h1>
             <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
               {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
