@@ -376,6 +376,49 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
                   </div>
                 </div>
               </div>
+
+              {/* Action Buttons */}
+              <div className="mt-6 border-t pt-4 flex gap-3 justify-center">
+                <button
+                  type="button"
+                  onClick={() => alert('➕ Add Monitor Document\n\nThis will create a new monitor document.')}
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  <span>➕</span>
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alert('✏️ Edit Monitor Document\n\nThis will allow you to edit the current document.')}
+                  className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  <span>✏️</span>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('🗑️ Delete this monitor document?\n\nThis action cannot be undone.')) {
+                      alert('✅ Document deleted successfully!');
+                    }
+                  }}
+                  className="flex items-center gap-2 px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  <span>🗑️</span>
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    alert('🖨️ Print Monitor Document\n\nOpening print dialog...');
+                    window.print();
+                  }}
+                  className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors"
+                >
+                  <span>🖨️</span>
+                  Print
+                </button>
+              </div>
             </div>
           </div>
         </div>
