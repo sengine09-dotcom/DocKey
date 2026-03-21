@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 
-export default function MonitorHome({ onNavigate = () => {} }) {
+export default function MonitorHome({ onNavigate = () => {} }: any) {
   const [monitors, setMonitors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(true);

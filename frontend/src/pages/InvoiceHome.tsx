@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 
-export default function InvoiceHome({ onNavigate = () => {} }) {
+export default function InvoiceHome({ onNavigate = () => {} }: any) {
   const [invoices, setInvoices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(true);

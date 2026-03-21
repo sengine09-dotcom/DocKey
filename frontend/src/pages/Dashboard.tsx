@@ -5,7 +5,7 @@ import SummaryCard from '../components/Dashboard/SummaryCard';
 import DocumentTable from '../components/Dashboard/DocumentTable';
 import documentService from '../services/documentService';
 
-export default function Dashboard({ onNavigate = () => {} }) {
+export default function Dashboard({ onNavigate = () => {} }: any) {
   const [documents, setDocuments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');

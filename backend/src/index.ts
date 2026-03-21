@@ -1,8 +1,10 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+import express, { NextFunction, Request, Response } from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
 
-const documentRoutes = require('./routes/documents');
+import documentRoutes from './routes/documents';
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,12 +17,12 @@ app.use(express.json());
 app.use('/api', documentRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err.stack);
   res.status(500).json({
     success: false,

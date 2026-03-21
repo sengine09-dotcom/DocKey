@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 import DocumentCard from '../components/Documents/DocumentCard';
 
-export default function Documents({ onNavigate = () => { } }) {
+export default function Documents({ onNavigate = () => { } }: any) {
   const [documents, setDocuments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(true);

@@ -1,6 +1,6 @@
-const pool = require('../config/database');
+import pool from '../config/database';
 
-class Document {
+class DocumentModel {
   static async getAll(search = '', status = '') {
     let query = 'SELECT * FROM documents WHERE 1=1';
     const params = [];
@@ -33,7 +33,7 @@ class Document {
     `;
     const connection = await pool.getConnection();
     try {
-      const [result] = await connection.execute(query, [fileName, customerName]);
+      const [result]: any = await connection.execute(query, [fileName, customerName]);
       return { id: result.insertId, file_name: fileName, customer_name: customerName, status: 'Draft' };
     } finally {
       connection.release();
@@ -52,4 +52,4 @@ class Document {
   }
 }
 
-module.exports = Document;
+export default DocumentModel;

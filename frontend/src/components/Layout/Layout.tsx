@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard' }) {
+export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard' }: any) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
 

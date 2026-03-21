@@ -1,10 +1,14 @@
-const Document = require('../models/Document');
+import { Request, Response } from 'express';
+import DocumentModel from '../models/Document';
 
 class DocumentController {
-  static async getAll(req, res) {
+  static async getAll(req: Request, res: Response) {
     try {
       const { search = '', status = '' } = req.query;
-      const documents = await Document.getAll(search, status);
+      const documents: any[] = (await DocumentModel.getAll(
+        String(search),
+        String(status)
+      )) as any[];
       res.json({
         success: true,
         data: documents,
@@ -20,10 +24,10 @@ class DocumentController {
     }
   }
 
-  static async create(req, res) {
+  static async create(req: Request, res: Response) {
     try {
       const { fileName = 'Untitled Document', customerName = 'Unnamed Customer' } = req.body;
-      const document = await Document.create(fileName, customerName);
+      const document = await DocumentModel.create(fileName, customerName);
       res.status(201).json({
         success: true,
         data: document,
@@ -39,10 +43,10 @@ class DocumentController {
     }
   }
 
-  static async delete(req, res) {
+  static async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      await Document.delete(id);
+      await DocumentModel.delete(id);
       res.json({
         success: true,
         message: 'Document deleted successfully'
@@ -58,4 +62,4 @@ class DocumentController {
   }
 }
 
-module.exports = DocumentController;
+export default DocumentController;

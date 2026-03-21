@@ -8,10 +8,10 @@
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev": "echo 'Run in separate terminals:' && echo 'Terminal 1: npm run dev:backend' && echo 'Terminal 2: npm run dev:frontend'",
-    "build:backend": "echo 'Backend is Node.js - no build needed'",
+    "build:backend": "npm --prefix backend run build",
     "build:frontend": "npm --prefix frontend run build",
-    "build": "npm run build:frontend",
-    "backend:start": "node backend/src/index.js",
+    "build": "npm run build:backend && npm run build:frontend",
+    "backend:start": "node backend/dist/index.js",
     "frontend:start": "npm --prefix frontend run preview"
   },
   "workspaces": [
