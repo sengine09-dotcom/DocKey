@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 
-export default function KeyInvoice({ onNavigate = () => {} }) {
+export default function KeyInvoice({ onNavigate = () => {}, initialData = null }) {
   const [darkMode, setDarkMode] = useState(true);
 
   const [header, setHeader] = useState({
@@ -18,6 +18,36 @@ export default function KeyInvoice({ onNavigate = () => {} }) {
   const [items, setItems] = useState([
     { id: '', description: '', quantity: '', unitPrice: '', total: '' },
   ]);
+
+  useEffect(() => {
+    if (!initialData) {
+      return;
+    }
+
+    setHeader((prev) => ({
+      ...prev,
+      invoiceId: initialData.invoiceId || '',
+      invoiceDate: initialData.invoiceDate || '',
+      customer: initialData.customer || '',
+      invoiceNo: initialData.invoiceNo || '',
+      dueDate: initialData.dueDate || '',
+      billTo: initialData.billTo || '',
+      shipTo: initialData.shipTo || '',
+      paymentMethod: initialData.paymentMethod || prev.paymentMethod,
+    }));
+
+    if (Array.isArray(initialData.items) && initialData.items.length > 0) {
+      setItems(
+        initialData.items.map((item) => ({
+          id: item.id || '',
+          description: item.description || '',
+          quantity: item.quantity || '',
+          unitPrice: item.unitPrice || '',
+          total: item.total || '',
+        }))
+      );
+    }
+  }, [initialData]);
 
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
@@ -334,7 +364,7 @@ export default function KeyInvoice({ onNavigate = () => {} }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-6 border-t pt-4 flex gap-3 justify-center">
+              <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
                 <button
                   type="button"
                   onClick={() => {

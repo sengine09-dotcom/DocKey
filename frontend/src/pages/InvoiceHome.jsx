@@ -41,11 +41,30 @@ export default function InvoiceHome({ onNavigate = () => {} }) {
       invoiceNo: 'INV-2024-003',
       invoiceDate: '2024-03-10',
       dueDate: '2024-04-10',
+      billTo: 'Global Traders HQ',
+      shipTo: 'Phuket Warehouse',
+      paymentMethod: 'Bank Transfer',
       amount: 28500.00,
       status: 'Paid',
       itemCount: 3,
       lastUpdated: '2024-03-15',
-      color: 'green'
+      color: 'green',
+      items: [
+        {
+          id: '1',
+          description: 'AGP - Wall Stud',
+          quantity: '400',
+          unitPrice: '45.00',
+          total: '18000.00'
+        },
+        {
+          id: '2',
+          description: 'AGP - Wall Track',
+          quantity: '300',
+          unitPrice: '35.00',
+          total: '10500.00'
+        }
+      ]
     },
     {
       id: 'INV-004',
@@ -75,8 +94,7 @@ export default function InvoiceHome({ onNavigate = () => {} }) {
   };
 
   const handleEditInvoice = (invoice) => {
-    alert(`✏️ Edit Invoice: ${invoice.invoiceId}\n\nCustomer: ${invoice.customer}\n\nNavigating to form...`);
-    onNavigate('key-invoice');
+    onNavigate('key-invoice', invoice);
   };
 
   const handleDeleteInvoice = (invoice) => {
@@ -87,7 +105,7 @@ export default function InvoiceHome({ onNavigate = () => {} }) {
   };
 
   const handleViewInvoice = (invoice) => {
-    alert(`👁️ View Invoice: ${invoice.invoiceId}\n\nCustomer: ${invoice.customer}\nAmount: ${invoice.amount.toLocaleString('th-TH', { style: 'currency', currency: 'THB' })}\nStatus: ${invoice.status}`);
+    onNavigate('key-invoice', invoice);
   };
 
   const getStatusColor = (status) => {
