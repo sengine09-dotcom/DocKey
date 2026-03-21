@@ -28,7 +28,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
   };
 
   const handleEditInvoice = (invoice) => {
-    onNavigate('key-invoice', invoice);
+    onNavigate('key-invoice', { ...invoice, __mode: 'edit' });
   };
 
   const handleDeleteInvoice = (invoice) => {
@@ -43,7 +43,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
   };
 
   const handleViewInvoice = (invoice) => {
-    onNavigate('key-invoice', invoice);
+    onNavigate('key-invoice', { ...invoice, __mode: 'view' });
   };
 
   const getStatusColor = (status) => {

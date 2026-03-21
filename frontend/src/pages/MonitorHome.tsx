@@ -28,7 +28,7 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
   };
 
   const handleEditMonitor = (monitor) => {
-    onNavigate('key-monitor', monitor);
+    onNavigate('key-monitor', { ...monitor, __mode: 'edit' });
   };
 
   const handleDeleteMonitor = (monitor) => {
@@ -43,7 +43,7 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
   };
 
   const handleViewMonitor = (monitor) => {
-    onNavigate('key-monitor', monitor);
+    onNavigate('key-monitor', { ...monitor, __mode: 'view' });
   };
 
   const getStatusColor = (status) => {

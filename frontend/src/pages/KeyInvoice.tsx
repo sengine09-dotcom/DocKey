@@ -4,6 +4,7 @@ import invoiceService from '../services/invoiceService';
 
 export default function KeyInvoice({ onNavigate = () => {}, initialData = null }: any) {
   const [darkMode, setDarkMode] = useState(true);
+  const [mode, setMode] = useState('create');
 
   const [header, setHeader] = useState({
     invoiceId: '',
@@ -22,8 +23,11 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
 
   useEffect(() => {
     if (!initialData) {
+      setMode('create');
       return;
     }
+
+    setMode(initialData.__mode || 'edit');
 
     setHeader((prev) => ({
       ...prev,
@@ -50,16 +54,20 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
     }
   }, [initialData]);
 
+  const isViewMode = mode === 'view';
+
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
 
   const handleHeaderChange = (field, value) => {
+    if (isViewMode) return;
     setHeader((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleItemChange = (index, field, value) => {
+    if (isViewMode) return;
     setItems((prev) => {
       const next = [...prev];
       const updated = { ...next[index], [field]: value };
@@ -78,6 +86,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
   };
 
   const addItemRow = () => {
+    if (isViewMode) return;
     setItems((prev) => [
       ...prev,
       { id: '', description: '', quantity: '', unitPrice: '', total: '' },
@@ -85,6 +94,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
   };
 
   const removeItemRow = (index) => {
+    if (isViewMode) return;
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -112,6 +122,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
             </div>
 
             <div className="px-6 py-6 space-y-4 text-xs">
+              <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
               {/* Top row: Invoice ID / Invoice Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
@@ -364,42 +375,67 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                 </div>
               </div>
 
+              </fieldset>
+
               {/* Action Buttons */}
               <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const invoiceNo =
-                      header.invoiceNo?.trim() ||
-                      header.invoiceId?.trim() ||
-                      `I${Date.now().toString().slice(-7)}`;
+                {!isViewMode && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const invoiceNo =
+                        header.invoiceNo?.trim() ||
+                        header.invoiceId?.trim() ||
+                        `I${Date.now().toString().slice(-7)}`;
 
-                    const payload = {
-                      header: {
-                        ...header,
-                        invoiceNo,
-                        invoiceId: invoiceNo,
-                        total,
-                        totalQuantity,
-                        vat: 0,
-                        statusOnline: 1,
-                      },
-                      items,
-                    };
+                      if (!header.customer?.trim()) {
+                        alert('Please fill Customer before saving.');
+                        return;
+                      }
 
-                    try {
-                      await invoiceService.save(payload);
-                      alert('💾 Invoice saved successfully!');
-                      setHeader((prev) => ({ ...prev, invoiceNo, invoiceId: invoiceNo }));
-                    } catch (error) {
-                      alert('Failed to save invoice');
-                    }
-                  }}
-                  className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
-                >
-                  <span>💾</span>
-                  Save
-                </button>
+                      const validItems = items.filter((it) => it.id || it.description);
+                      if (validItems.length === 0) {
+                        alert('Please add at least 1 item before saving.');
+                        return;
+                      }
+
+                      const payload = {
+                        header: {
+                          ...header,
+                          invoiceNo,
+                          invoiceId: invoiceNo,
+                          total,
+                          totalQuantity,
+                          vat: 0,
+                          statusOnline: 1,
+                        },
+                        items: validItems,
+                      };
+
+                      try {
+                        await invoiceService.save(payload);
+                        alert('💾 Invoice saved successfully!');
+                        setHeader((prev) => ({ ...prev, invoiceNo, invoiceId: invoiceNo }));
+                      } catch (error) {
+                        alert('Failed to save invoice');
+                      }
+                    }}
+                    className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <span>💾</span>
+                    Save
+                  </button>
+                )}
+                {isViewMode && (
+                  <button
+                    type="button"
+                    onClick={() => setMode('edit')}
+                    className="flex items-center gap-2 px-6 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <span>✏️</span>
+                    Enable Edit
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

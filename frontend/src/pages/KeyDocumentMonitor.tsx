@@ -4,6 +4,7 @@ import monitorService from '../services/monitorService';
 
 export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData = null }: any) {
   const [darkMode, setDarkMode] = useState(true);
+  const [mode, setMode] = useState('create');
 
   const [header, setHeader] = useState({
     monitorId: '',
@@ -23,8 +24,11 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
 
   useEffect(() => {
     if (!initialData) {
+      setMode('create');
       return;
     }
+
+    setMode(initialData.__mode || 'edit');
 
     setHeader((prev) => ({
       ...prev,
@@ -53,14 +57,18 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
     }
   }, [initialData]);
 
+  const isViewMode = mode === 'view';
+
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const totalSales = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
 
   const handleHeaderChange = (field, value) => {
+    if (isViewMode) return;
     setHeader((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleItemChange = (index, field, value) => {
+    if (isViewMode) return;
     setItems((prev) => {
       const next = [...prev];
       const updated = { ...next[index], [field]: value };
@@ -79,6 +87,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
   };
 
   const addItemRow = () => {
+    if (isViewMode) return;
     setItems((prev) => [
       ...prev,
       { id: '', product: '', packing: '', quantity: '', price: '', total: '' },
@@ -86,6 +95,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
   };
 
   const removeItemRow = (index) => {
+    if (isViewMode) return;
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -113,6 +123,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
             </div>
 
             <div className="px-6 py-6 space-y-4 text-xs">
+              <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
               {/* Top row: Monitor ID / Issued Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
@@ -410,39 +421,64 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                 </div>
               </div>
 
+              </fieldset>
+
               {/* Action Buttons */}
               <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const monitorId =
-                      header.monitorId?.trim() || `M${Date.now().toString().slice(-9)}`;
+                {!isViewMode && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const monitorId =
+                        header.monitorId?.trim() || `M${Date.now().toString().slice(-9)}`;
 
-                    const payload = {
-                      header: {
-                        ...header,
-                        monitorId,
-                        totalQuantity,
-                        totalSales,
-                        status: 'Active',
-                        vat: 0,
-                      },
-                      items,
-                    };
+                      if (!header.customer?.trim()) {
+                        alert('Please fill Customer before saving.');
+                        return;
+                      }
 
-                    try {
-                      await monitorService.save(payload);
-                      alert('💾 Monitor document saved successfully!');
-                      setHeader((prev) => ({ ...prev, monitorId }));
-                    } catch (error) {
-                      alert('Failed to save monitor document');
-                    }
-                  }}
-                  className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
-                >
-                  <span>💾</span>
-                  Save
-                </button>
+                      const validItems = items.filter((it) => it.id || it.product);
+                      if (validItems.length === 0) {
+                        alert('Please add at least 1 item before saving.');
+                        return;
+                      }
+
+                      const payload = {
+                        header: {
+                          ...header,
+                          monitorId,
+                          totalQuantity,
+                          totalSales,
+                          status: 'Active',
+                          vat: 0,
+                        },
+                        items: validItems,
+                      };
+
+                      try {
+                        await monitorService.save(payload);
+                        alert('💾 Monitor document saved successfully!');
+                        setHeader((prev) => ({ ...prev, monitorId }));
+                      } catch (error) {
+                        alert('Failed to save monitor document');
+                      }
+                    }}
+                    className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <span>💾</span>
+                    Save
+                  </button>
+                )}
+                {isViewMode && (
+                  <button
+                    type="button"
+                    onClick={() => setMode('edit')}
+                    className="flex items-center gap-2 px-6 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <span>✏️</span>
+                    Enable Edit
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
