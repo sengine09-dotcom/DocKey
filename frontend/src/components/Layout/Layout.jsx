@@ -15,6 +15,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
     { id: 'documents', label: 'Documents', icon: '📄', href: '/documents' },
+    { id: 'monitor', label: 'Monitor', icon: '🖥️', href: '/monitor' },
     { id: 'reports', label: 'Reports', icon: '📈', href: '/reports' },
     { id: 'upload', label: 'Upload', icon: '⬆️', href: '/upload' },
     { id: 'settings', label: 'Settings', icon: '⚙️', href: '/settings' },
@@ -26,6 +27,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('dashboard');
     } else if (id === 'documents') {
       onNavigate('documents');
+    } else if (id === 'monitor') {
+      onNavigate('monitor');
     } else if (id === 'key-monitor') {
       onNavigate('key-monitor');
     } else if (id === 'reports') {
