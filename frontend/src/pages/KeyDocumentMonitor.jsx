@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 
-export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
+export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData = null }) {
   const [darkMode, setDarkMode] = useState(true);
 
   const [header, setHeader] = useState({
@@ -19,6 +19,38 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
   const [items, setItems] = useState([
     { id: '', product: '', packing: '', quantity: '', price: '', total: '' },
   ]);
+
+  useEffect(() => {
+    if (!initialData) {
+      return;
+    }
+
+    setHeader((prev) => ({
+      ...prev,
+      monitorId: initialData.monitorId || '',
+      issuedDate: initialData.issuedDate || '',
+      customer: initialData.customer || '',
+      poNo: initialData.poNo || '',
+      poDate: initialData.poDate || '',
+      requestDate: initialData.requestDate || '',
+      destination: initialData.destination || '',
+      deliveredTo: initialData.deliveredTo || '',
+      paymentTerm: initialData.paymentTerm || prev.paymentTerm,
+    }));
+
+    if (Array.isArray(initialData.items) && initialData.items.length > 0) {
+      setItems(
+        initialData.items.map((item) => ({
+          id: item.id || '',
+          product: item.product || '',
+          packing: item.packing || '',
+          quantity: item.quantity || '',
+          price: item.price || '',
+          total: item.total || '',
+        }))
+      );
+    }
+  }, [initialData]);
 
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const totalSales = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
@@ -378,7 +410,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {} }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-6 border-t pt-4 flex gap-3 justify-center">
+              <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
                 <button
                   type="button"
                   onClick={() => {

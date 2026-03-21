@@ -9,8 +9,17 @@ import './index.css';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [selectedMonitor, setSelectedMonitor] = useState(null);
 
-  const handlePageChange = (page) => {
+  const handlePageChange = (page, payload = null) => {
+    if (page === 'key-monitor') {
+      setSelectedMonitor(payload);
+    }
+
+    if (page !== 'key-monitor' && selectedMonitor) {
+      setSelectedMonitor(null);
+    }
+
     setCurrentPage(page);
   };
 
@@ -19,7 +28,9 @@ function App() {
       {currentPage === 'dashboard' && <Dashboard onNavigate={handlePageChange} />}
       {currentPage === 'documents' && <Documents onNavigate={handlePageChange} />}
       {currentPage === 'monitor-home' && <MonitorHome onNavigate={handlePageChange} />}
-      {currentPage === 'key-monitor' && <KeyDocumentMonitor onNavigate={handlePageChange} />}
+      {currentPage === 'key-monitor' && (
+        <KeyDocumentMonitor onNavigate={handlePageChange} initialData={selectedMonitor} />
+      )}
       {currentPage === 'invoice-home' && <InvoiceHome onNavigate={handlePageChange} />}
       {currentPage === 'key-invoice' && <KeyInvoice onNavigate={handlePageChange} />}
     </>

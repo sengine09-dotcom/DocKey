@@ -51,7 +51,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   return (
     <div className={`flex h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-24'} transition-all duration-300 ease-in-out ${darkMode ? 'bg-gray-800 border-gray-700 shadow-2xl' : 'bg-white border-gray-200 shadow-lg'} border-r flex flex-col`}>
+      <div className={`no-print ${sidebarOpen ? 'w-64' : 'w-24'} transition-all duration-300 ease-in-out ${darkMode ? 'bg-gray-800 border-gray-700 shadow-2xl' : 'bg-white border-gray-200 shadow-lg'} border-r flex flex-col`}>
         
         {/* Logo Section */}
         <div className={`p-6 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} transition-all duration-300`}>
@@ -167,7 +167,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
-        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 flex items-center justify-between shadow-sm relative`}>
+        <div className={`no-print ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 flex items-center justify-between shadow-sm relative`}>
           <div className="flex items-center gap-3">
             <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
               {(() => {

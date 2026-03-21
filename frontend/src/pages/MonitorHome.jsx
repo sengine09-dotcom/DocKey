@@ -41,17 +41,38 @@ export default function MonitorHome({ onNavigate = () => {} }) {
     {
       id: 'MON-003',
       monitorId: 'MON-003/2024',
-      customer: 'Global Traders',
-      poNo: 'PO-2024-003',
-      poDate: '2024-02-28',
-      issuedDate: '2024-03-10',
-      destination: 'Phuket, Thailand',
-      totalQuantity: 85.75,
-      totalSales: 28500.00,
+      customer: 'Uniplaster Marketing Sdn. Bhd.',
+      poNo: 'PO-202603/0002',
+      poDate: '2026-03-13',
+      issuedDate: '2026-03-19',
+      requestDate: '',
+      destination: 'Chemor, Perak',
+      deliveredTo: '',
+      paymentTerm: '30 Days from Delivery Date',
+      totalQuantity: 700.00,
+      totalSales: 6868.00,
       status: 'Completed',
-      itemCount: 3,
-      lastUpdated: '2024-03-15',
-      color: 'purple'
+      itemCount: 2,
+      lastUpdated: '2026-03-19',
+      color: 'purple',
+      items: [
+        {
+          id: '0275',
+          product: 'AGP - Wall Stud',
+          packing: 'Packing : 51mm x 0.50 bmt x 3000 mm (TS5150)',
+          quantity: '400.000',
+          price: '10.18',
+          total: '4072.00'
+        },
+        {
+          id: '0274',
+          product: 'AGP - Wall Track',
+          packing: 'Packing : 51mm x 0.50 bmt x 3000 mm (TT5150)',
+          quantity: '300.000',
+          price: '9.32',
+          total: '2796.00'
+        }
+      ]
     },
     {
       id: 'MON-004',
@@ -95,7 +116,7 @@ export default function MonitorHome({ onNavigate = () => {} }) {
   };
 
   const handleViewMonitor = (monitor) => {
-    alert(`👁️ View Monitor: ${monitor.monitorId}\n\nCustomer: ${monitor.customer}\nPO No: ${monitor.poNo}\nTotal Sales: ${monitor.totalSales.toLocaleString('th-TH', { style: 'currency', currency: 'THB' })}`);
+    onNavigate('key-monitor', monitor);
   };
 
   const getStatusColor = (status) => {
