@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Monitor {
+  monitorId      String          @id @map("MonitorID") @db.VarChar(10)
+  isCancel       String?         @map("isCancel") @db.VarChar(1)
+  issDate        DateTime?       @map("IssDate")
+  customerId     String?         @map("CustomerID") @db.VarChar(5)
+  supplierId     String?         @map("SupplierID") @db.VarChar(3)
+  termId         String?         @map("TermID") @db.VarChar(3)
+  poNo           String?         @map("PoNo") @db.VarChar(50)
+  poDate         DateTime?       @map("PoDate")
+  reqDate        DateTime?       @map("ReqDate")
+  eUserId        String?         @map("EUserID") @db.VarChar(3)
+  destinationId  String?         @map("DestinationID") @db.VarChar(3)
+  totalQuantity  Decimal?        @map("TotalQuantity") @db.Decimal(18, 2)
+  totalAmount    Decimal?        @map("TotalAmount") @db.Decimal(19, 4)
+  isArranged     String?         @map("isArranged") @db.VarChar(1)
+  remark         String?         @map("Remark") @db.VarChar(300)
+  status         Int?            @map("Status")
+  vat            Int             @map("Vat")
+  monitorDetails MonitorDetail[]
+
+  @@map("tblMonitor")
+}
+
+model MonitorDetail {
+  mdId       Int      @id @default(autoincrement()) @map("MDID")
+  idMonitor  String   @map("IDMonitor") @db.VarChar(10)
+  item       Int?     @map("Item")
+  productId  String   @map("ProductID") @db.VarChar(5)
+  quantity   Decimal? @map("Quantity") @db.Decimal(18, 3)
+  unitCount  String?  @map("UnitCount") @db.VarChar(3)
+  price      Decimal? @map("Price") @db.Decimal(10, 3)
+  total      Decimal? @map("Total") @db.Decimal(18, 3)
+  supplierId String?  @map("SupplierID") @db.VarChar(10)
+
+  monitor Monitor @relation(fields: [idMonitor], references: [monitorId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([idMonitor])
+  @@map("tblMonitorDetail")
+}
