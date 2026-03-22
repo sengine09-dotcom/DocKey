@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Documents from './pages/Documents';
 import MonitorHome from './pages/MonitorHome';
@@ -7,40 +9,57 @@ import InvoiceHome from './pages/InvoiceHome';
 import KeyInvoice from './pages/KeyInvoice';
 import './index.css';
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const token = localStorage.getItem('token');
+  return token ? <>{children}</> : <Navigate to="/login" />;
+}
+
 function App() {
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  const [selectedMonitor, setSelectedMonitor] = useState(null);
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
-
-  const handlePageChange = (page, payload = null) => {
-    if (page === 'key-monitor') {
-      setSelectedMonitor(payload);
-    } else {
-      setSelectedMonitor(null);
-    }
-
-    if (page === 'key-invoice') {
-      setSelectedInvoice(payload);
-    } else {
-      setSelectedInvoice(null);
-    }
-
-    setCurrentPage(page);
-  };
-
   return (
-    <>
-      {currentPage === 'dashboard' && <Dashboard onNavigate={handlePageChange} />}
-      {currentPage === 'documents' && <Documents onNavigate={handlePageChange} />}
-      {currentPage === 'monitor-home' && <MonitorHome onNavigate={handlePageChange} />}
-      {currentPage === 'key-monitor' && (
-        <KeyDocumentMonitor onNavigate={handlePageChange} initialData={selectedMonitor} />
-      )}
-      {currentPage === 'invoice-home' && <InvoiceHome onNavigate={handlePageChange} />}
-      {currentPage === 'key-invoice' && (
-        <KeyInvoice onNavigate={handlePageChange} initialData={selectedInvoice} />
-      )}
-    </>
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* Protected Routes */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/documents"
+          element={
+            <ProtectedRoute>
+              <Documents />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/monitors"
+          element={
+            <ProtectedRoute>
+              <MonitorHome />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/invoices"
+          element={
+            <ProtectedRoute>
+              <InvoiceHome />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Redirect to dashboard or login */}
+        <Route path="/" element={<Navigate to="/dashboard" />} />
+      </Routes>
+    </Router>
   );
 }
 
