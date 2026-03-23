@@ -72,10 +72,10 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  🖥️ Individual Customer Monitoring
+                  🖥️ Monitor Documents
                 </h1>
                 <p className={`text-sm mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Manage and monitor all customer purchase orders
+                  Manage and monitor all monitor documents
                 </p>
               </div>
               <button

@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 import ProductSelectionModal from '../components/ProductSelectionModal';
 import codeService from '../services/codeService';
 import monitorService from '../services/monitorService';
 import useThemePreference from '../hooks/useThemePreference';
+import { printDocumentContent } from '../utils/printDocument';
 
 const toDateInputValue = (value: any) => {
   if (!value) return '';
   return String(value).slice(0, 10);
 };
+
+const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
 
 const formatPrintDate = (value: any) => {
   if (!value) return '-';
@@ -21,8 +24,10 @@ const formatPrintDate = (value: any) => {
   });
 };
 
-export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData = null }: any) {
-  const [darkMode, setDarkMode] = useThemePreference();
+export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData = null, embedded = false, darkMode: embeddedDarkMode, setDarkMode: embeddedSetDarkMode, currentPage = 'key-monitor' }: any) {
+  const [preferredDarkMode, setPreferredDarkMode] = useThemePreference();
+  const darkMode = embedded ? embeddedDarkMode : preferredDarkMode;
+  const setDarkMode = embedded ? embeddedSetDarkMode : setPreferredDarkMode;
   const [mode, setMode] = useState('create');
   const [customerCodes, setCustomerCodes] = useState<any[]>([]);
   const [destinationCodes, setDestinationCodes] = useState<any[]>([]);
@@ -32,10 +37,11 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
   const [codeError, setCodeError] = useState('');
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+  const printSheetRef = useRef<HTMLDivElement | null>(null);
 
   const [header, setHeader] = useState({
     monitorId: '',
-    issuedDate: '',
+    issuedDate: getTodayDateInputValue(),
     customer: '',
     poNo: '',
     poDate: '',
@@ -99,7 +105,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
       setHeader((prev) => ({
         ...prev,
         monitorId: '',
-        issuedDate: '',
+        issuedDate: getTodayDateInputValue(),
         customer: '',
         poNo: '',
         poDate: '',
@@ -211,6 +217,9 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
     return selectedDestination.destination || selectedDestination.location || selectedDestination.destId || destinationId;
   })();
 
+  const sheetControlClass = 'min-h-[30px] w-full border border-black bg-white px-2 py-1 text-[12px] text-black';
+  const sheetActionButtonClass = 'rounded border border-black px-2 py-1 text-[11px] font-medium text-black transition-colors hover:bg-gray-100';
+
   const handleItemChange = (index, field, value) => {
     if (isViewMode) return;
     setItems((prev) => {
@@ -252,21 +261,59 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
     ]);
   };
 
+  const goBackToDocuments = () => {
+    onNavigate('documents', { selectedType: 'monitor' });
+  };
+
   const removeItemRow = (index) => {
     if (isViewMode) return;
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  return (
-    <Layout
-      darkMode={darkMode}
-      setDarkMode={setDarkMode}
-      onNavigate={onNavigate}
-      currentPage="key-monitor"
-    >
-      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-        <div className="print-monitor-doc max-w-5xl mx-auto px-6 py-10">
-          <div className={`${isViewMode ? 'block' : 'hidden print:block'} monitor-print-sheet border border-black bg-white p-4 text-[12px] leading-tight text-black`}>
+  const handlePrint = async () => {
+    try {
+      await monitorService.markPrinted(header.monitorId);
+    } catch (_error) {
+      // Ignore print status update failures and continue printing the document.
+    }
+
+    if (!printSheetRef.current) {
+      window.alert('Print form is not ready yet.');
+      return;
+    }
+
+    printDocumentContent(`Monitor ${header.monitorId || ''}`, printSheetRef.current.outerHTML, {
+      bodyPadding: '0',
+      extraCss: `
+        @page {
+          size: A4 portrait;
+          margin: 4mm;
+        }
+
+        body {
+          padding: 0 !important;
+        }
+
+        .monitor-print-sheet {
+          width: 100%;
+          min-height: 289mm;
+          margin: 0;
+          padding: 7mm 8mm;
+          box-sizing: border-box;
+          border: 1px solid #000;
+        }
+
+        .monitor-print-sheet table {
+          width: 100%;
+        }
+      `,
+    });
+  };
+
+  const content = (
+      <div className={embedded ? '' : `min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+        <div className={`print-monitor-doc ${embedded ? 'px-0 py-0' : 'max-w-5xl mx-auto px-6 py-10'}`}>
+          <div ref={printSheetRef} className="monitor-print-sheet border border-black bg-white p-4 text-[12px] leading-tight text-black shadow-sm">
             <div className="flex items-start gap-4 border-b-2 border-red-700 pb-3">
               <div className="h-16 w-16 border border-black bg-gray-100 flex items-center justify-center text-lg font-bold">CT</div>
               <div className="flex-1 text-center">
@@ -278,23 +325,144 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
             </div>
 
             <div className="mt-3 bg-gray-500 text-white text-center font-semibold text-[22px] py-1">
-              Individual Customer Monitoring
+              Monitor Document
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-4 text-[12px]">
               <div className="space-y-2">
-                <div className="flex items-center gap-2"><span className="font-semibold w-24">Monitor ID :</span><span className="border border-black px-3 py-1 min-w-[120px] text-center font-semibold">{header.monitorId || '-'}</span></div>
-                <div><span className="font-semibold">Customer :</span> {customerDisplay || '-'}</div>
-                <div><span className="font-semibold">Po No :</span> {header.poNo || '-'}</div>
-                <div><span className="font-semibold">Destination :</span> {destinationDisplay || '-'}</div>
-                <div><span className="font-semibold">Delivered to :</span> {header.deliveredTo || '-'}</div>
-                <div><span className="font-semibold">Payment Term :</span> {paymentTermDisplay || '-'}</div>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-semibold">Monitor ID :</span>
+                  {isViewMode ? (
+                    <span className="min-w-[120px] border border-black px-3 py-1 text-center font-semibold">{header.monitorId || '-'}</span>
+                  ) : (
+                    <div className="flex flex-1 items-center gap-2">
+                      <input
+                        className={`${sheetControlClass} bg-yellow-200 font-semibold`}
+                        value={header.monitorId}
+                        onChange={(e) => handleHeaderChange('monitorId', e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void loadNextMonitorId(true)}
+                        className={`${sheetActionButtonClass} no-print whitespace-nowrap`}
+                      >
+                        Refresh ID
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Customer :</span>
+                  {isViewMode ? (
+                    <span>{customerDisplay || '-'}</span>
+                  ) : (
+                    <select
+                      className={sheetControlClass}
+                      value={header.customer}
+                      onChange={(e) => handleCustomerChange(e.target.value)}
+                    >
+                      <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
+                      {customerCodes.map((customer) => (
+                        <option key={customer.customerId} value={customer.customerId}>
+                          {customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed Customer'}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Po No :</span>
+                  {isViewMode ? (
+                    <span>{header.poNo || '-'}</span>
+                  ) : (
+                    <input
+                      className={sheetControlClass}
+                      value={header.poNo}
+                      onChange={(e) => handleHeaderChange('poNo', e.target.value)}
+                    />
+                  )}
+                </div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Destination :</span>
+                  {isViewMode ? (
+                    <span>{destinationDisplay || '-'}</span>
+                  ) : (
+                    <select
+                      className={sheetControlClass}
+                      value={header.destination}
+                      onChange={(e) => handleHeaderChange('destination', e.target.value)}
+                    >
+                      <option value="">{isLoadingCodes ? 'Loading destinations...' : 'Select destination code'}</option>
+                      {destinationCodes.map((destination) => (
+                        <option key={destination.destId} value={destination.destId}>
+                          {destination.destId} - {destination.destination || destination.location || 'Unnamed Destination'}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Delivered to :</span>
+                  {isViewMode ? (
+                    <span>{header.deliveredTo || '-'}</span>
+                  ) : (
+                    <input
+                      className={sheetControlClass}
+                      value={header.deliveredTo}
+                      onChange={(e) => handleHeaderChange('deliveredTo', e.target.value)}
+                    />
+                  )}
+                </div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Payment Term :</span>
+                  {isViewMode ? (
+                    <span>{paymentTermDisplay || '-'}</span>
+                  ) : (
+                    <input className={sheetControlClass} value={paymentTermDisplay} readOnly />
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
-                <div><span className="font-semibold">Issued Date :</span> {formatPrintDate(header.issuedDate)}</div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Issued Date :</span>
+                  {isViewMode ? (
+                    <span>{formatPrintDate(header.issuedDate)}</span>
+                  ) : (
+                    <input
+                      type="date"
+                      className={sheetControlClass}
+                      value={header.issuedDate}
+                      onChange={(e) => handleHeaderChange('issuedDate', e.target.value)}
+                    />
+                  )}
+                </div>
                 <div className="h-6" />
-                <div><span className="font-semibold">Po Date :</span> {formatPrintDate(header.poDate)}</div>
-                <div><span className="font-semibold">Request Date :</span> {formatPrintDate(header.requestDate)}</div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Po Date :</span>
+                  {isViewMode ? (
+                    <span>{formatPrintDate(header.poDate)}</span>
+                  ) : (
+                    <input
+                      type="date"
+                      className={sheetControlClass}
+                      value={header.poDate}
+                      onChange={(e) => handleHeaderChange('poDate', e.target.value)}
+                    />
+                  )}
+                </div>
+                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                  <span className="font-semibold">Request Date :</span>
+                  {isViewMode ? (
+                    <span>{formatPrintDate(header.requestDate)}</span>
+                  ) : (
+                    <input
+                      type="date"
+                      className={sheetControlClass}
+                      value={header.requestDate}
+                      onChange={(e) => handleHeaderChange('requestDate', e.target.value)}
+                    />
+                  )}
+                </div>
               </div>
             </div>
 
@@ -317,20 +485,107 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                 ) : (
                   printItems.map((item, idx) => (
                     <tr key={`print-${idx}`}>
-                      <td className="border border-black px-2 py-1 text-center">{idx + 1}</td>
-                      <td className="border border-black px-2 py-1 text-center">{item.id || '-'}</td>
-                      <td className="border border-black px-2 py-1">
-                        <div>{item.product || '-'}</div>
-                        {item.packing && <div><span className="font-semibold">Packing :</span> {item.packing}</div>}
+                      <td className="border border-black px-2 py-1 text-center align-top">{idx + 1}</td>
+                      <td className="border border-black px-2 py-1 text-center align-top">
+                        {isViewMode ? (
+                          item.id || '-'
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedItemIndex(idx);
+                              setProductModalOpen(true);
+                            }}
+                            className="no-print w-full rounded border border-black px-1 py-1 text-left text-[11px]"
+                          >
+                            {item.id || 'Select...'}
+                          </button>
+                        )}
                       </td>
-                      <td className="border border-black px-2 py-1 text-right">{Number(item.quantity || 0).toFixed(3)}</td>
-                      <td className="border border-black px-2 py-1 text-right">{Number(item.price || 0).toFixed(2)}</td>
-                      <td className="border border-black px-2 py-1 text-right">{Number(item.total || 0).toFixed(2)}</td>
+                      <td className="border border-black px-2 py-1 align-top">
+                        {isViewMode ? (
+                          <>
+                            <div>{item.product || '-'}</div>
+                            {item.packing && <div><span className="font-semibold">Packing :</span> {item.packing}</div>}
+                          </>
+                        ) : (
+                          <div className="space-y-2">
+                            <input className={sheetControlClass} value={item.product} readOnly />
+                            <input
+                              className={sheetControlClass}
+                              placeholder="Packing"
+                              value={item.packing}
+                              onChange={(e) => handleItemChange(idx, 'packing', e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </td>
+                      <td className="border border-black px-2 py-1 text-right align-top">
+                        {isViewMode ? (
+                          Number(item.quantity || 0).toFixed(3)
+                        ) : (
+                          <input
+                            type="number"
+                            className={`${sheetControlClass} text-right`}
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
+                          />
+                        )}
+                      </td>
+                      <td className="border border-black px-2 py-1 text-right align-top">
+                        {isViewMode ? (
+                          Number(item.price || 0).toFixed(2)
+                        ) : (
+                          <input
+                            type="number"
+                            step="0.01"
+                            className={`${sheetControlClass} text-right`}
+                            value={item.price}
+                            onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
+                          />
+                        )}
+                      </td>
+                      <td className="border border-black px-2 py-1 text-right align-top">
+                        {isViewMode ? (
+                          Number(item.total || 0).toFixed(2)
+                        ) : (
+                          <div className="space-y-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              className={`${sheetControlClass} text-right`}
+                              value={item.total}
+                              onChange={(e) => handleItemChange(idx, 'total', e.target.value)}
+                            />
+                            {items.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeItemRow(idx)}
+                                className="no-print w-full rounded border border-red-600 px-1 py-1 text-[11px] text-red-600"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
+
+            {!isViewMode && (
+              <div className="no-print mt-3 flex justify-between">
+                <button
+                  type="button"
+                  onClick={addItemRow}
+                  className={sheetActionButtonClass}
+                >
+                  + Add Item
+                </button>
+              </div>
+            )}
 
             <div className="mt-4 grid grid-cols-2 gap-6">
               <div>
@@ -387,390 +642,83 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
               </tbody>
             </table>
           </div>
-          <div
-            className={`print:hidden border rounded-2xl shadow ${
-              darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-            }`}
-          >
-            {/* Title bar */}
-            <div
-              className={`px-6 py-3 text-center font-semibold text-sm tracking-wide rounded-t-2xl ${
-                darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-900'
-              }`}
-            >
-              Individual Customer Monitoring
+          {codeError && (
+            <div className="no-print mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+              {codeError}
             </div>
+          )}
 
-            <div className="px-6 py-6 space-y-4 text-xs">
-              {codeError && (
-                <div className={`rounded-lg border px-4 py-3 text-xs ${darkMode ? 'border-red-500/30 bg-red-500/10 text-red-200' : 'border-red-200 bg-red-50 text-red-700'}`}>
-                  {codeError}
-                </div>
-              )}
+          <div className="no-print mt-6 flex gap-3 justify-end">
+            {!isViewMode && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const monitorId = header.monitorId?.trim();
 
-              <fieldset disabled={isViewMode} className={isViewMode ? 'hidden' : ''}>
-              {/* Top row: Monitor ID / Issued Date */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Monitor ID :</span>
-                  <input
-                    className={`flex-1 border px-2 py-1 text-xs bg-yellow-300 ${formControlClass}`}
-                    value={header.monitorId}
-                    onChange={(e) => handleHeaderChange('monitorId', e.target.value)}
-                  />
-                  {!isViewMode && (
-                    <button
-                      type="button"
-                      onClick={() => void loadNextMonitorId(true)}
-                      className="px-3 py-1 text-[11px] rounded border border-blue-500 text-blue-600 hover:bg-blue-50 whitespace-nowrap"
-                    >
-                      Refresh ID
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Issued Date :</span>
-                  <input
-                    type="date"
-                    className={`border px-2 py-1 text-xs ${formControlClass}`}
-                    value={header.issuedDate}
-                    onChange={(e) => handleHeaderChange('issuedDate', e.target.value)}
-                  />
-                </div>
-              </div>
+                  if (!monitorId) {
+                    alert('Monitor ID is missing. Please wait for auto-generated ID from server.');
+                    return;
+                  }
 
-              {/* Customer */}
-              <div className="flex items-center gap-2">
-                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Customer :</span>
-                <select
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
-                  value={header.customer}
-                  onChange={(e) => handleCustomerChange(e.target.value)}
-                >
-                  <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
-                  {customerCodes.map((customer) => (
-                    <option key={customer.customerId} value={customer.customerId}>
-                      {customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed Customer'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  if (!header.customer?.trim()) {
+                    alert('Please fill Customer before saving.');
+                    return;
+                  }
 
-              {/* PO row */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Po No :</span>
-                  <input
-                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
-                    value={header.poNo}
-                    onChange={(e) => handleHeaderChange('poNo', e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Po Date :</span>
-                  <input
-                    type="date"
-                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
-                    value={header.poDate}
-                    onChange={(e) => handleHeaderChange('poDate', e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                    Request Date :
-                  </span>
-                  <input
-                    type="date"
-                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
-                    value={header.requestDate}
-                    onChange={(e) => handleHeaderChange('requestDate', e.target.value)}
-                  />
-                </div>
-              </div>
+                  const validItems = items.filter((it) => it.id || it.product);
+                  if (validItems.length === 0) {
+                    alert('Please add at least 1 item before saving.');
+                    return;
+                  }
 
-              {/* Destination */}
-              <div className="flex items-center gap-2">
-                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Destination :</span>
-                <select
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
-                  value={header.destination}
-                  onChange={(e) => handleHeaderChange('destination', e.target.value)}
-                >
-                  <option value="">{isLoadingCodes ? 'Loading destinations...' : 'Select destination code'}</option>
-                  {destinationCodes.map((destination) => (
-                    <option key={destination.destId} value={destination.destId}>
-                      {destination.destId} - {destination.destination || destination.location || 'Unnamed Destination'}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  const payload = {
+                    header: {
+                      ...header,
+                      paymentTerm: resolvePaymentTermId(header.paymentTerm),
+                      monitorId,
+                      totalQuantity,
+                      totalSales,
+                      vat: 0,
+                    },
+                    items: validItems,
+                  };
 
-              {/* Delivered to */}
-              <div className="flex items-center gap-2">
-                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Delivered to :</span>
-                <input
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
-                  value={header.deliveredTo}
-                  onChange={(e) => handleHeaderChange('deliveredTo', e.target.value)}
-                />
-              </div>
-
-              {/* Payment Term */}
-              <div className="flex items-center gap-2">
-                <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                  Payment Term :
-                </span>
-                <input
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
-                  value={paymentTermDisplay}
-                  readOnly
-                />
-              </div>
-
-              {/* Items table */}
-              <div
-                className={`mt-4 border-t ${
-                  darkMode ? 'border-gray-600' : 'border-gray-300'
-                } pt-3`}
+                  try {
+                    await monitorService.save(payload);
+                    alert('💾 Monitor document saved successfully!');
+                    goBackToDocuments();
+                  } catch (_error) {
+                    alert('Failed to save monitor document');
+                  }
+                }}
+                className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-2 font-medium text-white transition-colors hover:bg-green-700"
               >
-                <div
-                  className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] font-semibold px-2 py-1 ${
-                    darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-900'
-                  }`}
-                >
-                  <div>Item</div>
-                  <div>ID</div>
-                  <div>Product</div>
-                  <div>Quantity</div>
-                  <div>Price</div>
-                  <div>Total</div>
-                  <div></div>
-                </div>
-
-                {items.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] px-2 py-1 border-b ${
-                      darkMode ? 'border-gray-700' : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center">{idx + 1}</div>
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedItemIndex(idx);
-                          setProductModalOpen(true);
-                        }}
-                        className={`w-full px-1 py-0.5 text-left border rounded text-xs font-medium transition-colors ${
-                          darkMode
-                            ? 'bg-blue-900 border-blue-600 text-blue-200 hover:bg-blue-800'
-                            : 'bg-blue-50 border-blue-300 text-blue-900 hover:bg-blue-100'
-                        }`}
-                      >
-                        {item.id || 'Select...'}
-                      </button>
-                    </div>
-                    <div className="space-y-1">
-                      <input
-                        className={`w-full border px-1 py-0.5 ${formControlClass}`}
-                        placeholder="Product"
-                        value={item.product}
-                        readOnly
-                      />
-                      <input
-                        className={`w-full border px-1 py-0.5 text-[10px] italic ${formControlClass}`}
-                        placeholder="Packing"
-                        value={item.packing}
-                        onChange={(e) => handleItemChange(idx, 'packing', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="number"
-                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
-                        value={item.price}
-                        onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
-                        value={item.total}
-                        onChange={(e) => handleItemChange(idx, 'total', e.target.value)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-center">
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeItemRow(idx)}
-                          className="text-red-500 text-lg leading-none"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-
-                <div className="flex justify-between items-center px-2 py-2">
-                  <button
-                    type="button"
-                    onClick={addItemRow}
-                    className="text-[11px] px-3 py-1 rounded border border-dashed border-blue-500 text-blue-500 hover:bg-blue-50"
-                  >
-                    + Add Item
-                  </button>
-                </div>
-              </div>
-
-              {/* Totals */}
-              <div className="mt-4 border-t pt-3 text-[11px] space-y-1">
-                <div className="flex justify-end gap-16">
-                  <div className="flex gap-2">
-                    <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                      Total Quantity (MT) :
-                    </span>
-                    <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>
-                      {totalQuantity.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-16">
-                  <div className="flex gap-2">
-                    <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                      Total Sales :
-                    </span>
-                    <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>
-                      {totalSales.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-16">
-                  <div className="flex gap-2">
-                    <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                      Add GST @ 0% :
-                    </span>
-                    <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>0.00</span>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-16 font-semibold">
-                  <div className="flex gap-2">
-                    <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
-                      Total Amount Due :
-                    </span>
-                    <span className={darkMode ? 'text-gray-100' : 'text-gray-900'}>
-                      {totalSales.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="hidden print:grid grid-cols-3 gap-8 mt-10 text-xs">
-                <div className="text-center">
-                  <div className="border-t border-black pt-1">Prepared By</div>
-                </div>
-                <div className="text-center">
-                  <div className="border-t border-black pt-1">Checked By</div>
-                </div>
-                <div className="text-center">
-                  <div className="border-t border-black pt-1">Approved By</div>
-                </div>
-              </div>
-
-              </fieldset>
-
-              {/* Action Buttons */}
-              <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
-                {!isViewMode && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const monitorId = header.monitorId?.trim();
-
-                      if (!monitorId) {
-                        alert('Monitor ID is missing. Please wait for auto-generated ID from server.');
-                        return;
-                      }
-
-                      if (!header.customer?.trim()) {
-                        alert('Please fill Customer before saving.');
-                        return;
-                      }
-
-                      const validItems = items.filter((it) => it.id || it.product);
-                      if (validItems.length === 0) {
-                        alert('Please add at least 1 item before saving.');
-                        return;
-                      }
-
-                      const payload = {
-                        header: {
-                          ...header,
-                          paymentTerm: resolvePaymentTermId(header.paymentTerm),
-                          monitorId,
-                          totalQuantity,
-                          totalSales,
-                          vat: 0,
-                        },
-                        items: validItems,
-                      };
-
-                      try {
-                        await monitorService.save(payload);
-                        alert('💾 Monitor document saved successfully!');
-                        onNavigate('monitor-home');
-                      } catch (error) {
-                        alert('Failed to save monitor document');
-                      }
-                    }}
-                    className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
-                  >
-                    <span>💾</span>
-                    Save
-                  </button>
-                )}
-                {isViewMode && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await monitorService.markPrinted(header.monitorId);
-                      } catch (_e) { /* silent */ }
-                      window.print();
-                    }}
-                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-                  >
-                    <span>🖨️</span>
-                    Print
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm('❌ Cancel? Any unsaved changes will be lost.')) {
-                      onNavigate('monitor-home');
-                    }
-                  }}
-                  className="flex items-center gap-2 px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
-                >
-                  <span>❌</span>
-                  Cancel
-                </button>
-              </div>
-            </div>
+                <span>💾</span>
+                Save
+              </button>
+            )}
+            {isViewMode && (
+              <button
+                type="button"
+                onClick={() => void handlePrint()}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                <span>🖨️</span>
+                Print
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('❌ Cancel? Any unsaved changes will be lost.')) {
+                  goBackToDocuments();
+                }
+              }}
+              className="flex items-center gap-2 rounded-lg bg-gray-600 px-6 py-2 font-medium text-white transition-colors hover:bg-gray-700"
+            >
+              <span>❌</span>
+              Cancel
+            </button>
           </div>
         </div>
 
@@ -786,6 +734,20 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
           isLoading={isLoadingCodes}
         />
       </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <Layout
+      darkMode={darkMode}
+      setDarkMode={setDarkMode}
+      onNavigate={onNavigate}
+      currentPage={currentPage}
+    >
+      {content}
     </Layout>
   );
 }

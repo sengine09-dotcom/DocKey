@@ -62,7 +62,22 @@
 		font-size: 11px !important;
 	}
 
+	.print-invoice-doc {
+		max-width: none !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		color: #000000 !important;
+		font-size: 11px !important;
+	}
+
 	.print-monitor-doc > div {
+		border: 1px solid #000 !important;
+		border-radius: 0 !important;
+		box-shadow: none !important;
+		background: #ffffff !important;
+	}
+
+	.print-invoice-doc > div {
 		border: 1px solid #000 !important;
 		border-radius: 0 !important;
 		box-shadow: none !important;
@@ -73,7 +88,15 @@
 		page-break-inside: avoid;
 	}
 
+	.invoice-print-sheet {
+		page-break-inside: avoid;
+	}
+
 	.monitor-print-sheet table {
+		page-break-inside: avoid;
+	}
+
+	.invoice-print-sheet table {
 		page-break-inside: avoid;
 	}
 
@@ -88,7 +111,24 @@
 		appearance: none !important;
 	}
 
+	.print-invoice-doc input,
+	.print-invoice-doc select,
+	.print-invoice-doc textarea {
+		border: none !important;
+		background: transparent !important;
+		color: #000000 !important;
+		padding: 0 !important;
+		height: auto !important;
+		appearance: none !important;
+	}
+
 	.print-monitor-doc button {
+		background: transparent !important;
+		color: #000000 !important;
+		border: none !important;
+	}
+
+	.print-invoice-doc button {
 		background: transparent !important;
 		color: #000000 !important;
 		border: none !important;

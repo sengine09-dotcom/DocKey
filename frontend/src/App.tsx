@@ -15,10 +15,10 @@ import './index.css';
 const pageRouteMap: Record<string, string> = {
   dashboard: '/dashboard',
   documents: '/documents',
-  'monitor-home': '/monitors',
-  'key-monitor': '/monitors/detail',
-  'invoice-home': '/invoices',
-  'key-invoice': '/invoices/detail',
+  'monitor-home': '/documents/monitor',
+  'key-monitor': '/documents/monitor/detail',
+  'invoice-home': '/documents/invoice',
+  'key-invoice': '/documents/invoice/detail',
   'customer-code': '/codes/customer',
   'product-code': '/codes/product',
   'destination-code': '/codes/destination',
@@ -110,24 +110,28 @@ function App() {
         />
         <Route
           path="/documents"
-          element={<RoutedPage component={Documents} currentPage="documents" />}
+          element={<RoutedPage component={Documents} currentPage="documents" useLocationState={true} />}
         />
         <Route
-          path="/monitors"
+          path="/documents/monitor"
           element={<RoutedPage component={MonitorHome} currentPage="monitor-home" />}
         />
         <Route
-          path="/monitors/detail"
+          path="/documents/monitor/detail"
           element={<RoutedPage component={KeyDocumentMonitor} currentPage="key-monitor" useLocationState={true} />}
         />
         <Route
-          path="/invoices"
+          path="/documents/invoice"
           element={<RoutedPage component={InvoiceHome} currentPage="invoice-home" />}
         />
         <Route
-          path="/invoices/detail"
+          path="/documents/invoice/detail"
           element={<RoutedPage component={KeyInvoice} currentPage="key-invoice" useLocationState={true} />}
         />
+        <Route path="/monitors" element={<Navigate to="/documents/monitor" replace />} />
+        <Route path="/monitors/detail" element={<Navigate to="/documents/monitor/detail" replace />} />
+        <Route path="/invoices" element={<Navigate to="/documents/invoice" replace />} />
+        <Route path="/invoices/detail" element={<Navigate to="/documents/invoice/detail" replace />} />
         <Route
           path="/codes/customer"
           element={<RoutedPage component={CodeMaster} currentPage="customer-code" />}
