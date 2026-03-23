@@ -1,16 +1,43 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 
 export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard' }: any) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
-
-  // Sample user data (can be replaced with real user data from props or context)
-  const user = {
-    name: 'John Doe',
-    email: 'john.doe@example.com',
+  const [user, setUser] = useState({
+    name: 'User',
+    email: 'No email',
     avatar: '👤',
-    role: 'Admin'
-  };
+    role: 'User'
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCurrentUser = async () => {
+      try {
+        const response = await axios.get('/api/auth/me');
+        const profile = response.data?.user;
+
+        if (mounted && profile) {
+          setUser({
+            name: profile.name || 'User',
+            email: profile.email || 'No email',
+            avatar: '👤',
+            role: profile.role || 'User'
+          });
+        }
+      } catch (_error) {
+        // If auth fetch fails, keep fallback user labels.
+      }
+    };
+
+    loadCurrentUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
@@ -353,9 +380,14 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 {/* Logout */}
                 <a
                   href="#logout"
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.preventDefault();
-                    alert('👋 Logout - Coming Soon!');
+                    try {
+                      await axios.post('/api/auth/logout');
+                    } catch (_error) {
+                      // Ignore logout API failure and continue redirecting.
+                    }
+                    window.location.href = '/login';
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
                     darkMode
