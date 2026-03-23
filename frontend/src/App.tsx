@@ -22,6 +22,7 @@ const pageRouteMap: Record<string, string> = {
   'customer-code': '/codes/customer',
   'product-code': '/codes/product',
   'destination-code': '/codes/destination',
+  'payment-term-code': '/codes/payment-term',
 };
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -80,7 +81,7 @@ function RoutedPage({
       return;
     }
 
-    navigate(path, { state });
+    navigate(path, { state: state ?? null });
   };
 
   return (
@@ -138,6 +139,10 @@ function App() {
         <Route
           path="/codes/destination"
           element={<RoutedPage component={CodeMaster} currentPage="destination-code" />}
+        />
+        <Route
+          path="/codes/payment-term"
+          element={<RoutedPage component={CodeMaster} currentPage="payment-term-code" />}
         />
 
         {/* Redirect to dashboard or login */}

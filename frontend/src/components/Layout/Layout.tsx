@@ -1,9 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import monitorService from '../../services/monitorService';
+import invoiceService from '../../services/invoiceService';
+import codeService from '../../services/codeService';
 
-export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard' }: any) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard', topBarCaption = '' }: any) {
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('doc-key-sidebar-open');
+      return saved == null ? true : saved === 'true';
+    } catch (_error) {
+      return true;
+    }
+  });
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [openSubmenus, setOpenSubmenus] = useState(() => {
+    try {
+      const saved = localStorage.getItem('doc-key-open-submenus');
+      if (!saved) {
+        return { documents: true, codes: true };
+      }
+      const parsed = JSON.parse(saved);
+      return {
+        documents: parsed?.documents !== false,
+        codes: parsed?.codes !== false,
+      };
+    } catch (_error) {
+      return { documents: true, codes: true };
+    }
+  });
+  const [sidebarCounts, setSidebarCounts] = useState({
+    monitor: 0, invoice: 0,
+    customer: 0, product: 0, destination: 0, paymentTerm: 0,
+  });
   const [user, setUser] = useState({
     name: 'User',
     email: 'No email',
@@ -57,6 +86,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     { id: 'customer-code', label: 'Customer', icon: '🏢', href: '/codes/customer' },
     { id: 'product-code', label: 'Product', icon: '📦', href: '/codes/product' },
     { id: 'destination-code', label: 'Destination', icon: '📍', href: '/codes/destination' },
+    { id: 'payment-term-code', label: 'Payment Term', icon: '💳', href: '/codes/payment-term' },
   ];
 
   const isDocumentSectionActive =
@@ -70,7 +100,46 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     currentPage === 'codes' ||
     currentPage === 'customer-code' ||
     currentPage === 'product-code' ||
-    currentPage === 'destination-code';
+    currentPage === 'destination-code' ||
+    currentPage === 'payment-term-code';
+
+  useEffect(() => {
+    localStorage.setItem('doc-key-sidebar-open', String(sidebarOpen));
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('doc-key-open-submenus', JSON.stringify(openSubmenus));
+  }, [openSubmenus]);
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      const [mon, inv, cust, prod, dest, term] = await Promise.allSettled([
+        monitorService.getAll(),
+        invoiceService.getAll(),
+        codeService.getAll('customer'),
+        codeService.getAll('product'),
+        codeService.getAll('destination'),
+        codeService.getAll('payment-term'),
+      ]);
+      setSidebarCounts({
+        monitor:     mon.status  === 'fulfilled' ? (mon.value?.data?.data?.length  ?? 0) : 0,
+        invoice:     inv.status  === 'fulfilled' ? (inv.value?.data?.data?.length  ?? 0) : 0,
+        customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
+        product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
+        destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
+        paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
+      });
+    };
+    fetchCounts();
+  }, []);
+
+  const toggleSubmenu = (menuId) => {
+    if (menuId !== 'documents' && menuId !== 'codes') return;
+    setOpenSubmenus((prev) => ({
+      ...prev,
+      [menuId]: !prev[menuId],
+    }));
+  };
 
   const handleMenuClick = (id) => {
     // Navigate to the appropriate page
@@ -90,6 +159,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('product-code');
     } else if (id === 'destination-code') {
       onNavigate('destination-code');
+    } else if (id === 'payment-term-code') {
+      onNavigate('payment-term-code');
     } else if (id === 'key-monitor') {
       onNavigate('key-monitor');
     } else if (id === 'key-invoice') {
@@ -126,7 +197,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">          
           {menuItems.map((item) => (
             <div key={item.id} className="space-y-1">
               <a
@@ -152,14 +223,53 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 {sidebarOpen && (
                   <span className="font-medium whitespace-nowrap text-sm">{item.label}</span>
                 )}
-                {sidebarOpen && (currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive)) && (
-                  <div className="ml-auto w-1 h-6 bg-white rounded-full"></div>
+                {sidebarOpen && (
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {/* Count badge for Documents */}
+                    {item.id === 'documents' && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                        isDocumentSectionActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {sidebarCounts.monitor + sidebarCounts.invoice}
+                      </span>
+                    )}
+                    {/* Count badge for Codes */}
+                    {item.id === 'codes' && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                        isCodeSectionActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {sidebarCounts.customer + sidebarCounts.product + sidebarCounts.destination + sidebarCounts.paymentTerm}
+                      </span>
+                    )}
+                    {/* Submenu toggle button */}
+                    {item.hasSubmenu && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleSubmenu(item.id);
+                        }}
+                        className={`w-6 h-6 rounded flex items-center justify-center text-xs ${
+                          darkMode ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                        aria-label={openSubmenus[item.id] ? `Collapse ${item.label} submenu` : `Expand ${item.label} submenu`}
+                        title={openSubmenus[item.id] ? 'Collapse submenu' : 'Expand submenu'}
+                      >
+                        {openSubmenus[item.id] ? '▾' : '▸'}
+                      </button>
+                    )}
+                    {/* Active page indicator bar */}
+                    {(currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive)) && (
+                      <div className="w-1 h-6 bg-white rounded-full"></div>
+                    )}
+                  </div>
                 )}
               </a>
 
               {/* Submenu under Documents */}
-              {item.id === 'documents' && sidebarOpen && (
-                <div className="space-y-1">
+              {item.id === 'documents' && sidebarOpen && openSubmenus.documents && (
+                <div className="space-y-1">                
                   {documentSubmenu.map((submenu) => (
                     <button
                       key={submenu.id}
@@ -168,7 +278,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                         currentPage === submenu.id || currentPage === 'key-monitor' && submenu.id === 'monitor-home' || currentPage === 'key-invoice' && submenu.id === 'invoice-home'
                           ? darkMode
                             ? 'bg-blue-700 text-white'
-                            : 'bg-blue-100 text-blue-900'
+                            : 'bg-blue-400 text-white shadow-sm'
                           : darkMode
                           ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
                           : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -176,12 +286,15 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                     >
                       <span className="text-sm">{submenu.icon}</span>
                       <span>{submenu.label}</span>
+                      <span className="ml-auto text-xs font-medium opacity-70 tabular-nums">
+                        {submenu.id === 'monitor-home' ? sidebarCounts.monitor : sidebarCounts.invoice}
+                      </span>
                     </button>
                   ))}
                 </div>
               )}
 
-              {item.id === 'codes' && sidebarOpen && (
+              {item.id === 'codes' && sidebarOpen && openSubmenus.codes && (
                 <div className="space-y-1">
                   {codeSubmenu.map((submenu) => (
                     <button
@@ -191,7 +304,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                         currentPage === submenu.id
                           ? darkMode
                             ? 'bg-blue-700 text-white'
-                            : 'bg-blue-100 text-blue-900'
+                            : 'bg-blue-400 text-white shadow-sm'
                           : darkMode
                           ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
                           : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -199,6 +312,9 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                     >
                       <span className="text-sm">{submenu.icon}</span>
                       <span>{submenu.label}</span>
+                      <span className="ml-auto text-xs font-medium opacity-70 tabular-nums">
+                        {({'customer-code': sidebarCounts.customer, 'product-code': sidebarCounts.product, 'destination-code': sidebarCounts.destination, 'payment-term-code': sidebarCounts.paymentTerm} as any)[submenu.id] ?? 0}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -248,7 +364,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         <div className={`no-print ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 flex items-center justify-between shadow-sm relative`}>
           <div className="flex items-center gap-3">
             <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-              {(() => {
+              {topBarCaption || (() => {
                 let label = menuItems.find(m => m.id === currentPage)?.label || '';
                 if (!label && currentPage === 'monitor-home') label = '🖥️ Monitor';
                 if (!label && currentPage === 'key-monitor') label = '🖥️ Individual Customer Monitoring';

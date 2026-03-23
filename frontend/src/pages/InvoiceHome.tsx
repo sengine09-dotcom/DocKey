@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 import invoiceService from '../services/invoiceService';
+import useThemePreference from '../hooks/useThemePreference';
 
 export default function InvoiceHome({ onNavigate = () => {} }: any) {
   const [invoices, setInvoices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useThemePreference();
 
   useEffect(() => {
     const fetchInvoices = async () => {

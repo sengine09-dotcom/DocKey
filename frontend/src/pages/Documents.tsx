@@ -1,205 +1,286 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/Layout/Layout';
-import DocumentCard from '../components/Documents/DocumentCard';
+import monitorService from '../services/monitorService';
+import invoiceService from '../services/invoiceService';
+import useThemePreference from '../hooks/useThemePreference';
 
-export default function Documents({ onNavigate = () => { } }: any) {
-  const [documents, setDocuments] = useState([]);
+export default function Documents({ onNavigate = () => { }, currentPage = 'documents' }: any) {
+  const [darkMode, setDarkMode] = useThemePreference();
+  const [selectedType, setSelectedType] = useState<'monitor' | 'invoice'>('monitor');
+  const [monitors, setMonitors] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [search, setSearch] = useState('');
+  const [docCounts, setDocCounts] = useState({
+    monitor: 0, monitorUnprinted: 0,
+    invoice: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
-  const [expandedDocs, setExpandedDocs] = useState({});
-
-  // Sample documents data
-  const sampleDocuments = [
-    {
-      id: 1,
-      title: 'Monitor',
-      icon: '🖥️',
-      type: 'monitor',
-      description: 'Monthly system performance and monitoring report',
-      status: 'Active',
-      color: 'blue',
-      items: [
-        { id: 101, name: '0001/26', date: '2024-03-20', size: '1.2 MB', status: 'Print' },
-        { id: 102, name: '0002/26', date: '2024-03-15', size: '1.2 MB', status: 'NotPrint' }
-      ]
-    },
-    {
-      id: 2,
-      title: 'Invoice',
-      icon: '📄',
-      type: 'invoice',
-      description: 'First quarter invoice documentation',
-      status: 'Active',
-      color: 'green',
-      items: [
-        { id: 201, name: 'INV-001/2024', date: '2024-03-20', size: '0.8 MB', status: 'Print' },
-        { id: 202, name: 'INV-002/2024', date: '2024-03-15', size: '0.9 MB', status: 'Print' }
-      ]
-    }
-  ];
 
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      setDocuments(sampleDocuments);
+    const fetchCounts = async () => {
+      setIsLoading(true);
+      const [mon, inv] = await Promise.allSettled([
+        monitorService.getAll(),
+        invoiceService.getAll(),
+      ]);
+      const monitors = mon.status === 'fulfilled' ? (mon.value?.data?.data || []) : [];
+      const invoices = inv.status === 'fulfilled' ? (inv.value?.data?.data || []) : [];
+      setMonitors(monitors);
+      setInvoices(invoices);
+      setDocCounts({
+        monitor: monitors.length,
+        monitorUnprinted: monitors.filter((m: any) => m.status === 'Unprinted').length,
+        invoice: invoices.length,
+      });
       setIsLoading(false);
-    }, 500);
+    };
+    fetchCounts();
   }, []);
 
-  const handleViewDocument = (doc) => {
-    alert(`📂 Opening: ${doc.title}\nType: ${doc.type}\nSize: ${doc.size}`);
+  const formatDate = (value: any) => {
+    if (!value) return '-';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '-';
+    return parsed.toLocaleDateString('th-TH');
   };
 
-  const handleDownloadDocument = (doc) => {
-    alert(`⬇️ Downloading: ${doc.title}`);
-  };
+  const headerTitle = selectedType === 'monitor' ? '🖥️ Monitors' : '🧾 Invoices';
+  const headerSubtitle = selectedType === 'monitor'
+    ? 'Manage and review monitor documents'
+    : 'Manage and review invoice documents';
 
-  const handleDeleteDocument = (doc) => {
-    if (window.confirm(`Delete "${doc.title}"?`)) {
-      setDocuments(documents.filter(d => d.id !== doc.id));
-      alert(`✅ Document deleted successfully!`);
-    }
-  };
+  const filteredMonitors = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return monitors;
+    return monitors.filter((item: any) =>
+      [item.monitorId, item.customer, item.poNo, item.status]
+        .some((value) => String(value ?? '').toLowerCase().includes(keyword))
+    );
+  }, [monitors, search]);
 
-  const toggleExpandDoc = (docId) => {
-    setExpandedDocs({
-      ...expandedDocs,
-      [docId]: !expandedDocs[docId]
-    });
-  };
-
-  const handleAddItem = (docId) => {
-    const itemName = prompt(`Enter ${documents.find(d => d.id === docId)?.title} item name:`);
-    if (itemName && itemName.trim()) {
-      const updatedDocs = documents.map(doc => {
-        if (doc.id === docId) {
-          return {
-            ...doc,
-            items: [
-              ...doc.items,
-              {
-                id: Math.max(...doc.items.map(i => i.id), 0) + 1,
-                name: itemName.trim(),
-                date: new Date().toISOString().split('T')[0],
-                size: '0 MB',
-                status: 'Print'
-              }
-            ]
-          };
-        }
-        return doc;
-      });
-      setDocuments(updatedDocs);
-      alert(`✅ Item "${itemName}" added successfully!`);
-    }
-  };
+  const filteredInvoices = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return invoices;
+    return invoices.filter((item: any) =>
+      [item.invoiceId, item.invoiceNo, item.customer, item.status]
+        .some((value) => String(value ?? '').toLowerCase().includes(keyword))
+    );
+  }, [invoices, search]);
 
   return (
-    <Layout darkMode={darkMode} setDarkMode={setDarkMode} onNavigate={onNavigate} currentPage="documents">
+    <Layout
+      darkMode={darkMode}
+      setDarkMode={setDarkMode}
+      onNavigate={onNavigate}
+      currentPage={currentPage}
+      topBarCaption={selectedType === 'monitor' ? '🖥️ Monitors' : '🧾 Invoices'}
+    >
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-        {/* Header */}
-        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b sticky top-0 z-10`}>
-          <div className="max-w-7xl mx-auto px-6 py-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  📂 All Documents
-                </h1>
-                <p className={`text-sm mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Manage and view all your documents
-                </p>
-              </div>
-              <button
-                onClick={() => alert('📤 Upload Document - Coming Soon!')}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-2 px-6 rounded-lg transition-all flex items-center gap-2 shadow-md hover:shadow-lg"
-              >
-                <span>⬆️</span> Upload Document
-              </button>
-            </div>
-
-            {/* Stats */}
-            <div className="flex gap-4">
-              <div className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-900'}`}>
-                <span className="text-sm font-medium">Total: {documents.length}</span>
-              </div>
-              <div className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-900'}`}>
-                <span className="text-sm font-medium">Active: {documents.filter(d => d.status === 'Active').length}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Content */}
         <div className="max-w-7xl mx-auto px-6 py-8">
           {isLoading ? (
-            <div className={`text-center py-12 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              <div className="text-4xl mb-4">⏳</div>
-              <p>Loading documents...</p>
-            </div>
-          ) : documents.length === 0 ? (
-            <div className={`text-center py-12 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-lg`}>
-              <div className="text-5xl mb-4">📭</div>
-              <p className={`text-lg font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                No documents found
-              </p>
-              <p className={`text-sm mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                Upload your first document to get started
-              </p>
+            <div className={`text-center py-16 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              <div className="text-4xl mb-3">⏳</div>
+              <p>Loading...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-              {documents.map((doc) => {
-                const totalItems = doc.items.length;
-                const printedItems = doc.items.filter(i => i.status !== 'NotPrint').length;
-                const notPrintItems = doc.items.filter(i => i.status === 'NotPrint').length;
-
-                return (
-                  <div
-                    key={doc.id}
-                    className={`${darkMode ? 'bg-gray-800 hover:bg-gray-750 border-gray-700' : 'bg-white hover:bg-gray-50 border-gray-200'} border rounded-lg overflow-hidden transition-all h-full flex flex-col`}
-                  >
-                    {/* Card Content */}
-                    <div className="flex-1 px-8 py-16 flex flex-col items-start justify-start text-left">
-                      <span className="text-7xl mb-8">{doc.icon}</span>
-
-                      <div className="flex flex-row justify-between items-start w-full">
-
-                        <h3 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-3`}>
-                          {doc.title}
-                        </h3>
-
-                        {/* Summary Stats */}
-                        <div className="mb-10 space-y-1 left-0">
-                          <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Total {totalItems}
-                          </p>
-                          <p className={`text-sm ${darkMode ? 'text-green-600' : 'text-gray-600'}`}>
-                            New {notPrintItems}
-                          </p>
-                        </div>
-
-                      </div>
-
-
-                      {/* Action Buttons */}
-                      <div className="flex gap-3 w-full">
-                        <button
-                          onClick={() => handleAddItem(doc.id)}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm transition-colors font-medium"
-                        >
-                          ➕ Add new
-                        </button>
-                        <button
-                          onClick={() => toggleExpandDoc(doc.id)}
-                          className={`flex-1 ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-200 hover:bg-gray-300 text-gray-900'} px-4 py-3 rounded-lg text-sm transition-colors font-medium`}
-                        >
-                          👁️ Show All
-                        </button>
-                      </div>
+            <div className="space-y-8">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Monitor Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedType('monitor')}
+                  className={`text-left rounded-xl border p-4 transition-all ${
+                    selectedType === 'monitor'
+                      ? 'border-blue-500 bg-blue-600 text-white shadow-md'
+                      : darkMode
+                      ? 'border-gray-700 bg-gray-800 text-gray-300 hover:border-blue-500 hover:bg-gray-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-blue-400 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="text-2xl mb-2">🖥️</div>
+                  <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${
+                    selectedType === 'monitor' ? 'text-blue-100' : darkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>Document Type</p>
+                  <h2 className={`text-lg font-bold mb-2 ${selectedType === 'monitor' ? 'text-white' : darkMode ? 'text-white' : 'text-gray-900'}`}>Monitor</h2>
+                  <div className="flex gap-4">
+                    <div className={`flex-1 rounded-lg p-3 ${
+                      selectedType === 'monitor'
+                        ? 'bg-white/15 border border-white/30'
+                        : darkMode
+                        ? 'bg-gray-700'
+                        : 'bg-gray-50 border border-gray-200'
+                    }`}>
+                      <p className={`text-xs ${selectedType === 'monitor' ? 'text-blue-100' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total</p>
+                      <p className={`text-xl font-bold ${selectedType === 'monitor' ? 'text-white' : darkMode ? 'text-white' : 'text-gray-900'}`}>{docCounts.monitor}</p>
+                    </div>
+                    <div className={`flex-1 rounded-lg p-3 ${
+                      selectedType === 'monitor'
+                        ? 'bg-yellow-300/20 border border-yellow-200/40'
+                        : darkMode
+                        ? 'bg-yellow-900/30'
+                        : 'bg-yellow-50 border border-yellow-200'
+                    }`}>
+                      <p className={`text-xs ${selectedType === 'monitor' ? 'text-yellow-100' : darkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>Unprinted</p>
+                      <p className={`text-xl font-bold ${selectedType === 'monitor' ? 'text-yellow-100' : darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>{docCounts.monitorUnprinted}</p>
                     </div>
                   </div>
-                );
-              })}
+                  <p className={`mt-2 text-xs ${selectedType === 'monitor' ? 'text-blue-100' : darkMode ? 'text-blue-400' : 'text-blue-600'}`}>Click to show Monitor list below</p>
+                </button>
+
+                {/* Invoice Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedType('invoice')}
+                  className={`text-left rounded-xl border p-4 transition-all ${
+                    selectedType === 'invoice'
+                      ? 'border-purple-500 bg-purple-600 text-white shadow-md'
+                      : darkMode
+                      ? 'border-gray-700 bg-gray-800 text-gray-300 hover:border-purple-500 hover:bg-gray-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-purple-400 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="text-2xl mb-2">🧾</div>
+                  <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${
+                    selectedType === 'invoice' ? 'text-purple-100' : darkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>Document Type</p>
+                  <h2 className={`text-lg font-bold mb-2 ${selectedType === 'invoice' ? 'text-white' : darkMode ? 'text-white' : 'text-gray-900'}`}>Invoice</h2>
+                  <div className="flex gap-4">
+                    <div className={`flex-1 rounded-lg p-3 ${
+                      selectedType === 'invoice'
+                        ? 'bg-white/15 border border-white/30'
+                        : darkMode
+                        ? 'bg-gray-700'
+                        : 'bg-gray-50 border border-gray-200'
+                    }`}>
+                      <p className={`text-xs ${selectedType === 'invoice' ? 'text-purple-100' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total</p>
+                      <p className={`text-xl font-bold ${selectedType === 'invoice' ? 'text-white' : darkMode ? 'text-white' : 'text-gray-900'}`}>{docCounts.invoice}</p>
+                    </div>
+                  </div>
+                  <p className={`mt-2 text-xs ${selectedType === 'invoice' ? 'text-purple-100' : darkMode ? 'text-purple-400' : 'text-purple-600'}`}>Click to show Invoice list below</p>
+                </button>
+
+                
+              </div>
+
+              <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <p className={`text-sm font-medium ${selectedType === 'monitor' ? (darkMode ? 'text-blue-300' : 'text-blue-700') : (darkMode ? 'text-purple-300' : 'text-purple-700')}`}>
+                    {selectedType === 'monitor' ? '🖥️ Documents Master' : '🧾 Documents Master'}
+                  </p>
+                  <h2 className={`mt-2 text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                    {selectedType === 'monitor' ? 'Monitor Documents' : 'Invoice Documents'}
+                  </h2>
+                  <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {selectedType === 'monitor'
+                      ? 'Manage monitor records and check print status in one place.'
+                      : 'Manage invoice records and review payment status in one place.'}
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={selectedType === 'monitor' ? 'Search monitor ID, customer, PO No' : 'Search invoice ID, no, customer'}
+                    className={`rounded-lg border px-4 py-2 text-sm ${
+                      darkMode
+                        ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-500'
+                        : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-400'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(selectedType === 'monitor' ? 'monitor-home' : 'invoice-home')}
+                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                  >
+                    Open Full Page
+                  </button>
+                </div>
+              </div>
+
+              {/* Document List Section */}
+              <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
+                <div className={`grid px-6 py-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) 180px' }}>
+                  {selectedType === 'monitor' ? (
+                    <>
+                      <div>Monitor ID</div>
+                      <div>Customer</div>
+                      <div>PO No</div>
+                      <div>PO Date</div>
+                    </>
+                  ) : (
+                    <>
+                      <div>Invoice ID</div>
+                      <div>Invoice No</div>
+                      <div>Customer</div>
+                      <div>Invoice Date</div>
+                    </>
+                  )}
+                  <div>Status</div>
+                </div>
+
+                {selectedType === 'monitor' ? (
+                  filteredMonitors.length === 0 ? (
+                    <div className={`px-6 py-12 text-center text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      No monitor documents found.
+                    </div>
+                  ) : (
+                    filteredMonitors.map((item: any) => (
+                      <div
+                        key={item.monitorId}
+                        className={`grid items-center px-6 py-4 text-sm ${
+                          darkMode ? 'border-t border-gray-700 text-gray-100' : 'border-t border-gray-200 text-gray-900'
+                        }`}
+                        style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) 180px' }}
+                      >
+                        <div className="font-semibold">{item.monitorId || '-'}</div>
+                        <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{item.customer || '-'}</div>
+                        <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{item.poNo || '-'}</div>
+                        <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{formatDate(item.poDate)}</div>
+                        <div>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            item.status === 'Printed'
+                              ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700')
+                              : (darkMode ? 'bg-yellow-500/15 text-yellow-300' : 'bg-yellow-100 text-yellow-700')
+                          }`}>
+                            {item.status || 'Unprinted'}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )
+                ) : filteredInvoices.length === 0 ? (
+                  <div className={`px-6 py-12 text-center text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    No invoice documents found.
+                  </div>
+                ) : (
+                  filteredInvoices.map((item: any) => (
+                    <div
+                      key={item.invoiceNo}
+                      className={`grid items-center px-6 py-4 text-sm ${
+                        darkMode ? 'border-t border-gray-700 text-gray-100' : 'border-t border-gray-200 text-gray-900'
+                      }`}
+                      style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) 180px' }}
+                    >
+                      <div className="font-semibold">{item.invoiceId || '-'}</div>
+                      <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{item.invoiceNo || '-'}</div>
+                      <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{item.customer || '-'}</div>
+                      <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{formatDate(item.invoiceDate)}</div>
+                      <div>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          item.status === 'Paid'
+                            ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700')
+                            : item.status === 'Overdue'
+                            ? (darkMode ? 'bg-red-500/15 text-red-300' : 'bg-red-100 text-red-700')
+                            : (darkMode ? 'bg-yellow-500/15 text-yellow-300' : 'bg-yellow-100 text-yellow-700')
+                        }`}>
+                          {item.status || 'Pending'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>

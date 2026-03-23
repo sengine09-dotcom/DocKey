@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 import codeService from '../services/codeService';
+import useThemePreference from '../hooks/useThemePreference';
 
 const usedOptions = [
   { value: 'Y', label: 'Active' },
@@ -40,7 +41,7 @@ const pageConfigs: Record<string, any> = {
       { key: 'email', label: 'Email', type: 'email' },
       { key: 'contactPerson', label: 'Contact Person' },
       { key: 'creditLimit', label: 'Credit Limit', type: 'number', step: '0.0001' },
-      { key: 'idTerm', label: 'Term ID' },
+      { key: 'idTerm', label: 'Payment Term', type: 'select', loadOptionsFrom: 'paymentTerm' },
       { key: 'internalTerm', label: 'Internal Term', type: 'number' },
       { key: 'remark', label: 'Remark', type: 'textarea', fullWidth: true },
       { key: 'used', label: 'Status', type: 'select', options: usedOptions },
@@ -109,6 +110,31 @@ const pageConfigs: Record<string, any> = {
       destId: '', destination: '', location: '', used: 'Y',
     },
   },
+  'payment-term-code': {
+    apiType: 'payment-term',
+    title: 'Payment Term Codes',
+    icon: '💳',
+    description: 'Master payment terms used for monitor and invoice documents.',
+    idField: 'termId',
+    nameField: 'termName',
+    columns: [
+      { key: 'termId', label: 'Code' },
+      { key: 'termName', label: 'Term Name' },
+      { key: 'shortName', label: 'Short Name' },
+      { key: 'days', label: 'Days' },
+      { key: 'used', label: 'Status', type: 'status' },
+    ],
+    fields: [
+      { key: 'termId', label: 'Term ID', required: true },
+      { key: 'termName', label: 'Term Name' },
+      { key: 'shortName', label: 'Short Name' },
+      { key: 'days', label: 'Days' },
+      { key: 'used', label: 'Status', type: 'select', options: usedOptions },
+    ],
+    initialValues: {
+      termId: '', termName: '', shortName: '', days: '', used: 'Y',
+    },
+  },
 };
 
 const toDateInputValue = (value: any) => {
@@ -117,7 +143,7 @@ const toDateInputValue = (value: any) => {
 };
 
 export default function CodeMaster({ onNavigate = () => {}, currentPage = 'customer-code' }: any) {
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useThemePreference();
   const [search, setSearch] = useState('');
   const [records, setRecords] = useState<any[]>([]);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
@@ -126,6 +152,9 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [paymentTermOptions, setPaymentTermOptions] = useState<{ value: string; label: string }[]>([]);
+  const [isLoadingTerms, setIsLoadingTerms] = useState(false);
+  const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, destination: 0, paymentTerm: 0 });
 
   const config = pageConfigs[currentPage] || pageConfigs['customer-code'];
 
@@ -134,7 +163,10 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
       setIsLoading(true);
       setError('');
       const response = await codeService.getAll(config.apiType);
-      setRecords(response.data.data || []);
+      const loaded = response.data.data || [];
+      setRecords(loaded);
+      // refresh that type's count in the summary cards
+      setCodeCounts((prev) => ({ ...prev, [config.apiType === 'payment-term' ? 'paymentTerm' : config.apiType]: loaded.length }));
     } catch (loadError: any) {
       setError(loadError?.response?.data?.message || loadError.message || 'Failed to load codes');
     } finally {
@@ -149,6 +181,33 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     setEditingId(null);
     loadRecords();
   }, [currentPage]);
+
+  useEffect(() => {
+    setIsLoadingTerms(true);
+    codeService.getAll('payment-term').then((res) => {
+      const terms = res.data.data || [];
+      setPaymentTermOptions(
+        terms.map((t: any) => ({ value: t.termId, label: `${t.termId} - ${t.termName || t.shortName || t.termId}` }))
+      );
+    }).catch(() => {}).finally(() => setIsLoadingTerms(false));
+  }, []);
+
+  // Fetch all code counts for summary cards
+  useEffect(() => {
+    Promise.allSettled([
+      codeService.getAll('customer'),
+      codeService.getAll('product'),
+      codeService.getAll('destination'),
+      codeService.getAll('payment-term'),
+    ]).then(([cust, prod, dest, term]) => {
+      setCodeCounts({
+        customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
+        product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
+        destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
+        paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
+      });
+    });
+  }, []);
 
   const openCreateForm = () => {
     setEditingId(null);
@@ -234,6 +293,39 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     >
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="max-w-7xl mx-auto px-6 py-8">
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {([
+              { id: 'customer-code',      icon: '🏢', label: 'Customer',     count: codeCounts.customer },
+              { id: 'product-code',       icon: '📦', label: 'Product',      count: codeCounts.product },
+              { id: 'destination-code',   icon: '📍', label: 'Destination',  count: codeCounts.destination },
+              { id: 'payment-term-code',  icon: '💳', label: 'Payment Term', count: codeCounts.paymentTerm },
+            ] as { id: string; icon: string; label: string; count: number }[]).map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => onNavigate(card.id)}
+                className={`text-left rounded-xl border p-4 transition-all ${
+                  currentPage === card.id
+                    ? 'border-blue-500 bg-blue-600 text-white shadow-md'
+                    : darkMode
+                    ? 'border-gray-700 bg-gray-800 text-gray-300 hover:border-blue-500 hover:bg-gray-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-400 hover:shadow-sm'
+                }`}
+              >
+                <div className="text-2xl mb-2">{card.icon}</div>
+                <p className={`text-xs font-medium truncate ${
+                  currentPage === card.id ? 'text-blue-100' : darkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}>{card.label}</p>
+                <p className={`text-2xl font-bold mt-0.5 ${
+                  currentPage === card.id ? 'text-white' : darkMode ? 'text-white' : 'text-gray-900'
+                }`}>{card.count}</p>
+              </button>
+            ))}
+          </div>
+
+          {/* Header + Search */}
           <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
               <p className={`text-sm font-medium ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
@@ -317,11 +409,26 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                         onChange={(e) => handleChange(field.key, e.target.value)}
                         className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-600 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
                       >
-                        {(field.options || []).map((option: any) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
+                        {field.loadOptionsFrom === 'paymentTerm' ? (
+                          isLoadingTerms ? (
+                            <option value="">Loading payment terms...</option>
+                          ) : (
+                            <>
+                              <option value="">— Select payment term —</option>
+                              {paymentTermOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </>
+                          )
+                        ) : (
+                          (field.options || []).map((option: any) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))
+                        )}
                       </select>
                     ) : (
                       <input

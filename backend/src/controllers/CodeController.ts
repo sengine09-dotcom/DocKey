@@ -68,6 +68,14 @@ const mapDestination = (row: any) => ({
   used: row.used || 'Y',
 });
 
+const mapPaymentTerm = (row: any) => ({
+  termId: row.termId,
+  termName: row.termName || '',
+  shortName: row.shortName || '',
+  days: row.days || '',
+  used: row.used || 'Y',
+});
+
 const codeConfigs: Record<string, any> = {
   customer: {
     model: prisma.customer,
@@ -127,6 +135,19 @@ const codeConfigs: Record<string, any> = {
       destId: parseString(payload.destId),
       destination: parseString(payload.destination),
       location: parseString(payload.location),
+      used: parseString(payload.used) || 'Y',
+    }),
+  },
+  'payment-term': {
+    model: prisma.paymentTerm,
+    idField: 'termId',
+    orderBy: { termId: 'asc' },
+    mapRecord: mapPaymentTerm,
+    toData: (payload: any) => ({
+      termId: parseString(payload.termId),
+      termName: parseString(payload.termName),
+      shortName: parseString(payload.shortName),
+      days: parseString(payload.days),
       used: parseString(payload.used) || 'Y',
     }),
   },
