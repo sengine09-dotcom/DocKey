@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import documentRoutes from './routes/documents';
 import monitorRoutes from './routes/monitors';
 import invoiceRoutes from './routes/invoices';
+import codeRoutes from './routes/codes';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', monitorRoutes);
 app.use('/api', invoiceRoutes);
+app.use('/api', codeRoutes);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {

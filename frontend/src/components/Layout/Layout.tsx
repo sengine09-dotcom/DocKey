@@ -15,6 +15,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
     { id: 'documents', label: 'Documents', icon: '📄', href: '/documents', hasSubmenu: true },
+    { id: 'codes', label: 'Codes', icon: '🗂️', href: '/codes', hasSubmenu: true },
     { id: 'reports', label: 'Reports', icon: '📈', href: '/reports' },
     { id: 'upload', label: 'Upload', icon: '⬆️', href: '/upload' },
     { id: 'settings', label: 'Settings', icon: '⚙️', href: '/settings' },
@@ -25,16 +26,43 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     { id: 'invoice-home', label: 'Invoice', icon: '📋', href: '/invoice' },
   ];
 
+  const codeSubmenu = [
+    { id: 'customer-code', label: 'Customer', icon: '🏢', href: '/codes/customer' },
+    { id: 'product-code', label: 'Product', icon: '📦', href: '/codes/product' },
+    { id: 'destination-code', label: 'Destination', icon: '📍', href: '/codes/destination' },
+  ];
+
+  const isDocumentSectionActive =
+    currentPage === 'documents' ||
+    currentPage === 'monitor-home' ||
+    currentPage === 'key-monitor' ||
+    currentPage === 'invoice-home' ||
+    currentPage === 'key-invoice';
+
+  const isCodeSectionActive =
+    currentPage === 'codes' ||
+    currentPage === 'customer-code' ||
+    currentPage === 'product-code' ||
+    currentPage === 'destination-code';
+
   const handleMenuClick = (id) => {
     // Navigate to the appropriate page
     if (id === 'dashboard') {
       onNavigate('dashboard');
     } else if (id === 'documents') {
       onNavigate('documents');
+    } else if (id === 'codes') {
+      onNavigate('customer-code');
     } else if (id === 'monitor-home') {
       onNavigate('monitor-home');
     } else if (id === 'invoice-home') {
       onNavigate('invoice-home');
+    } else if (id === 'customer-code') {
+      onNavigate('customer-code');
+    } else if (id === 'product-code') {
+      onNavigate('product-code');
+    } else if (id === 'destination-code') {
+      onNavigate('destination-code');
     } else if (id === 'key-monitor') {
       onNavigate('key-monitor');
     } else if (id === 'key-invoice') {
@@ -81,7 +109,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   handleMenuClick(item.id);
                 }}
                 className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 group ${
-                  currentPage === item.id || (item.id === 'documents' && (currentPage === 'monitor-home' || currentPage === 'key-monitor' || currentPage === 'invoice-home' || currentPage === 'key-invoice'))
+                  currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive)
                     ? darkMode
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'bg-blue-600 text-white shadow-md'
@@ -97,7 +125,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 {sidebarOpen && (
                   <span className="font-medium whitespace-nowrap text-sm">{item.label}</span>
                 )}
-                {sidebarOpen && (currentPage === item.id || (item.id === 'documents' && (currentPage === 'monitor-home' || currentPage === 'key-monitor' || currentPage === 'invoice-home' || currentPage === 'key-invoice'))) && (
+                {sidebarOpen && (currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive)) && (
                   <div className="ml-auto w-1 h-6 bg-white rounded-full"></div>
                 )}
               </a>
@@ -111,6 +139,29 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                       onClick={() => handleMenuClick(submenu.id)}
                       className={`ml-12 mt-1 w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all ${
                         currentPage === submenu.id || currentPage === 'key-monitor' && submenu.id === 'monitor-home' || currentPage === 'key-invoice' && submenu.id === 'invoice-home'
+                          ? darkMode
+                            ? 'bg-blue-700 text-white'
+                            : 'bg-blue-100 text-blue-900'
+                          : darkMode
+                          ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="text-sm">{submenu.icon}</span>
+                      <span>{submenu.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {item.id === 'codes' && sidebarOpen && (
+                <div className="space-y-1">
+                  {codeSubmenu.map((submenu) => (
+                    <button
+                      key={submenu.id}
+                      onClick={() => handleMenuClick(submenu.id)}
+                      className={`ml-12 mt-1 w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                        currentPage === submenu.id
                           ? darkMode
                             ? 'bg-blue-700 text-white'
                             : 'bg-blue-100 text-blue-900'
@@ -176,6 +227,9 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 if (!label && currentPage === 'key-monitor') label = '🖥️ Individual Customer Monitoring';
                 if (!label && currentPage === 'invoice-home') label = '📋 Invoice Management';
                 if (!label && currentPage === 'key-invoice') label = '📋 Invoice Management';
+                if (!label && currentPage === 'customer-code') label = '🏢 Customer Codes';
+                if (!label && currentPage === 'product-code') label = '📦 Product Codes';
+                if (!label && currentPage === 'destination-code') label = '📍 Destination Codes';
                 return label || 'Dashboard';
               })()}
             </h1>

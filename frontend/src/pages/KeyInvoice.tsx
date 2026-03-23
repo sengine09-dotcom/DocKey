@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout/Layout';
+import ProductSelectionModal from '../components/ProductSelectionModal';
 import invoiceService from '../services/invoiceService';
+import codeService from '../services/codeService';
 
 export default function KeyInvoice({ onNavigate = () => {}, initialData = null }: any) {
   const [darkMode, setDarkMode] = useState(true);
@@ -20,6 +22,37 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
   const [items, setItems] = useState([
     { id: '', description: '', quantity: '', unitPrice: '', total: '' },
   ]);
+
+  const [customerCodes, setCustomerCodes] = useState<any[]>([]);
+  const [destinationCodes, setDestinationCodes] = useState<any[]>([]);
+  const [productCodes, setProductCodes] = useState<any[]>([]);
+  const [isLoadingCodes, setIsLoadingCodes] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    const loadCodeOptions = async () => {
+      setIsLoadingCodes(true);
+      try {
+        const [customerResponse, destinationResponse, productResponse] = await Promise.all([
+          codeService.getAll('customer'),
+          codeService.getAll('destination'),
+          codeService.getAll('product'),
+        ]);
+        setCustomerCodes(customerResponse.data.data || []);
+        setDestinationCodes(destinationResponse.data.data || []);
+        setProductCodes(productResponse.data.data || []);
+        setCodeError(null);
+      } catch (err) {
+        setCodeError('Failed to load code lists');
+      } finally {
+        setIsLoadingCodes(false);
+      }
+    };
+
+    loadCodeOptions();
+  }, []);
 
   useEffect(() => {
     if (!initialData) {
@@ -85,6 +118,20 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
     });
   };
 
+  const handleProductSelect = (product: any) => {
+    if (isViewMode || selectedItemIndex === null) return;
+
+    setItems((prev) => {
+      const next = [...prev];
+      next[selectedItemIndex] = {
+        ...next[selectedItemIndex],
+        id: product.productId,
+        description: product.productName || '',
+      };
+      return next;
+    });
+  };
+
   const addItemRow = () => {
     if (isViewMode) return;
     setItems((prev) => [
@@ -123,6 +170,13 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
 
             <div className="px-6 py-6 space-y-4 text-xs">
               <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
+              {/* Error display */}
+              {codeError && (
+                <div className={`px-3 py-2 rounded text-xs ${darkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-900'}`}>
+                  {codeError}
+                </div>
+              )}
+
               {/* Top row: Invoice ID / Invoice Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
@@ -152,10 +206,17 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                 </div>
               </div>
 
+              {/* Error display */}
+              {codeError && (
+                <div className={`px-3 py-2 rounded text-xs ${darkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-900'}`}>
+                  {codeError}
+                </div>
+              )}
+
               {/* Customer */}
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Customer :</span>
-                <input
+                <select
                   className={`flex-1 border px-2 py-1 text-xs ${
                     darkMode
                       ? 'bg-gray-900 border-gray-600 text-gray-100'
@@ -163,7 +224,14 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                   }`}
                   value={header.customer}
                   onChange={(e) => handleHeaderChange('customer', e.target.value)}
-                />
+                >
+                  <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
+                  {customerCodes.map((customer) => (
+                    <option key={customer.customerId} value={customer.customerId}>
+                      {customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Invoice row */}
@@ -212,7 +280,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               {/* Ship To */}
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Ship To :</span>
-                <input
+                <select
                   className={`flex-1 border px-2 py-1 text-xs ${
                     darkMode
                       ? 'bg-gray-900 border-gray-600 text-gray-100'
@@ -220,7 +288,14 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                   }`}
                   value={header.shipTo}
                   onChange={(e) => handleHeaderChange('shipTo', e.target.value)}
-                />
+                >
+                  <option value="">{isLoadingCodes ? 'Loading destinations...' : 'Select destination code'}</option>
+                  {destinationCodes.map((destination) => (
+                    <option key={destination.destId} value={destination.destId}>
+                      {destination.destId} - {destination.destination || destination.location || 'Unnamed'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Payment Method */}
@@ -246,12 +321,13 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                 } pt-3`}
               >
                 <div
-                  className={`grid grid-cols-[60px,2fr,100px,100px,110px,40px] text-[11px] font-semibold px-2 py-1 ${
+                  className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] font-semibold px-2 py-1 ${
                     darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-900'
                   }`}
                 >
                   <div>Item</div>
-                  <div>Description</div>
+                  <div>ID</div>
+                  <div>Product</div>
                   <div>Quantity</div>
                   <div>Unit Price</div>
                   <div>Total</div>
@@ -261,21 +337,37 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                 {items.map((item, idx) => (
                   <div
                     key={idx}
-                    className={`grid grid-cols-[60px,2fr,100px,100px,110px,40px] text-[11px] px-2 py-1 border-b ${
+                    className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] px-2 py-1 border-b ${
                       darkMode ? 'border-gray-700' : 'border-gray-200'
                     }`}
                   >
                     <div className="flex items-center">{idx + 1}</div>
                     <div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedItemIndex(idx);
+                          setProductModalOpen(true);
+                        }}
+                        className={`w-full px-1 py-0.5 text-left border rounded text-xs font-medium transition-colors ${
+                          darkMode
+                            ? 'bg-blue-900 border-blue-600 text-blue-200 hover:bg-blue-800'
+                            : 'bg-blue-50 border-blue-300 text-blue-900 hover:bg-blue-100'
+                        }`}
+                      >
+                        {item.id || 'Select...'}
+                      </button>
+                    </div>
+                    <div>
                       <input
+                        readOnly
                         className={`w-full border px-1 py-0.5 ${
                           darkMode
                             ? 'bg-gray-900 border-gray-600 text-gray-100'
                             : 'bg-white border-gray-300 text-gray-900'
                         }`}
-                        placeholder="Item description"
+                        placeholder="Product name"
                         value={item.description}
-                        onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
                       />
                     </div>
                     <div>
@@ -463,6 +555,18 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
             </div>
           </div>
         </div>
+
+        <ProductSelectionModal
+          isOpen={productModalOpen}
+          products={productCodes}
+          onSelect={handleProductSelect}
+          onClose={() => {
+            setProductModalOpen(false);
+            setSelectedItemIndex(null);
+          }}
+          darkMode={darkMode}
+          isLoading={isLoadingCodes}
+        />
       </div>
     </Layout>
   );
