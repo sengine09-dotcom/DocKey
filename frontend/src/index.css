@@ -2,12 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+	.border-gray-200 {
+		border-color: rgb(156 163 175) !important;
+	}
+
+	.border-gray-300 {
+		border-color: rgb(107 114 128) !important;
+	}
+
+	.border-gray-600 {
+		border-color: rgb(107 114 128) !important;
+	}
+
+	.border-gray-700 {
+		border-color: rgb(75 85 99) !important;
+	}
+
+	.border-red-200 {
+		border-color: rgb(252 165 165) !important;
+	}
+
+	.border-blue-200 {
+		border-color: rgb(96 165 250) !important;
+	}
+
+	.border-yellow-200 {
+		border-color: rgb(250 204 21) !important;
+	}
+
+	.border-green-200 {
+		border-color: rgb(74 222 128) !important;
+	}
+
+	.border-purple-200 {
+		border-color: rgb(196 181 253) !important;
+	}
+}
+
 @media print {
+	@page {
+		size: A4 portrait;
+		margin: 10mm;
+	}
+
 	.no-print {
 		display: none !important;
 	}
 
 	body {
 		background: #ffffff !important;
+	}
+
+	.print-monitor-doc {
+		max-width: none !important;
+		margin: 0 !important;
+		padding: 0 !important;
+		color: #000000 !important;
+		font-size: 11px !important;
+	}
+
+	.print-monitor-doc > div {
+		border: 1px solid #000 !important;
+		border-radius: 0 !important;
+		box-shadow: none !important;
+		background: #ffffff !important;
+	}
+
+	.monitor-print-sheet {
+		page-break-inside: avoid;
+	}
+
+	.monitor-print-sheet table {
+		page-break-inside: avoid;
+	}
+
+	.print-monitor-doc input,
+	.print-monitor-doc select,
+	.print-monitor-doc textarea {
+		border: none !important;
+		background: transparent !important;
+		color: #000000 !important;
+		padding: 0 !important;
+		height: auto !important;
+		appearance: none !important;
+	}
+
+	.print-monitor-doc button {
+		background: transparent !important;
+		color: #000000 !important;
+		border: none !important;
 	}
 }

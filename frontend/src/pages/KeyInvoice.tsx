@@ -3,9 +3,10 @@ import Layout from '../components/Layout/Layout';
 import ProductSelectionModal from '../components/ProductSelectionModal';
 import invoiceService from '../services/invoiceService';
 import codeService from '../services/codeService';
+import useThemePreference from '../hooks/useThemePreference';
 
 export default function KeyInvoice({ onNavigate = () => {}, initialData = null }: any) {
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useThemePreference();
   const [mode, setMode] = useState('create');
 
   const [header, setHeader] = useState({
@@ -88,6 +89,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
   }, [initialData]);
 
   const isViewMode = mode === 'view';
+  const formControlClass = 'bg-white border-gray-300 text-black';
 
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
@@ -161,7 +163,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
           >
             {/* Title bar */}
             <div
-              className={`px-6 py-3 text-center font-semibold text-sm tracking-wide ${
+              className={`px-6 py-3 text-center font-semibold text-sm tracking-wide rounded-t-2xl ${
                 darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-200 text-gray-900'
               }`}
             >
@@ -182,11 +184,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                 <div className="flex items-center gap-2">
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice ID :</span>
                   <input
-                    className={`flex-1 border px-2 py-1 text-xs ${
-                      darkMode
-                        ? 'bg-gray-900 border-gray-600 text-gray-100'
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
+                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
                     value={header.invoiceId}
                     onChange={(e) => handleHeaderChange('invoiceId', e.target.value)}
                   />
@@ -195,11 +193,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice Date :</span>
                   <input
                     type="date"
-                    className={`border px-2 py-1 text-xs ${
-                      darkMode
-                        ? 'bg-gray-900 border-gray-600 text-gray-100'
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
+                    className={`border px-2 py-1 text-xs ${formControlClass}`}
                     value={header.invoiceDate}
                     onChange={(e) => handleHeaderChange('invoiceDate', e.target.value)}
                   />
@@ -217,11 +211,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Customer :</span>
                 <select
-                  className={`flex-1 border px-2 py-1 text-xs ${
-                    darkMode
-                      ? 'bg-gray-900 border-gray-600 text-gray-100'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
+                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
                   value={header.customer}
                   onChange={(e) => handleHeaderChange('customer', e.target.value)}
                 >
@@ -239,11 +229,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                 <div className="flex items-center gap-2">
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice No :</span>
                   <input
-                    className={`flex-1 border px-2 py-1 text-xs ${
-                      darkMode
-                        ? 'bg-gray-900 border-gray-600 text-gray-100'
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
+                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
                     value={header.invoiceNo}
                     onChange={(e) => handleHeaderChange('invoiceNo', e.target.value)}
                   />
@@ -252,11 +238,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Due Date :</span>
                   <input
                     type="date"
-                    className={`flex-1 border px-2 py-1 text-xs ${
-                      darkMode
-                        ? 'bg-gray-900 border-gray-600 text-gray-100'
-                        : 'bg-white border-gray-300 text-gray-900'
-                    }`}
+                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
                     value={header.dueDate}
                     onChange={(e) => handleHeaderChange('dueDate', e.target.value)}
                   />
@@ -267,11 +249,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Bill To :</span>
                 <input
-                  className={`flex-1 border px-2 py-1 text-xs ${
-                    darkMode
-                      ? 'bg-gray-900 border-gray-600 text-gray-100'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
+                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
                   value={header.billTo}
                   onChange={(e) => handleHeaderChange('billTo', e.target.value)}
                 />
@@ -281,11 +259,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Ship To :</span>
                 <select
-                  className={`flex-1 border px-2 py-1 text-xs ${
-                    darkMode
-                      ? 'bg-gray-900 border-gray-600 text-gray-100'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
+                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
                   value={header.shipTo}
                   onChange={(e) => handleHeaderChange('shipTo', e.target.value)}
                 >
@@ -304,11 +278,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                   Payment Method :
                 </span>
                 <input
-                  className={`flex-1 border px-2 py-1 text-xs ${
-                    darkMode
-                      ? 'bg-gray-900 border-gray-600 text-gray-100'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
+                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
                   value={header.paymentMethod}
                   onChange={(e) => handleHeaderChange('paymentMethod', e.target.value)}
                 />
@@ -361,11 +331,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                     <div>
                       <input
                         readOnly
-                        className={`w-full border px-1 py-0.5 ${
-                          darkMode
-                            ? 'bg-gray-900 border-gray-600 text-gray-100'
-                            : 'bg-white border-gray-300 text-gray-900'
-                        }`}
+                        className={`w-full border px-1 py-0.5 ${formControlClass}`}
                         placeholder="Product name"
                         value={item.description}
                       />
@@ -373,11 +339,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                     <div>
                       <input
                         type="number"
-                        className={`w-full border px-1 py-0.5 text-right ${
-                          darkMode
-                            ? 'bg-gray-900 border-gray-600 text-gray-100'
-                            : 'bg-white border-gray-300 text-gray-900'
-                        }`}
+                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
                         value={item.quantity}
                         onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
                       />
@@ -386,11 +348,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                       <input
                         type="number"
                         step="0.01"
-                        className={`w-full border px-1 py-0.5 text-right ${
-                          darkMode
-                            ? 'bg-gray-900 border-gray-600 text-gray-100'
-                            : 'bg-white border-gray-300 text-gray-900'
-                        }`}
+                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
                         value={item.unitPrice}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
                       />
@@ -399,11 +357,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                       <input
                         type="number"
                         step="0.01"
-                        className={`w-full border px-1 py-0.5 text-right ${
-                          darkMode
-                            ? 'bg-gray-900 border-gray-600 text-gray-100'
-                            : 'bg-white border-gray-300 text-gray-900'
-                        }`}
+                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
                         value={item.total}
                         onChange={(e) => handleItemChange(idx, 'total', e.target.value)}
                       />

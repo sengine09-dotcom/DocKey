@@ -159,3 +159,13 @@ model Destination {
 
   @@map("tblDestination")
 }
+
+model PaymentTerm {
+  termId      String   @id @map("TermID") @db.VarChar(3)
+  termName    String?  @map("TermName") @db.VarChar(50)
+  shortName   String?  @map("ShortName") @db.VarChar(20)
+  days        String?  @map("Days") @db.VarChar(3)
+  used        String?  @map("Used") @db.VarChar(1)
+
+  @@map("tblPaymentTerm")
+}

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 import monitorService from '../services/monitorService';
+import useThemePreference from '../hooks/useThemePreference';
 
 export default function MonitorHome({ onNavigate = () => {} }: any) {
   const [monitors, setMonitors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useThemePreference();
 
   useEffect(() => {
     const fetchMonitors = async () => {
@@ -47,8 +48,8 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
   };
 
   const getStatusColor = (status) => {
-    if (status === 'Active') return 'bg-green-500/20 text-green-600';
-    if (status === 'Completed') return 'bg-blue-500/20 text-blue-600';
+    if (status === 'Printed') return 'bg-green-500/20 text-green-600';
+    if (status === 'Unprinted') return 'bg-yellow-500/20 text-yellow-600';
     return 'bg-gray-500/20 text-gray-600';
   };
 
@@ -91,10 +92,10 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
                 <span className="text-sm font-medium">Total: {monitors.length}</span>
               </div>
               <div className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-900'}`}>
-                <span className="text-sm font-medium">Active: {monitors.filter(m => m.status === 'Active').length}</span>
+                <span className="text-sm font-medium">Unprinted: {monitors.filter((m: any) => m.status === 'Unprinted').length}</span>
               </div>
               <div className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-900'}`}>
-                <span className="text-sm font-medium">Completed: {monitors.filter(m => m.status === 'Completed').length}</span>
+                <span className="text-sm font-medium">Printed: {monitors.filter((m: any) => m.status === 'Printed').length}</span>
               </div>
               <div className={`px-4 py-2 rounded-lg ${darkMode ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-900'}`}>
                 <span className="text-sm font-medium">Total Value: ฿{monitors.reduce((sum, m) => sum + m.totalSales, 0).toLocaleString()}</span>

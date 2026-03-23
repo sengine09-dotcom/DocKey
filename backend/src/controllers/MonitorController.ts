@@ -12,13 +12,13 @@ const mapMonitor = (m: any) => ({
   requestDate: m.reqDate,
   destination: m.destinationId || '',
   deliveredTo: '',
-  paymentTerm: m.termId || '30 Days',
+  paymentTerm: m.termId || '',
   totalQuantity: toNumber(m.totalQuantity),
   totalSales: toNumber(m.totalAmount),
-  status: m.status === 2 ? 'Completed' : 'Active',
+  status: m.status === 1 ? 'Printed' : 'Unprinted',
   itemCount: m.monitorDetails?.length || 0,
   lastUpdated: m.issDate || new Date().toISOString(),
-  color: m.status === 2 ? 'purple' : 'blue',
+  color: m.status === 1 ? 'green' : 'yellow',
   items: (m.monitorDetails || []).map((d: any, idx: number) => ({
     id: d.productId,
     product: d.productId,
@@ -31,6 +31,66 @@ const mapMonitor = (m: any) => ({
 });
 
 class MonitorController {
+  static async getNextId(_req: Request, res: Response) {
+    try {
+      const serverNow = new Date();
+      const yy = String(serverNow.getFullYear()).slice(-2);
+      const suffix = `/${yy}`;
+
+      const monitors = await prisma.monitor.findMany({
+        where: {
+          monitorId: {
+            endsWith: suffix,
+          },
+        },
+        select: { monitorId: true },
+      });
+
+      if (monitors.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            monitorId: `0001/${yy}`,
+            serverYear: serverNow.getFullYear(),
+          },
+        });
+      }
+
+      let maxRunningNo = 0;
+
+      for (const monitor of monitors) {
+        const id = monitor.monitorId || '';
+        const [runningPart, yearPart] = id.split('/');
+        if (yearPart === yy && /^\d{4}$/.test(runningPart)) {
+          const parsed = Number(runningPart);
+          if (!Number.isNaN(parsed) && parsed > maxRunningNo) {
+            maxRunningNo = parsed;
+          }
+        }
+      }
+
+      const nextRunningNo = maxRunningNo + 1;
+      if (nextRunningNo > 9999) {
+        return res.status(409).json({
+          success: false,
+          message: `Cannot generate Monitor ID for ${yy}. Running number limit reached.`,
+        });
+      }
+
+      const monitorId = `${String(nextRunningNo).padStart(4, '0')}/${yy}`;
+
+      return res.json({
+        success: true,
+        data: {
+          monitorId,
+          serverYear: serverNow.getFullYear(),
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
   static async getAll(_req: Request, res: Response) {
     try {
       const monitors = await prisma.monitor.findMany({
@@ -89,7 +149,7 @@ class MonitorController {
           totalAmount: toNumber(header.totalSales || 0),
           isArranged: 'N',
           remark: header.remark || null,
-          status: header.status === 'Completed' ? 2 : 1,
+          status: 0,
           vat: Number(header.vat ?? 0),
         },
         update: {
@@ -103,7 +163,6 @@ class MonitorController {
           totalQuantity: toNumber(header.totalQuantity || 0),
           totalAmount: toNumber(header.totalSales || 0),
           remark: header.remark || null,
-          status: header.status === 'Completed' ? 2 : 1,
           vat: Number(header.vat ?? 0),
         },
       });
@@ -132,6 +191,20 @@ class MonitorController {
       });
 
       res.json({ success: true, data: mapMonitor(saved) });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async markPrinted(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const updated = await prisma.monitor.update({
+        where: { monitorId: id },
+        data: { status: 1 },
+        include: { monitorDetails: true },
+      });
+      res.json({ success: true, data: mapMonitor(updated) });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
     }
