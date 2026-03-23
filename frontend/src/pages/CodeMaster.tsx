@@ -18,7 +18,11 @@ const pageConfigs: Record<string, any> = {
     apiType: 'customer',
     title: 'Customer Codes',
     icon: '🏢',
+    cardDescription: 'เลือกรหัสลูกค้าเพื่อจัดการ master data สำหรับงาน Monitor และ Invoice',
     description: 'Master customer codes used in Monitor and Invoice documents.',
+    searchPlaceholder: 'Search customer code or name',
+    listTitle: 'Recent Customer Codes',
+    createLabel: 'Add Customer Code',
     idField: 'customerId',
     nameField: 'customerName',
     columns: [
@@ -60,7 +64,11 @@ const pageConfigs: Record<string, any> = {
     apiType: 'product',
     title: 'Product Codes',
     icon: '📦',
+    cardDescription: 'เลือกรหัสสินค้าเพื่อดูและจัดการข้อมูลที่ใช้ในรายการเอกสาร',
     description: 'Master product codes for line items in Monitor and Invoice documents.',
+    searchPlaceholder: 'Search product code or product name',
+    listTitle: 'Recent Product Codes',
+    createLabel: 'Add Product Code',
     idField: 'productId',
     nameField: 'productName',
     columns: [
@@ -91,7 +99,11 @@ const pageConfigs: Record<string, any> = {
     apiType: 'destination',
     title: 'Destination Codes',
     icon: '📍',
+    cardDescription: 'เลือกปลายทางเพื่อจัดการข้อมูล shipment และ delivery reference',
     description: 'Master destinations used for shipment and delivery references.',
+    searchPlaceholder: 'Search destination code or name',
+    listTitle: 'Recent Destination Codes',
+    createLabel: 'Add Destination Code',
     idField: 'destId',
     nameField: 'destination',
     columns: [
@@ -114,7 +126,11 @@ const pageConfigs: Record<string, any> = {
     apiType: 'payment-term',
     title: 'Payment Term Codes',
     icon: '💳',
+    cardDescription: 'เลือก payment term เพื่อดูเงื่อนไขเครดิตที่ใช้ในเอกสารทั้งหมด',
     description: 'Master payment terms used for monitor and invoice documents.',
+    searchPlaceholder: 'Search term code or name',
+    listTitle: 'Recent Payment Term Codes',
+    createLabel: 'Add Payment Term Code',
     idField: 'termId',
     nameField: 'termName',
     columns: [
@@ -140,6 +156,18 @@ const pageConfigs: Record<string, any> = {
 const toDateInputValue = (value: any) => {
   if (!value) return '';
   return String(value).slice(0, 10);
+};
+
+const statToneClasses: Record<string, string> = {
+  blue: 'bg-blue-100 text-blue-700',
+  amber: 'bg-amber-100 text-amber-700',
+  green: 'bg-green-100 text-green-700',
+};
+
+const darkStatToneClasses: Record<string, string> = {
+  blue: 'bg-blue-500/15 text-blue-300',
+  amber: 'bg-amber-500/15 text-amber-300',
+  green: 'bg-green-500/15 text-green-300',
 };
 
 export default function CodeMaster({ onNavigate = () => {}, currentPage = 'customer-code' }: any) {
@@ -284,24 +312,37 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     );
   }, [records, search]);
 
+  const currentSummary = useMemo(() => {
+    const activeCount = records.filter((row: any) => String(row.used || 'Y') === 'Y').length;
+    const inactiveCount = records.length - activeCount;
+
+    return [
+      { label: 'Total Records', value: records.length, tone: 'blue' },
+      { label: 'Active', value: activeCount, tone: 'green' },
+      { label: 'Inactive', value: inactiveCount, tone: 'amber' },
+    ];
+  }, [records]);
+
+  const codeCards = [
+    { id: 'customer-code', icon: '🏢', label: 'Customer', count: codeCounts.customer, description: pageConfigs['customer-code'].cardDescription },
+    { id: 'product-code', icon: '📦', label: 'Product', count: codeCounts.product, description: pageConfigs['product-code'].cardDescription },
+    { id: 'destination-code', icon: '📍', label: 'Destination', count: codeCounts.destination, description: pageConfigs['destination-code'].cardDescription },
+    { id: 'payment-term-code', icon: '💳', label: 'Payment Term', count: codeCounts.paymentTerm, description: pageConfigs['payment-term-code'].cardDescription },
+  ];
+
   return (
     <Layout
       darkMode={darkMode}
       setDarkMode={setDarkMode}
       onNavigate={onNavigate}
       currentPage={currentPage}
+      topBarCaption={`${config.icon} ${config.title}`}
     >
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="max-w-7xl mx-auto px-6 py-8">
 
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {([
-              { id: 'customer-code',      icon: '🏢', label: 'Customer',     count: codeCounts.customer },
-              { id: 'product-code',       icon: '📦', label: 'Product',      count: codeCounts.product },
-              { id: 'destination-code',   icon: '📍', label: 'Destination',  count: codeCounts.destination },
-              { id: 'payment-term-code',  icon: '💳', label: 'Payment Term', count: codeCounts.paymentTerm },
-            ] as { id: string; icon: string; label: string; count: number }[]).map((card) => (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mb-8">
+            {codeCards.map((card) => (
               <button
                 key={card.id}
                 type="button"
@@ -315,17 +356,28 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                 }`}
               >
                 <div className="text-2xl mb-2">{card.icon}</div>
-                <p className={`text-xs font-medium truncate ${
+                <p className={`text-xs font-medium uppercase tracking-wide mb-1 ${
                   currentPage === card.id ? 'text-blue-100' : darkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}>{card.label}</p>
-                <p className={`text-2xl font-bold mt-0.5 ${
+                }`}>Step 1</p>
+                <h2 className={`text-lg font-bold mb-2 ${
                   currentPage === card.id ? 'text-white' : darkMode ? 'text-white' : 'text-gray-900'
-                }`}>{card.count}</p>
+                }`}>{card.label}</h2>
+                <p className={`mb-3 text-sm ${currentPage === card.id ? 'text-blue-100' : darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  {card.description}
+                </p>
+                <div className={`inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${
+                  currentPage === card.id
+                    ? 'bg-white/15 text-white'
+                    : darkMode
+                    ? 'bg-gray-700 text-white'
+                    : 'bg-gray-100 text-gray-900'
+                }`}>
+                  {card.count} records
+                </div>
               </button>
             ))}
           </div>
 
-          {/* Header + Search */}
           <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
               <p className={`text-sm font-medium ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>
@@ -343,7 +395,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search code or name"
+                placeholder={config.searchPlaceholder}
                 className={`rounded-lg border px-4 py-2 text-sm ${
                   darkMode
                     ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-500'
@@ -355,9 +407,39 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                 onClick={openCreateForm}
                 className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
               >
-                Add Code
+                {config.createLabel}
               </button>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-8">
+            <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Step 1</p>
+              <h3 className={`mt-2 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Choose code type</h3>
+              <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>เลือกประเภท code จากการ์ดด้านบนก่อน เพื่อให้ฟอร์ม รายการ และ action ทำงานกับชุดข้อมูลเดียวกัน</p>
+            </div>
+            <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Step 2</p>
+              <h3 className={`mt-2 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Create or review here</h3>
+              <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>เพิ่มข้อมูลใหม่จากปุ่มด้านบน หรือค้นหา แก้ไข และลบจากรายการด้านล่างได้ทันทีจากหน้าเดียว</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
+            {currentSummary.map((item) => (
+              <div
+                key={item.label}
+                className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}
+              >
+                <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{item.label}</p>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.value}</p>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? darkStatToneClasses[item.tone] : statToneClasses[item.tone]}`}>
+                    {config.icon} {config.label || config.title.replace(' Codes', '')}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
 
           {error && (
@@ -370,6 +452,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
             <div className={`mb-6 rounded-2xl border p-6 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Step 2</p>
                   <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                     {editingId ? `Edit ${config.title}` : `Add ${config.title}`}
                   </h2>
@@ -451,13 +534,35 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                   disabled={isSaving}
                   className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
                 >
-                  {isSaving ? 'Saving...' : 'Save Code'}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
           )}
 
           <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
+            <div className={`flex items-center justify-between gap-4 px-6 py-5 ${darkMode ? 'border-b border-gray-700 bg-gray-800' : 'border-b border-gray-200 bg-white'}`}>
+              <div>
+                <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Step 2</p>
+                <h3 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{config.listTitle}</h3>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={loadRecords}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium ${darkMode ? 'bg-gray-700 text-gray-100 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={openCreateForm}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  Add New
+                </button>
+              </div>
+            </div>
             <div className={`grid px-6 py-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: `repeat(${config.columns.length}, minmax(0, 1fr)) 220px` }}>
               {config.columns.map((column: any) => (
                 <div key={column.key}>{column.label}</div>

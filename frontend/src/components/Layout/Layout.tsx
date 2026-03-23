@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useLocation } from 'react-router-dom';
 import monitorService from '../../services/monitorService';
 import invoiceService from '../../services/invoiceService';
 import codeService from '../../services/codeService';
 
 export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard', topBarCaption = '' }: any) {
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
       const saved = localStorage.getItem('doc-key-sidebar-open');
@@ -68,6 +70,10 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     };
   }, []);
 
+  const selectedDocumentTab = location.pathname === '/documents' && (location.state as any)?.selectedType === 'invoice'
+    ? 'invoice'
+    : 'monitor';
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
     { id: 'documents', label: 'Documents', icon: '📄', href: '/documents', hasSubmenu: true },
@@ -78,15 +84,15 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   ];
 
   const documentSubmenu = [
-    { id: 'monitor-home', label: 'Monitor', icon: '🖥️', href: '/monitor' },
-    { id: 'invoice-home', label: 'Invoice', icon: '📋', href: '/invoice' },
+    { id: 'monitor-home', label: 'Monitor', icon: '🖥️', href: '/documents', count: sidebarCounts.monitor, isActive: currentPage === 'monitor-home' || currentPage === 'key-monitor' || (currentPage === 'documents' && selectedDocumentTab === 'monitor') },
+    { id: 'invoice-home', label: 'Invoice', icon: '🧾', href: '/documents', count: sidebarCounts.invoice, isActive: currentPage === 'invoice-home' || currentPage === 'key-invoice' || (currentPage === 'documents' && selectedDocumentTab === 'invoice') },
   ];
 
   const codeSubmenu = [
-    { id: 'customer-code', label: 'Customer', icon: '🏢', href: '/codes/customer' },
-    { id: 'product-code', label: 'Product', icon: '📦', href: '/codes/product' },
-    { id: 'destination-code', label: 'Destination', icon: '📍', href: '/codes/destination' },
-    { id: 'payment-term-code', label: 'Payment Term', icon: '💳', href: '/codes/payment-term' },
+    { id: 'customer-code', label: 'Customer', icon: '🏢', href: '/codes/customer', count: sidebarCounts.customer, isActive: currentPage === 'customer-code' },
+    { id: 'product-code', label: 'Product', icon: '📦', href: '/codes/product', count: sidebarCounts.product, isActive: currentPage === 'product-code' },
+    { id: 'destination-code', label: 'Destination', icon: '📍', href: '/codes/destination', count: sidebarCounts.destination, isActive: currentPage === 'destination-code' },
+    { id: 'payment-term-code', label: 'Payment Term', icon: '💳', href: '/codes/payment-term', count: sidebarCounts.paymentTerm, isActive: currentPage === 'payment-term-code' },
   ];
 
   const isDocumentSectionActive =
@@ -150,9 +156,9 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     } else if (id === 'codes') {
       onNavigate('customer-code');
     } else if (id === 'monitor-home') {
-      onNavigate('monitor-home');
+      onNavigate('documents', { selectedType: 'monitor' });
     } else if (id === 'invoice-home') {
-      onNavigate('invoice-home');
+      onNavigate('documents', { selectedType: 'invoice' });
     } else if (id === 'customer-code') {
       onNavigate('customer-code');
     } else if (id === 'product-code') {
@@ -173,6 +179,37 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       alert('⚙️ Settings - Coming Soon!');
     }
   };
+
+  const renderSubmenu = (items) => (
+    <div className="ml-3 space-y-1">
+      {items.map((submenu) => (
+        <button
+          key={submenu.id}
+          onClick={() => handleMenuClick(submenu.id)}
+          className={`flex w-full items-center gap-4 rounded-lg px-4 py-3 text-left transition-all duration-200 group ${getMenuItemClasses(submenu.isActive)}`}
+        >
+          <span className="text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
+            {submenu.icon}
+          </span>
+          <span className="font-medium whitespace-nowrap text-sm">{submenu.label}</span>
+          <span className={`ml-auto text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+            submenu.isActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+          }`}>
+            {submenu.count}
+          </span>
+          {submenu.isActive && <div className="w-1 h-6 bg-white rounded-full"></div>}
+        </button>
+      ))}
+    </div>
+  );
+
+  const getMenuItemClasses = (isActive) => (
+    isActive
+      ? 'bg-blue-600 text-white shadow-md'
+      : darkMode
+      ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
+      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+  );
 
   return (
     <div className={`flex h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
@@ -206,15 +243,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   e.preventDefault();
                   handleMenuClick(item.id);
                 }}
-                className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 group ${
-                  currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive)
-                    ? darkMode
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-blue-600 text-white shadow-md'
-                    : darkMode
-                    ? 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                }`}
+                className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 group ${getMenuItemClasses(currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive))}`}
                 title={!sidebarOpen ? item.label : ''}
               >
                 <span className="text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
@@ -267,57 +296,12 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 )}
               </a>
 
-              {/* Submenu under Documents */}
               {item.id === 'documents' && sidebarOpen && openSubmenus.documents && (
-                <div className="space-y-1">                
-                  {documentSubmenu.map((submenu) => (
-                    <button
-                      key={submenu.id}
-                      onClick={() => handleMenuClick(submenu.id)}
-                      className={`ml-12 mt-1 w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all ${
-                        currentPage === submenu.id || currentPage === 'key-monitor' && submenu.id === 'monitor-home' || currentPage === 'key-invoice' && submenu.id === 'invoice-home'
-                          ? darkMode
-                            ? 'bg-blue-700 text-white'
-                            : 'bg-blue-400 text-white shadow-sm'
-                          : darkMode
-                          ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                      }`}
-                    >
-                      <span className="text-sm">{submenu.icon}</span>
-                      <span>{submenu.label}</span>
-                      <span className="ml-auto text-xs font-medium opacity-70 tabular-nums">
-                        {submenu.id === 'monitor-home' ? sidebarCounts.monitor : sidebarCounts.invoice}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                renderSubmenu(documentSubmenu)
               )}
 
               {item.id === 'codes' && sidebarOpen && openSubmenus.codes && (
-                <div className="space-y-1">
-                  {codeSubmenu.map((submenu) => (
-                    <button
-                      key={submenu.id}
-                      onClick={() => handleMenuClick(submenu.id)}
-                      className={`ml-12 mt-1 w-full text-left flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all ${
-                        currentPage === submenu.id
-                          ? darkMode
-                            ? 'bg-blue-700 text-white'
-                            : 'bg-blue-400 text-white shadow-sm'
-                          : darkMode
-                          ? 'text-gray-400 hover:bg-gray-700 hover:text-white'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                      }`}
-                    >
-                      <span className="text-sm">{submenu.icon}</span>
-                      <span>{submenu.label}</span>
-                      <span className="ml-auto text-xs font-medium opacity-70 tabular-nums">
-                        {({'customer-code': sidebarCounts.customer, 'product-code': sidebarCounts.product, 'destination-code': sidebarCounts.destination, 'payment-term-code': sidebarCounts.paymentTerm} as any)[submenu.id] ?? 0}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                renderSubmenu(codeSubmenu)
               )}
             </div>
           ))}
@@ -366,10 +350,10 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
             <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
               {topBarCaption || (() => {
                 let label = menuItems.find(m => m.id === currentPage)?.label || '';
-                if (!label && currentPage === 'monitor-home') label = '🖥️ Monitor';
-                if (!label && currentPage === 'key-monitor') label = '🖥️ Individual Customer Monitoring';
-                if (!label && currentPage === 'invoice-home') label = '📋 Invoice Management';
-                if (!label && currentPage === 'key-invoice') label = '📋 Invoice Management';
+                if (!label && currentPage === 'monitor-home') label = '🖥️ Monitor Documents';
+                if (!label && currentPage === 'key-monitor') label = '🖥️ Monitor Document';
+                if (!label && currentPage === 'invoice-home') label = '🧾 Invoice Documents';
+                if (!label && currentPage === 'key-invoice') label = '🧾 Invoice Document';
                 if (!label && currentPage === 'customer-code') label = '🏢 Customer Codes';
                 if (!label && currentPage === 'product-code') label = '📦 Product Codes';
                 if (!label && currentPage === 'destination-code') label = '📍 Destination Codes';

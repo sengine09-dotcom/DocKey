@@ -1,17 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 import ProductSelectionModal from '../components/ProductSelectionModal';
 import invoiceService from '../services/invoiceService';
 import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
+import { printDocumentContent } from '../utils/printDocument';
 
-export default function KeyInvoice({ onNavigate = () => {}, initialData = null }: any) {
-  const [darkMode, setDarkMode] = useThemePreference();
+const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
+
+const formatPrintDate = (value: any) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: '2-digit',
+  });
+};
+
+export default function KeyInvoice({ onNavigate = () => {}, initialData = null, embedded = false, darkMode: embeddedDarkMode, setDarkMode: embeddedSetDarkMode, currentPage = 'key-invoice' }: any) {
+  const [preferredDarkMode, setPreferredDarkMode] = useThemePreference();
+  const darkMode = embedded ? embeddedDarkMode : preferredDarkMode;
+  const setDarkMode = embedded ? embeddedSetDarkMode : setPreferredDarkMode;
   const [mode, setMode] = useState('create');
 
   const [header, setHeader] = useState({
     invoiceId: '',
-    invoiceDate: '',
+    invoiceDate: getTodayDateInputValue(),
     customer: '',
     invoiceNo: '',
     dueDate: '',
@@ -31,6 +47,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
   const [codeError, setCodeError] = useState<string | null>(null);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+  const printSheetRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const loadCodeOptions = async () => {
@@ -58,6 +75,19 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
   useEffect(() => {
     if (!initialData) {
       setMode('create');
+      setHeader({
+        invoiceId: '',
+        invoiceDate: getTodayDateInputValue(),
+        customer: '',
+        invoiceNo: '',
+        dueDate: '',
+        billTo: '',
+        shipTo: '',
+        paymentMethod: 'Bank Transfer',
+      });
+      setItems([
+        { id: '', description: '', quantity: '', unitPrice: '', total: '' },
+      ]);
       return;
     }
 
@@ -95,6 +125,27 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
+  const printItems = items.filter((item) => item.id || item.description || item.quantity || item.unitPrice || item.total);
+
+  const customerDisplay = (() => {
+    const customerId = String(header.customer || '').trim();
+    if (!customerId) return '';
+
+    const selectedCustomer = customerCodes.find((customer) => customer.customerId === customerId);
+    if (!selectedCustomer) return customerId;
+
+    return selectedCustomer.customerName || selectedCustomer.shortName || selectedCustomer.customerId || customerId;
+  })();
+
+  const shipToDisplay = (() => {
+    const destinationId = String(header.shipTo || '').trim();
+    if (!destinationId) return '';
+
+    const selectedDestination = destinationCodes.find((destination) => destination.destId === destinationId);
+    if (!selectedDestination) return destinationId;
+
+    return selectedDestination.destination || selectedDestination.location || selectedDestination.destId || destinationId;
+  })();
 
   const handleHeaderChange = (field, value) => {
     if (isViewMode) return;
@@ -147,17 +198,101 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  return (
-    <Layout
-      darkMode={darkMode}
-      setDarkMode={setDarkMode}
-      onNavigate={onNavigate}
-      currentPage="key-invoice"
-    >
-      <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
-        <div className="max-w-5xl mx-auto px-6 py-10">
+  const goBackToDocuments = () => {
+    onNavigate('documents', { selectedType: 'invoice' });
+  };
+
+  const handlePrint = () => {
+    if (!printSheetRef.current) {
+      window.alert('Print form is not ready yet.');
+      return;
+    }
+
+    printDocumentContent(`Invoice ${header.invoiceNo || header.invoiceId || ''}`, printSheetRef.current.outerHTML);
+  };
+
+  const content = (
+      <div className={embedded ? '' : `min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+        <div className={`print-invoice-doc ${embedded ? 'px-0 py-0' : 'max-w-5xl mx-auto px-6 py-10'}`}>
+          <div ref={printSheetRef} className={`${isViewMode ? 'block' : 'hidden print:block'} invoice-print-sheet border border-black bg-white p-4 text-[12px] leading-tight text-black`}>
+            <div className="flex items-start gap-4 border-b-2 border-red-700 pb-3">
+              <div className="flex h-16 w-16 items-center justify-center border border-black bg-gray-100 text-lg font-bold">CT</div>
+              <div className="flex-1 text-center">
+                <div className="text-3xl font-bold tracking-wide">CHAYA TENANG SDN.BHD.</div>
+                <div className="mt-1 text-[11px]">(56951-U)</div>
+                <div className="mt-1 text-[11px]">No.33, Jalan Mutiara Emas 7/6 Taman Mount Austin 81100 Johor Bahru, Johor Malaysia</div>
+                <div className="text-[11px]">Mobile : 012-7849148   Email : chayatenang@yahoo.com</div>
+              </div>
+            </div>
+
+            <div className="mt-3 bg-gray-500 py-1 text-center text-[22px] font-semibold text-white">
+              Invoice
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-4 text-[12px]">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2"><span className="w-24 font-semibold">Invoice No :</span><span className="min-w-[120px] border border-black px-3 py-1 text-center font-semibold">{header.invoiceNo || header.invoiceId || '-'}</span></div>
+                <div><span className="font-semibold">Customer :</span> {customerDisplay || '-'}</div>
+                <div><span className="font-semibold">Bill To :</span> {header.billTo || customerDisplay || '-'}</div>
+                <div><span className="font-semibold">Ship To :</span> {shipToDisplay || '-'}</div>
+                <div><span className="font-semibold">Payment Method :</span> {header.paymentMethod || '-'}</div>
+              </div>
+              <div className="space-y-2">
+                <div><span className="font-semibold">Invoice Date :</span> {formatPrintDate(header.invoiceDate)}</div>
+                <div><span className="font-semibold">Due Date :</span> {formatPrintDate(header.dueDate)}</div>
+                <div><span className="font-semibold">Customer Code :</span> {header.customer || '-'}</div>
+                <div><span className="font-semibold">Ship To Code :</span> {header.shipTo || '-'}</div>
+              </div>
+            </div>
+
+            <table className="mt-4 w-full border-collapse border border-black text-[12px]">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="w-10 border border-black px-2 py-1">Item</th>
+                  <th className="w-16 border border-black px-2 py-1">ID</th>
+                  <th className="border border-black px-2 py-1">Description</th>
+                  <th className="w-28 border border-black px-2 py-1">Quantity</th>
+                  <th className="w-24 border border-black px-2 py-1">Unit Price</th>
+                  <th className="w-24 border border-black px-2 py-1">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {printItems.length === 0 ? (
+                  <tr>
+                    <td className="border border-black px-2 py-2 text-center" colSpan={6}>-</td>
+                  </tr>
+                ) : (
+                  printItems.map((item, idx) => (
+                    <tr key={`print-${idx}`}>
+                      <td className="border border-black px-2 py-1 text-center">{idx + 1}</td>
+                      <td className="border border-black px-2 py-1 text-center">{item.id || '-'}</td>
+                      <td className="border border-black px-2 py-1">{item.description || '-'}</td>
+                      <td className="border border-black px-2 py-1 text-right">{Number(item.quantity || 0).toFixed(3)}</td>
+                      <td className="border border-black px-2 py-1 text-right">{Number(item.unitPrice || 0).toFixed(2)}</td>
+                      <td className="border border-black px-2 py-1 text-right">{Number(item.total || 0).toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            <div className="mt-4 grid grid-cols-2 gap-6">
+              <div>
+                <div className="font-semibold">Remark :</div>
+                <div className="mt-2 min-h-[70px] border border-black px-3 py-2">-</div>
+              </div>
+              <div className="space-y-1 text-[13px]">
+                <div className="flex justify-between"><span className="font-semibold">Total Quantity :</span><span className="font-semibold">{totalQuantity.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="font-semibold">Subtotal :</span><span className="font-semibold">{subtotal.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="font-semibold">Tax (10%) :</span><span className="font-semibold">{tax.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="font-semibold">Total Amount Due :</span><span className="font-semibold">{total.toFixed(2)}</span></div>
+                <div className="mt-8 border-t border-black pt-8 text-center">Approval Sign by Authorized Person</div>
+              </div>
+            </div>
+          </div>
+
           <div
-            className={`border rounded-2xl shadow ${
+            className={`print:hidden border rounded-2xl shadow ${
               darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
             }`}
           >
@@ -171,7 +306,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
             </div>
 
             <div className="px-6 py-6 space-y-4 text-xs">
-              <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
+              <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95 space-y-4' : 'space-y-4'}>
               {/* Error display */}
               {codeError && (
                 <div className={`px-3 py-2 rounded text-xs ${darkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-900'}`}>
@@ -180,20 +315,20 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               )}
 
               {/* Top row: Invoice ID / Invoice Date */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-5">
+                <div className="flex items-center gap-3">
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice ID :</span>
                   <input
-                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
+                    className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                     value={header.invoiceId}
                     onChange={(e) => handleHeaderChange('invoiceId', e.target.value)}
                   />
                 </div>
-                <div className="flex items-center gap-2 justify-end">
+                <div className="flex items-center gap-3 justify-end">
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice Date :</span>
                   <input
                     type="date"
-                    className={`border px-2 py-1 text-xs ${formControlClass}`}
+                    className={`rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                     value={header.invoiceDate}
                     onChange={(e) => handleHeaderChange('invoiceDate', e.target.value)}
                   />
@@ -208,10 +343,10 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               )}
 
               {/* Customer */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Customer :</span>
                 <select
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
+                  className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                   value={header.customer}
                   onChange={(e) => handleHeaderChange('customer', e.target.value)}
                 >
@@ -225,20 +360,20 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               </div>
 
               {/* Invoice row */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-3 gap-5">
+                <div className="flex items-center gap-3">
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice No :</span>
                   <input
-                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
+                    className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                     value={header.invoiceNo}
                     onChange={(e) => handleHeaderChange('invoiceNo', e.target.value)}
                   />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Due Date :</span>
                   <input
                     type="date"
-                    className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
+                    className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                     value={header.dueDate}
                     onChange={(e) => handleHeaderChange('dueDate', e.target.value)}
                   />
@@ -246,20 +381,20 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               </div>
 
               {/* Bill To */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Bill To :</span>
                 <input
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
+                  className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                   value={header.billTo}
                   onChange={(e) => handleHeaderChange('billTo', e.target.value)}
                 />
               </div>
 
               {/* Ship To */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Ship To :</span>
                 <select
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
+                  className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                   value={header.shipTo}
                   onChange={(e) => handleHeaderChange('shipTo', e.target.value)}
                 >
@@ -273,12 +408,12 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               </div>
 
               {/* Payment Method */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>
                   Payment Method :
                 </span>
                 <input
-                  className={`flex-1 border px-2 py-1 text-xs ${formControlClass}`}
+                  className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
                   value={header.paymentMethod}
                   onChange={(e) => handleHeaderChange('paymentMethod', e.target.value)}
                 />
@@ -307,7 +442,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                 {items.map((item, idx) => (
                   <div
                     key={idx}
-                    className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] px-2 py-1 border-b ${
+                    className={`grid grid-cols-[40px,80px,1.5fr,100px,90px,110px,40px] text-[11px] px-2 py-2 border-b ${
                       darkMode ? 'border-gray-700' : 'border-gray-200'
                     }`}
                   >
@@ -331,7 +466,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                     <div>
                       <input
                         readOnly
-                        className={`w-full border px-1 py-0.5 ${formControlClass}`}
+                        className={`w-full rounded-md border px-2 py-1.5 ${formControlClass}`}
                         placeholder="Product name"
                         value={item.description}
                       />
@@ -339,7 +474,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                     <div>
                       <input
                         type="number"
-                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
+                        className={`w-full rounded-md border px-2 py-1.5 text-right ${formControlClass}`}
                         value={item.quantity}
                         onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
                       />
@@ -348,7 +483,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                       <input
                         type="number"
                         step="0.01"
-                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
+                        className={`w-full rounded-md border px-2 py-1.5 text-right ${formControlClass}`}
                         value={item.unitPrice}
                         onChange={(e) => handleItemChange(idx, 'unitPrice', e.target.value)}
                       />
@@ -357,7 +492,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                       <input
                         type="number"
                         step="0.01"
-                        className={`w-full border px-1 py-0.5 text-right ${formControlClass}`}
+                        className={`w-full rounded-md border px-2 py-1.5 text-right ${formControlClass}`}
                         value={item.total}
                         onChange={(e) => handleItemChange(idx, 'total', e.target.value)}
                       />
@@ -424,7 +559,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
               </fieldset>
 
               {/* Action Buttons */}
-              <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-center">
+              <div className="no-print mt-6 border-t pt-4 flex gap-3 justify-end">
                 {!isViewMode && (
                   <button
                     type="button"
@@ -462,6 +597,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                         await invoiceService.save(payload);
                         alert('💾 Invoice saved successfully!');
                         setHeader((prev) => ({ ...prev, invoiceNo, invoiceId: invoiceNo }));
+                        goBackToDocuments();
                       } catch (error) {
                         alert('Failed to save invoice');
                       }
@@ -486,7 +622,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                   type="button"
                   onClick={() => {
                     if (window.confirm('❌ Cancel? Any unsaved changes will be lost.')) {
-                      onNavigate('invoice-home');
+                      goBackToDocuments();
                     }
                   }}
                   className="flex items-center gap-2 px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition-colors"
@@ -494,17 +630,16 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
                   <span>❌</span>
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    alert('🖨️ Print Invoice\n\nOpening print dialog...');
-                    window.print();
-                  }}
-                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-                >
-                  <span>🖨️</span>
-                  Print
-                </button>
+                {isViewMode && (
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                  >
+                    <span>🖨️</span>
+                    Print
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -522,6 +657,20 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null }
           isLoading={isLoadingCodes}
         />
       </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <Layout
+      darkMode={darkMode}
+      setDarkMode={setDarkMode}
+      onNavigate={onNavigate}
+      currentPage={currentPage}
+    >
+      {content}
     </Layout>
   );
 }
