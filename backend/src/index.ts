@@ -2,6 +2,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
+import authRoutes from './routes/auth';
 import documentRoutes from './routes/documents';
 import monitorRoutes from './routes/monitors';
 import invoiceRoutes from './routes/invoices';
@@ -17,6 +18,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', monitorRoutes);
 app.use('/api', invoiceRoutes);
