@@ -93,3 +93,55 @@ model InvoiceDetail {
   @@index([invoiceNo])
   @@map("tblInvoiceDetail")
 }
+
+model Customer {
+  customerId          String    @id @map("CustomerID") @db.VarChar(5)
+  agentId             String?   @map("AgentID") @db.VarChar(5)
+  customerName        String?   @map("CustomerName") @db.VarChar(255)
+  shortName           String?   @map("ShortName") @db.VarChar(255)
+  registerDate        DateTime? @map("RegisterDate")
+  registrationNo      String?   @map("RegistrationNo") @db.VarChar(20)
+  address             String?   @map("Address") @db.VarChar(500)
+  phone               String?   @map("Phone") @db.VarChar(50)
+  fax                 String?   @map("Fax") @db.VarChar(20)
+  email               String?   @map("Email") @db.VarChar(255)
+  contactPerson       String?   @map("ContactPerson") @db.VarChar(50)
+  creditLimit         Decimal?  @map("CreditLimit") @db.Decimal(19, 4)
+  idTerm              String?   @map("IDTerm") @db.VarChar(3)
+  internalTerm        Int?      @map("InternalTerm")
+  remark              String?   @map("Remark") @db.VarChar(255)
+  used                String?   @map("Used") @db.VarChar(1)
+  totalShare          Decimal?  @map("TotalShare") @db.Decimal(19, 4)
+  gstId               String?   @map("GSTid") @db.VarChar(15)
+  isGuaratee          Int?      @map("IsGuaratee")
+  guarateePrice       Decimal?  @map("GuarateePrice") @db.Decimal(19, 4)
+  guarateeDateStart   DateTime? @map("GuarateeDateStart")
+  guarateeDateEnd     DateTime? @map("GuarateeDateEnd")
+
+  @@map("tblCustomer")
+}
+
+model Product {
+  productId    String   @id @map("ProductID") @db.VarChar(5)
+  productName  String?  @map("ProductName") @db.VarChar(100)
+  marking      String?  @map("Marking") @db.VarChar(100)
+  type         String?  @map("Type") @db.VarChar(100)
+  bagSize      String?  @map("BagSize") @db.VarChar(100)
+  pWeight      Float?   @map("PWeight")
+  comValue     String?  @map("ComValue") @db.VarChar(1)
+  description  String?  @map("Description") @db.VarChar(255)
+  idSupplier   String?  @map("IDSupplier") @db.VarChar(3)
+  showInStock  String?  @map("ShowInStock") @db.VarChar(1)
+  used         String?  @map("Used") @db.VarChar(1)
+
+  @@map("tblProduct")
+}
+
+model Destination {
+  destId        String   @id @map("DestID") @db.VarChar(3)
+  destination   String?  @map("Destination") @db.VarChar(50)
+  location      String?  @map("Location") @db.VarChar(50)
+  used          String?  @map("Used") @db.VarChar(1)
+
+  @@map("tblDestination")
+}

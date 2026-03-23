@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout/Layout';
+import ProductSelectionModal from '../components/ProductSelectionModal';
+import codeService from '../services/codeService';
 import monitorService from '../services/monitorService';
 
 export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData = null }: any) {
   const [darkMode, setDarkMode] = useState(true);
   const [mode, setMode] = useState('create');
+  const [customerCodes, setCustomerCodes] = useState<any[]>([]);
+  const [destinationCodes, setDestinationCodes] = useState<any[]>([]);
+  const [productCodes, setProductCodes] = useState<any[]>([]);
+  const [isLoadingCodes, setIsLoadingCodes] = useState(false);
+  const [codeError, setCodeError] = useState('');
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
   const [header, setHeader] = useState({
     monitorId: '',
@@ -21,6 +30,31 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
   const [items, setItems] = useState([
     { id: '', product: '', packing: '', quantity: '', price: '', total: '' },
   ]);
+
+  useEffect(() => {
+    const loadCodeOptions = async () => {
+      try {
+        setIsLoadingCodes(true);
+        setCodeError('');
+
+        const [customerResponse, destinationResponse, productResponse] = await Promise.all([
+          codeService.getAll('customer'),
+          codeService.getAll('destination'),
+          codeService.getAll('product'),
+        ]);
+
+        setCustomerCodes(customerResponse.data.data || []);
+        setDestinationCodes(destinationResponse.data.data || []);
+        setProductCodes(productResponse.data.data || []);
+      } catch (error: any) {
+        setCodeError(error?.response?.data?.message || error.message || 'Failed to load code lists');
+      } finally {
+        setIsLoadingCodes(false);
+      }
+    };
+
+    loadCodeOptions();
+  }, []);
 
   useEffect(() => {
     if (!initialData) {
@@ -86,6 +120,20 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
     });
   };
 
+  const handleProductSelect = (product: any) => {
+    if (isViewMode || selectedItemIndex === null) return;
+
+    setItems((prev) => {
+      const next = [...prev];
+      next[selectedItemIndex] = {
+        ...next[selectedItemIndex],
+        id: product.productId,
+        product: product.productName || '',
+      };
+      return next;
+    });
+  };
+
   const addItemRow = () => {
     if (isViewMode) return;
     setItems((prev) => [
@@ -123,6 +171,12 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
             </div>
 
             <div className="px-6 py-6 space-y-4 text-xs">
+              {codeError && (
+                <div className={`rounded-lg border px-4 py-3 text-xs ${darkMode ? 'border-red-500/30 bg-red-500/10 text-red-200' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                  {codeError}
+                </div>
+              )}
+
               <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
               {/* Top row: Monitor ID / Issued Date */}
               <div className="grid grid-cols-2 gap-4">
@@ -156,7 +210,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
               {/* Customer */}
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Customer :</span>
-                <input
+                <select
                   className={`flex-1 border px-2 py-1 text-xs ${
                     darkMode
                       ? 'bg-gray-900 border-gray-600 text-gray-100'
@@ -164,7 +218,14 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                   }`}
                   value={header.customer}
                   onChange={(e) => handleHeaderChange('customer', e.target.value)}
-                />
+                >
+                  <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
+                  {customerCodes.map((customer) => (
+                    <option key={customer.customerId} value={customer.customerId}>
+                      {customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed Customer'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* PO row */}
@@ -214,7 +275,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
               {/* Destination */}
               <div className="flex items-center gap-2">
                 <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Destination :</span>
-                <input
+                <select
                   className={`flex-1 border px-2 py-1 text-xs ${
                     darkMode
                       ? 'bg-gray-900 border-gray-600 text-gray-100'
@@ -222,7 +283,14 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                   }`}
                   value={header.destination}
                   onChange={(e) => handleHeaderChange('destination', e.target.value)}
-                />
+                >
+                  <option value="">{isLoadingCodes ? 'Loading destinations...' : 'Select destination code'}</option>
+                  {destinationCodes.map((destination) => (
+                    <option key={destination.destId} value={destination.destId}>
+                      {destination.destId} - {destination.destination || destination.location || 'Unnamed Destination'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Delivered to */}
@@ -284,15 +352,20 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                   >
                     <div className="flex items-center">{idx + 1}</div>
                     <div>
-                      <input
-                        className={`w-full border px-1 py-0.5 ${
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedItemIndex(idx);
+                          setProductModalOpen(true);
+                        }}
+                        className={`w-full px-1 py-0.5 text-left border rounded text-xs font-medium transition-colors ${
                           darkMode
-                            ? 'bg-gray-900 border-gray-600 text-gray-100'
-                            : 'bg-white border-gray-300 text-gray-900'
+                            ? 'bg-blue-900 border-blue-600 text-blue-200 hover:bg-blue-800'
+                            : 'bg-blue-50 border-blue-300 text-blue-900 hover:bg-blue-100'
                         }`}
-                        value={item.id}
-                        onChange={(e) => handleItemChange(idx, 'id', e.target.value)}
-                      />
+                      >
+                        {item.id || 'Select...'}
+                      </button>
                     </div>
                     <div className="space-y-1">
                       <input
@@ -303,7 +376,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                         }`}
                         placeholder="Product"
                         value={item.product}
-                        onChange={(e) => handleItemChange(idx, 'product', e.target.value)}
+                        readOnly
                       />
                       <input
                         className={`w-full border px-1 py-0.5 text-[10px] italic ${
@@ -506,6 +579,18 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
             </div>
           </div>
         </div>
+
+        <ProductSelectionModal
+          isOpen={productModalOpen}
+          products={productCodes}
+          onSelect={handleProductSelect}
+          onClose={() => {
+            setProductModalOpen(false);
+            setSelectedItemIndex(null);
+          }}
+          darkMode={darkMode}
+          isLoading={isLoadingCodes}
+        />
       </div>
     </Layout>
   );

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CodeMaster from './pages/CodeMaster';
 import Dashboard from './pages/Dashboard';
 import Documents from './pages/Documents';
 import MonitorHome from './pages/MonitorHome';
@@ -39,6 +40,9 @@ function App() {
       {currentPage === 'invoice-home' && <InvoiceHome onNavigate={handlePageChange} />}
       {currentPage === 'key-invoice' && (
         <KeyInvoice onNavigate={handlePageChange} initialData={selectedInvoice} />
+      )}
+      {(currentPage === 'customer-code' || currentPage === 'product-code' || currentPage === 'destination-code') && (
+        <CodeMaster onNavigate={handlePageChange} currentPage={currentPage} />
       )}
     </>
   );
