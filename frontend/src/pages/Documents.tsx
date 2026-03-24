@@ -5,6 +5,7 @@ import KeyInvoice from './KeyInvoice';
 import monitorService from '../services/monitorService';
 import invoiceService from '../services/invoiceService';
 import useThemePreference from '../hooks/useThemePreference';
+import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
 type DocumentType = 'monitor' | 'invoice';
 
@@ -91,6 +92,12 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  const buildDocCounts = (nextMonitors: any[], nextInvoices: any[]) => ({
+    monitor: nextMonitors.length,
+    monitorUnprinted: nextMonitors.filter((item: any) => item.status === 'Unprinted').length,
+    invoice: nextInvoices.length,
+  });
+
   useEffect(() => {
     const nextType = initialData?.selectedType;
     if (nextType === 'monitor' || nextType === 'invoice') {
@@ -113,11 +120,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
 
       setMonitors(nextMonitors);
       setInvoices(nextInvoices);
-      setDocCounts({
-        monitor: nextMonitors.length,
-        monitorUnprinted: nextMonitors.filter((item: any) => item.status === 'Unprinted').length,
-        invoice: nextInvoices.length,
-      });
+      setDocCounts(buildDocCounts(nextMonitors, nextInvoices));
 
       if (mon.status === 'rejected' || inv.status === 'rejected') {
         setError('Some document data could not be loaded completely.');
@@ -181,14 +184,93 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     setEditorState({ type: selectedType, initialData: { ...record, __mode: 'view' } });
   };
 
+  const handleEditRecord = (record: any) => {
+    setEditorState({ type: selectedType, initialData: { ...record, __mode: 'edit' } });
+  };
+
+  const handleDeleteRecord = async (record: any) => {
+    const recordId = selectedType === 'monitor' ? record.monitorId : record.invoiceNo;
+    const recordLabel = selectedType === 'monitor' ? 'Monitor Document' : 'Invoice';
+    const customerLabel = record.customer || '-';
+
+    const confirmed = await showAppConfirm({
+      title: `Delete ${recordLabel}`,
+      message: `Delete ${recordId}?\n\nCustomer: ${customerLabel}\n\nThis action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      if (selectedType === 'monitor') {
+        await monitorService.delete(record.monitorId);
+        setMonitors((prev) => prev.filter((item: any) => item.monitorId !== record.monitorId));
+      } else {
+        await invoiceService.delete(record.invoiceNo);
+        setInvoices((prev) => prev.filter((item: any) => item.invoiceNo !== record.invoiceNo));
+      }
+
+      setDocCounts((prev) => ({
+        ...prev,
+        monitor: selectedType === 'monitor' ? Math.max(0, prev.monitor - 1) : prev.monitor,
+        monitorUnprinted: selectedType === 'monitor' && record.status === 'Unprinted'
+          ? Math.max(0, prev.monitorUnprinted - 1)
+          : prev.monitorUnprinted,
+        invoice: selectedType === 'invoice' ? Math.max(0, prev.invoice - 1) : prev.invoice,
+      }));
+
+      if (editorState?.initialData?.[config.rowKey] === record[config.rowKey]) {
+        setEditorState(null);
+      }
+    } catch (_error) {
+      await showAppAlert({
+        title: 'Delete Failed',
+        message: selectedType === 'monitor' ? 'Failed to delete monitor document.' : 'Failed to delete invoice.',
+        tone: 'danger',
+      });
+    }
+  };
+
   const handleEditorNavigate = (page: string, state?: unknown) => {
     if (page === 'documents') {
-      const nextType = (state as any)?.selectedType;
+      const nextState = (state as any) || {};
+      const nextType = nextState.selectedType;
+
       if (nextType === 'monitor' || nextType === 'invoice') {
         setSelectedType(nextType);
       }
+
+      if (nextState.action === 'save' && nextState.savedRecord) {
+        if (nextType === 'monitor') {
+          setMonitors((prev) => {
+            const existingIndex = prev.findIndex((item: any) => item.monitorId === nextState.savedRecord.monitorId);
+            const nextMonitors = existingIndex === -1
+              ? [nextState.savedRecord, ...prev]
+              : prev.map((item: any, index: number) => (index === existingIndex ? nextState.savedRecord : item));
+
+            setDocCounts(buildDocCounts(nextMonitors, invoices));
+            return nextMonitors;
+          });
+        }
+
+        if (nextType === 'invoice') {
+          setInvoices((prev) => {
+            const existingIndex = prev.findIndex((item: any) => item.invoiceNo === nextState.savedRecord.invoiceNo);
+            const nextInvoices = existingIndex === -1
+              ? [nextState.savedRecord, ...prev]
+              : prev.map((item: any, index: number) => (index === existingIndex ? nextState.savedRecord : item));
+
+            setDocCounts(buildDocCounts(monitors, nextInvoices));
+            return nextInvoices;
+          });
+        }
+      }
+
       setEditorState(null);
-      void loadDocuments();
       return;
     }
 
@@ -410,10 +492,19 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                     <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Step 2</p>
                     <h3 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{config.listTitle}</h3>
                   </div>
-                  <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Latest records</div>
+                  <div className="flex items-center gap-3">
+                    <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Latest records</div>
+                    <button
+                      type="button"
+                      onClick={handleCreateDocument}
+                      className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
+                    >
+                      Add {selectedType === 'monitor' ? 'Monitor' : 'Invoice'}
+                    </button>
+                  </div>
                 </div>
 
-                <div className={`grid px-6 py-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: `repeat(${config.columns.length}, minmax(0, 1fr)) 120px` }}>
+                <div className={`grid px-6 py-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: `repeat(${config.columns.length}, minmax(0, 1fr)) 240px` }}>
                   {config.columns.map((column: any) => (
                     <div key={column.key}>{column.label}</div>
                   ))}
@@ -431,7 +522,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                       className={`grid items-center px-6 py-4 text-sm ${
                         darkMode ? 'border-t border-gray-700 text-gray-100' : 'border-t border-gray-200 text-gray-900'
                       }`}
-                      style={{ gridTemplateColumns: `repeat(${config.columns.length}, minmax(0, 1fr)) 120px` }}
+                      style={{ gridTemplateColumns: `repeat(${config.columns.length}, minmax(0, 1fr)) 240px` }}
                     >
                       {config.columns.map((column: any) => {
                         if (column.type === 'status') {
@@ -448,13 +539,31 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                           </div>
                         );
                       })}
-                      <div>
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleOpenRecord(item)}
                           className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
                         >
-                          Open
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleEditRecord(item)}
+                          className={`rounded-md px-3 py-2 text-xs font-medium ${
+                            darkMode
+                              ? 'bg-gray-700 text-gray-100 hover:bg-gray-600'
+                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteRecord(item)}
+                          className="rounded-md bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700"
+                        >
+                          Delete
                         </button>
                       </div>
                     </div>

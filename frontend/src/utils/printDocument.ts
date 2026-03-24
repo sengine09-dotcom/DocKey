@@ -1,3 +1,5 @@
+import { showAppAlert } from '../services/dialogService';
+
 type PrintDocumentOptions = {
   bodyPadding?: string;
   extraCss?: string;
@@ -9,6 +11,9 @@ export const printDocumentContent = (title: string, html: string, options: Print
     .join('\n');
   const bodyPadding = options.bodyPadding ?? '12mm';
   const extraCss = options.extraCss ?? '';
+  let contentReady = false;
+  let printTriggered = false;
+  let cleanedUp = false;
 
   const iframe = document.createElement('iframe');
   iframe.setAttribute('title', title);
@@ -22,24 +27,39 @@ export const printDocumentContent = (title: string, html: string, options: Print
   iframe.style.visibility = 'hidden';
 
   const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
     window.setTimeout(() => {
       iframe.remove();
     }, 300);
   };
 
-  iframe.onload = () => {
-    const frameWindow = iframe.contentWindow;
-    if (!frameWindow) {
-      cleanup();
-      window.alert('Unable to prepare print document.');
+  const triggerPrint = () => {
+    if (!contentReady || printTriggered) {
       return;
     }
 
+    const frameWindow = iframe.contentWindow;
+    if (!frameWindow) {
+      cleanup();
+      void showAppAlert({ title: 'Print Error', message: 'Unable to prepare print document.', tone: 'danger' });
+      return;
+    }
+
+    printTriggered = true;
+    frameWindow.onafterprint = cleanup;
     frameWindow.focus();
+
     window.setTimeout(() => {
       frameWindow.print();
-      cleanup();
+      window.setTimeout(cleanup, 1000);
     }, 250);
+  };
+
+  iframe.onload = () => {
+    triggerPrint();
   };
 
   document.body.appendChild(iframe);
@@ -47,7 +67,7 @@ export const printDocumentContent = (title: string, html: string, options: Print
   const frameDocument = iframe.contentDocument;
   if (!frameDocument) {
     cleanup();
-    window.alert('Unable to prepare print document.');
+    void showAppAlert({ title: 'Print Error', message: 'Unable to prepare print document.', tone: 'danger' });
     return;
   }
 
@@ -78,4 +98,6 @@ export const printDocumentContent = (title: string, html: string, options: Print
     </html>
   `);
   frameDocument.close();
+  contentReady = true;
+  triggerPrint();
 };

@@ -5,6 +5,7 @@ import invoiceService from '../services/invoiceService';
 import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
 import { printDocumentContent } from '../utils/printDocument';
+import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
 const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
 
@@ -202,9 +203,17 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
     onNavigate('documents', { selectedType: 'invoice' });
   };
 
+  const goBackToDocumentsWithSavedRecord = (savedRecord: any) => {
+    onNavigate('documents', {
+      selectedType: 'invoice',
+      action: 'save',
+      savedRecord,
+    });
+  };
+
   const handlePrint = () => {
     if (!printSheetRef.current) {
-      window.alert('Print form is not ready yet.');
+      void showAppAlert({ title: 'Print Error', message: 'Print form is not ready yet.', tone: 'danger' });
       return;
     }
 
@@ -570,13 +579,13 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                         `I${Date.now().toString().slice(-7)}`;
 
                       if (!header.customer?.trim()) {
-                        alert('Please fill Customer before saving.');
+                        await showAppAlert({ title: 'Validation', message: 'Please fill Customer before saving.', tone: 'warning' });
                         return;
                       }
 
                       const validItems = items.filter((it) => it.id || it.description);
                       if (validItems.length === 0) {
-                        alert('Please add at least 1 item before saving.');
+                        await showAppAlert({ title: 'Validation', message: 'Please add at least 1 item before saving.', tone: 'warning' });
                         return;
                       }
 
@@ -594,12 +603,12 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                       };
 
                       try {
-                        await invoiceService.save(payload);
-                        alert('💾 Invoice saved successfully!');
+                        const response = await invoiceService.save(payload);
+                        await showAppAlert({ title: 'Saved', message: 'Invoice saved successfully.', tone: 'success' });
                         setHeader((prev) => ({ ...prev, invoiceNo, invoiceId: invoiceNo }));
-                        goBackToDocuments();
+                        goBackToDocumentsWithSavedRecord(response?.data?.data || payload.header);
                       } catch (error) {
-                        alert('Failed to save invoice');
+                        await showAppAlert({ title: 'Save Failed', message: 'Failed to save invoice.', tone: 'danger' });
                       }
                     }}
                     className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
@@ -620,8 +629,16 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                 )}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm('❌ Cancel? Any unsaved changes will be lost.')) {
+                  onClick={async () => {
+                    const confirmed = await showAppConfirm({
+                      title: 'Cancel Changes',
+                      message: 'Any unsaved changes will be lost. Do you want to continue?',
+                      confirmText: 'Yes, Cancel',
+                      cancelText: 'No',
+                      tone: 'warning',
+                    });
+
+                    if (confirmed) {
                       goBackToDocuments();
                     }
                   }}

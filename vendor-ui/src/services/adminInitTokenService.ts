@@ -1,0 +1,44 @@
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: '/api',
+});
+
+export type AdminInitToken = {
+  id: string;
+  token: string;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  description?: string | null;
+  isActive: boolean;
+  online?: boolean;
+  expiresAt?: string | null;
+  usedAt?: string | null;
+  usedByEmail?: string | null;
+  lastSeenAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  claimUrl: string;
+};
+
+const adminInitTokenService = {
+  list: async () => {
+    const response = await api.get('/admin-init-tokens');
+    return response.data.data as AdminInitToken[];
+  },
+  create: async (payload: {
+    customerName?: string;
+    customerEmail?: string;
+    description?: string;
+    expiresAt?: string;
+  }) => {
+    const response = await api.post('/admin-init-tokens', payload);
+    return response.data.data as AdminInitToken;
+  },
+  disable: async (id: string) => {
+    const response = await api.patch(`/admin-init-tokens/${id}/disable`);
+    return response.data.data as AdminInitToken;
+  },
+};
+
+export default adminInitTokenService;

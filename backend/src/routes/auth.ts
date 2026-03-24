@@ -3,6 +3,10 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { ulid } from 'ulid';
 import { prisma } from '../lib/prisma';
+import { ensureUserTableExists } from '../lib/ensureUserTable';
+import { consumeAdminInitToken, getAdminInitTokenStatus, getVendorRuntimeTokenStatus, releaseAdminInitToken, sendVendorRuntimeDisconnect, sendVendorRuntimeHeartbeat } from '../lib/vendorAdminTokens';
+import { clearSystemActivation, getStoredSystemActivation, saveSystemActivation } from '../lib/systemActivation';
+import { markUserDisconnected, markUserHeartbeat } from '../lib/userPresence';
 
 const router = express.Router();
 
@@ -54,9 +58,131 @@ const findAuthenticatedUser = async (token: string) => {
   return user;
 };
 
+const getAuthenticatedUserFromRequest = async (req: Request) => {
+  const token = getTokenFromRequest(req);
+  if (!token) {
+    return null;
+  }
+
+  return findAuthenticatedUser(token);
+};
+
+const requireAdminFromRequest = async (req: Request) => {
+  const user = await getAuthenticatedUserFromRequest(req);
+  if (!user) {
+    return { user: null, error: { status: 401, message: 'No token provided' } };
+  }
+
+  if (String(user.role).toLowerCase() !== 'admin') {
+    return { user: null, error: { status: 403, message: 'Administrator access is required' } };
+  }
+
+  return { user, error: null };
+};
+
+const getExpiryWarningLevel = (expiresAt: Date | string | null | undefined) => {
+  if (!expiresAt) {
+    return { warningLevel: 'none', daysUntilExpiry: null };
+  }
+
+  const expiresAtMs = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresAtMs)) {
+    return { warningLevel: 'none', daysUntilExpiry: null };
+  }
+
+  const daysUntilExpiry = Math.ceil((expiresAtMs - Date.now()) / (24 * 60 * 60 * 1000));
+
+  if (daysUntilExpiry < 0) {
+    return { warningLevel: 'expired', daysUntilExpiry };
+  }
+
+  if (daysUntilExpiry <= 3) {
+    return { warningLevel: 'critical', daysUntilExpiry };
+  }
+
+  if (daysUntilExpiry <= 7) {
+    return { warningLevel: 'warning', daysUntilExpiry };
+  }
+
+  return { warningLevel: 'healthy', daysUntilExpiry };
+};
+
+const hasConfiguredAdmin = async () => {
+  await ensureUserTableExists();
+  const admin = await prisma.user.findFirst({
+    where: { role: 'admin' },
+    select: { id: true },
+  });
+
+  return Boolean(admin);
+};
+
+const getDocKeyActivationState = async () => {
+  await ensureUserTableExists();
+
+  const localActivation = await getStoredSystemActivation();
+  if (!localActivation) {
+    return { activated: false, reason: 'activation-token-missing', token: null };
+  }
+
+  const adminConfigured = await hasConfiguredAdmin();
+  if (!adminConfigured) {
+    return { activated: false, reason: 'admin-not-configured', token: localActivation.adminToken };
+  }
+
+  try {
+    const vendorStatus = await getVendorRuntimeTokenStatus(localActivation.adminToken);
+    if (!vendorStatus.active) {
+      return { activated: false, reason: vendorStatus.reason || 'vendor-token-inactive', token: localActivation.adminToken };
+    }
+  } catch (vendorStatusError) {
+    console.warn('Vendor runtime status unavailable, allowing customer access with local activation only.', vendorStatusError);
+    return { activated: true, reason: null, token: localActivation.adminToken };
+  }
+
+  try {
+    await sendVendorRuntimeHeartbeat(localActivation.adminToken);
+  } catch (_heartbeatError) {
+    console.warn('Vendor heartbeat unavailable, keeping customer access active until vendor returns.');
+    return { activated: true, reason: null, token: localActivation.adminToken };
+  }
+
+  return { activated: true, reason: null, token: localActivation.adminToken };
+};
+
+router.get('/activation-status', async (_req: Request, res: Response) => {
+  try {
+    const activationState = await getDocKeyActivationState();
+    return res.json({ success: true, data: activationState });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to load activation status' });
+  }
+});
+
+router.post('/runtime-disconnect', async (_req: Request, res: Response) => {
+  try {
+    const localActivation = await getStoredSystemActivation();
+    if (!localActivation?.adminToken) {
+      return res.status(204).end();
+    }
+
+    await sendVendorRuntimeDisconnect(localActivation.adminToken);
+    return res.status(204).end();
+  } catch (_error) {
+    return res.status(204).end();
+  }
+});
+
 // Register
 router.post('/register', async (req: Request, res: Response) => {
   try {
+    await ensureUserTableExists();
+
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey is locked until the administrator is activated from the setup link' });
+    }
+
     const { email, password, name } = req.body;
 
     // Validation
@@ -86,6 +212,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // Generate JWT
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    markUserHeartbeat(user.id);
 
     setAuthCookie(res, token);
 
@@ -102,6 +229,13 @@ router.post('/register', async (req: Request, res: Response) => {
 // Login
 router.post('/login', async (req: Request, res: Response) => {
   try {
+    await ensureUserTableExists();
+
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey is locked until the administrator is activated from the setup link' });
+    }
+
     const { email, password } = req.body;
 
     // Validation
@@ -123,6 +257,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Generate JWT
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    markUserHeartbeat(user.id);
 
     setAuthCookie(res, token);
 
@@ -137,14 +272,228 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // Logout
-router.post('/logout', (_req: Request, res: Response) => {
+router.post('/logout', async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (user?.id) {
+      markUserDisconnected(user.id);
+    }
+  } catch (_error) {
+    // Best effort only.
+  }
+
   clearAuthCookie(res);
   res.json({ success: true, message: 'Logged out successfully' });
+});
+
+router.post('/user-presence/heartbeat', async (req: Request, res: Response) => {
+  try {
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey license is inactive', reason: activationState.reason });
+    }
+
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (!user?.id) {
+      return res.status(401).json({ success: false, message: 'User not found' });
+    }
+
+    markUserHeartbeat(user.id);
+    return res.status(204).end();
+  } catch (_error) {
+    return res.status(401).json({ success: false, message: 'Invalid token' });
+  }
+});
+
+router.post('/user-presence/disconnect', async (req: Request, res: Response) => {
+  try {
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (user?.id) {
+      markUserDisconnected(user.id);
+    }
+  } catch (_error) {
+    // Best effort only.
+  }
+
+  return res.status(204).end();
+});
+
+router.get('/token-status', async (req: Request, res: Response) => {
+  try {
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey license is inactive', reason: activationState.reason });
+    }
+
+    const adminCheck = await requireAdminFromRequest(req);
+    if (adminCheck.error) {
+      return res.status(adminCheck.error.status).json({ success: false, message: adminCheck.error.message });
+    }
+
+    const localActivation = await getStoredSystemActivation();
+    if (!localActivation) {
+      return res.status(404).json({ success: false, message: 'Activation token is missing' });
+    }
+
+    let vendorReachable = true;
+    let runtimeStatus: any = null;
+
+    try {
+      runtimeStatus = await getVendorRuntimeTokenStatus(localActivation.adminToken);
+    } catch (_error) {
+      vendorReachable = false;
+    }
+
+    const expiresAt = runtimeStatus?.expiresAt || null;
+    const warning = getExpiryWarningLevel(expiresAt);
+
+    return res.json({
+      success: true,
+      data: {
+        token: localActivation.adminToken,
+        adminEmail: localActivation.adminEmail || null,
+        activatedAt: localActivation.activatedAt,
+        vendorReachable,
+        active: runtimeStatus?.active ?? true,
+        reason: runtimeStatus?.reason || null,
+        expiresAt,
+        customerName: runtimeStatus?.customerName || null,
+        customerEmail: runtimeStatus?.customerEmail || null,
+        usedAt: runtimeStatus?.usedAt || null,
+        warningLevel: warning.warningLevel,
+        daysUntilExpiry: warning.daysUntilExpiry,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to load token status' });
+  }
+});
+
+router.get('/init-admin/status', async (req: Request, res: Response) => {
+  try {
+    await ensureUserTableExists();
+
+    const token = String(req.query.id || req.query.token || '').trim();
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'Token is required' });
+    }
+
+    const existingAdmin = await prisma.user.findFirst({ where: { role: 'admin' } });
+    if (existingAdmin) {
+      return res.json({
+        success: true,
+        data: {
+          valid: false,
+          reason: 'admin-configured',
+        },
+      });
+    }
+
+    const status = await getAdminInitTokenStatus(token);
+
+    return res.json({
+      success: true,
+      data: {
+        valid: status.valid,
+        reason: status.reason,
+        customerName: status.token?.customerName || null,
+        customerEmail: status.token?.customerEmail || null,
+        description: status.token?.description || null,
+        expiresAt: status.token?.expiresAt || null,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to validate token' });
+  }
+});
+
+router.post('/init-admin/claim', async (req: Request, res: Response) => {
+  let tokenConsumed = false;
+
+  try {
+    await ensureUserTableExists();
+
+    const token = String(req.body?.token || req.body?.id || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+
+    if (!token || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Token, email, and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const existingAdmin = await prisma.user.findFirst({ where: { role: 'admin' } });
+    if (existingAdmin) {
+      return res.status(409).json({ success: false, message: 'Administrator is already configured' });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Email already exists' });
+    }
+
+    const status = await getAdminInitTokenStatus(token);
+    if (!status.valid) {
+      return res.status(400).json({ success: false, message: 'Token is invalid or unavailable', reason: status.reason });
+    }
+
+    tokenConsumed = await consumeAdminInitToken(token, email);
+    if (!tokenConsumed) {
+      return res.status(409).json({ success: false, message: 'Token has already been used or expired' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        id: ulid(),
+        email,
+        password: hashedPassword,
+        name: 'Administrator',
+        role: 'admin',
+      },
+    });
+
+    try {
+      await saveSystemActivation(token, email);
+    } catch (saveActivationError) {
+      await prisma.user.delete({ where: { id: user.id } });
+      await releaseAdminInitToken(token);
+      await clearSystemActivation();
+      throw saveActivationError;
+    }
+
+    const authToken = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    markUserHeartbeat(user.id);
+    setAuthCookie(res, authToken);
+
+    return res.json({
+      success: true,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    });
+  } catch (error: any) {
+    if (tokenConsumed) {
+      try {
+        await releaseAdminInitToken(String(req.body?.token || req.body?.id || '').trim());
+      } catch (_releaseError) {
+        // Best effort only; claim token should be reusable if user creation failed.
+      }
+    }
+
+    return res.status(500).json({ success: false, message: error.message || 'Failed to create administrator' });
+  }
 });
 
 // Current User (cookie or bearer token)
 router.get('/me', async (req: Request, res: Response) => {
   try {
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey license is inactive', reason: activationState.reason });
+    }
+
     const token = getTokenFromRequest(req);
     if (!token) {
       return res.status(401).json({ success: false, message: 'No token provided' });
@@ -155,6 +504,8 @@ router.get('/me', async (req: Request, res: Response) => {
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found' });
     }
+
+    markUserHeartbeat(user.id);
 
     return res.json({ success: true, user });
   } catch (error) {
@@ -165,6 +516,11 @@ router.get('/me', async (req: Request, res: Response) => {
 // Verify Token (for protected routes)
 router.get('/verify', async (req: Request, res: Response) => {
   try {
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey license is inactive', reason: activationState.reason });
+    }
+
     const token = getTokenFromRequest(req);
     if (!token) {
       return res.status(401).json({ success: false, message: 'No token provided' });
@@ -175,6 +531,8 @@ router.get('/verify', async (req: Request, res: Response) => {
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found' });
     }
+
+    markUserHeartbeat(user.id);
 
     res.json({ success: true, user });
   } catch (error) {

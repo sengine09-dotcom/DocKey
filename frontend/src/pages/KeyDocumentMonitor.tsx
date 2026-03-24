@@ -5,6 +5,7 @@ import codeService from '../services/codeService';
 import monitorService from '../services/monitorService';
 import useThemePreference from '../hooks/useThemePreference';
 import { printDocumentContent } from '../utils/printDocument';
+import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
 const toDateInputValue = (value: any) => {
   if (!value) return '';
@@ -24,6 +25,18 @@ const formatPrintDate = (value: any) => {
   });
 };
 
+const buildProductName = (product: any) => {
+  const marking = String(product?.marking || product?.Marking || '').trim();
+  const type = String(product?.type || product?.Type || '').trim();
+  const fallback = String(product?.productName || product?.ProductName || product?.productId || '').trim();
+  const combined = [marking, type].filter(Boolean).join(' ').trim();
+  return combined || fallback;
+};
+
+const buildProductPacking = (product: any) => {
+  return String(product?.bagSize || product?.BagSize || '').trim();
+};
+
 export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData = null, embedded = false, darkMode: embeddedDarkMode, setDarkMode: embeddedSetDarkMode, currentPage = 'key-monitor' }: any) {
   const [preferredDarkMode, setPreferredDarkMode] = useThemePreference();
   const darkMode = embedded ? embeddedDarkMode : preferredDarkMode;
@@ -31,6 +44,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
   const [mode, setMode] = useState('create');
   const [customerCodes, setCustomerCodes] = useState<any[]>([]);
   const [destinationCodes, setDestinationCodes] = useState<any[]>([]);
+  const [endUserCodes, setEndUserCodes] = useState<any[]>([]);
   const [productCodes, setProductCodes] = useState<any[]>([]);
   const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
@@ -78,15 +92,17 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
         setIsLoadingCodes(true);
         setCodeError('');
 
-        const [customerResponse, destinationResponse, productResponse, paymentTermResponse] = await Promise.all([
+        const [customerResponse, destinationResponse, endUserResponse, productResponse, paymentTermResponse] = await Promise.all([
           codeService.getAll('customer'),
           codeService.getAll('destination'),
+          codeService.getAll('end-user'),
           codeService.getAll('product'),
           codeService.getAll('payment-term'),
         ]);
 
         setCustomerCodes(customerResponse.data.data || []);
         setDestinationCodes(destinationResponse.data.data || []);
+        setEndUserCodes(endUserResponse.data.data || []);
         setProductCodes(productResponse.data.data || []);
         setPaymentTermCodes(paymentTermResponse.data.data || []);
       } catch (error: any) {
@@ -154,6 +170,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const totalSales = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
   const printItems = items.filter((item) => item.id || item.product || item.quantity || item.price || item.total);
+  const tableItems = isViewMode ? printItems : items;
 
   const handleHeaderChange = (field, value) => {
     if (isViewMode) return;
@@ -217,6 +234,32 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
     return selectedDestination.destination || selectedDestination.location || selectedDestination.destId || destinationId;
   })();
 
+  const deliveredToDisplay = (() => {
+    const endUserId = String(header.deliveredTo || '').trim();
+    if (!endUserId) return '';
+
+    const selectedEndUser = endUserCodes.find((endUser) => endUser.eUserId === endUserId);
+    if (!selectedEndUser) return endUserId;
+
+    return selectedEndUser.eUserName || selectedEndUser.shortName || selectedEndUser.eUserId || endUserId;
+  })();
+
+  const getResolvedItemDisplay = (item: any) => {
+    const selectedProduct = productCodes.find((product) => product.productId === item.id);
+
+    if (!selectedProduct) {
+      return {
+        productName: item.product || '-',
+        packing: item.packing || '',
+      };
+    }
+
+    return {
+      productName: buildProductName(selectedProduct) || item.product || selectedProduct.productId || '-',
+      packing: item.packing || buildProductPacking(selectedProduct),
+    };
+  };
+
   const sheetControlClass = 'min-h-[30px] w-full border border-black bg-white px-2 py-1 text-[12px] text-black';
   const sheetActionButtonClass = 'rounded border border-black px-2 py-1 text-[11px] font-medium text-black transition-colors hover:bg-gray-100';
 
@@ -247,7 +290,8 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
       next[selectedItemIndex] = {
         ...next[selectedItemIndex],
         id: product.productId,
-        product: product.productName || '',
+        product: buildProductName(product),
+        packing: buildProductPacking(product),
       };
       return next;
     });
@@ -255,14 +299,36 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
 
   const addItemRow = () => {
     if (isViewMode) return;
+
+    const emptyRowIndex = items.findIndex((item) =>
+      !item.id && !item.product && !item.packing && !item.quantity && !item.price && !item.total
+    );
+
+    if (emptyRowIndex !== -1) {
+      setSelectedItemIndex(emptyRowIndex);
+      setProductModalOpen(true);
+      return;
+    }
+
+    const nextIndex = items.length;
     setItems((prev) => [
       ...prev,
       { id: '', product: '', packing: '', quantity: '', price: '', total: '' },
     ]);
+    setSelectedItemIndex(nextIndex);
+    setProductModalOpen(true);
   };
 
   const goBackToDocuments = () => {
     onNavigate('documents', { selectedType: 'monitor' });
+  };
+
+  const goBackToDocumentsWithSavedRecord = (savedRecord: any) => {
+    onNavigate('documents', {
+      selectedType: 'monitor',
+      action: 'save',
+      savedRecord,
+    });
   };
 
   const removeItemRow = (index) => {
@@ -278,7 +344,7 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
     }
 
     if (!printSheetRef.current) {
-      window.alert('Print form is not ready yet.');
+      await showAppAlert({ title: 'Print Error', message: 'Print form is not ready yet.', tone: 'danger' });
       return;
     }
 
@@ -313,334 +379,349 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
   const content = (
       <div className={embedded ? '' : `min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className={`print-monitor-doc ${embedded ? 'px-0 py-0' : 'max-w-5xl mx-auto px-6 py-10'}`}>
-          <div ref={printSheetRef} className="monitor-print-sheet border border-black bg-white p-4 text-[12px] leading-tight text-black shadow-sm">
-            <div className="flex items-start gap-4 border-b-2 border-red-700 pb-3">
-              <div className="h-16 w-16 border border-black bg-gray-100 flex items-center justify-center text-lg font-bold">CT</div>
-              <div className="flex-1 text-center">
-                <div className="text-3xl font-bold tracking-wide">CHAYA TENANG SDN.BHD.</div>
-                <div className="text-[11px] mt-1">(56951-U)</div>
-                <div className="text-[11px] mt-1">No.33, Jalan Mutiara Emas 7/6 Taman Mount Austin 81100 Johor Bahru, Johor Malaysia</div>
-                <div className="text-[11px]">Mobile : 012-7849148   Email : chayatenang@yahoo.com</div>
+          <div ref={printSheetRef} className="monitor-print-sheet flex min-h-full flex-col border border-black bg-white p-4 text-[12px] leading-tight text-black shadow-sm">
+            <div>
+              <div className="flex items-start gap-4 border-b-2 border-red-700 pb-3">
+                <div className="h-16 w-16 border border-black bg-gray-100 flex items-center justify-center text-lg font-bold">CT</div>
+                <div className="flex-1 text-center">
+                  <div className="text-3xl font-bold tracking-wide">CHAYA TENANG SDN.BHD.</div>
+                  <div className="text-[11px] mt-1">(56951-U)</div>
+                  <div className="text-[11px] mt-1">No.33, Jalan Mutiara Emas 7/6 Taman Mount Austin 81100 Johor Bahru, Johor Malaysia</div>
+                  <div className="text-[11px]">Mobile : 012-7849148   Email : chayatenang@yahoo.com</div>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-3 bg-gray-500 text-white text-center font-semibold text-[22px] py-1">
-              Monitor Document
-            </div>
+              <div className="mt-3 bg-gray-500 text-white text-center font-semibold text-[22px] py-1">
+                Individual Customer Monitoring
+              </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-4 text-[12px]">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-semibold">Monitor ID :</span>
-                  {isViewMode ? (
-                    <span className="min-w-[120px] border border-black px-3 py-1 text-center font-semibold">{header.monitorId || '-'}</span>
-                  ) : (
-                    <div className="flex flex-1 items-center gap-2">
-                      <input
-                        className={`${sheetControlClass} bg-yellow-200 font-semibold`}
-                        value={header.monitorId}
-                        onChange={(e) => handleHeaderChange('monitorId', e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void loadNextMonitorId(true)}
-                        className={`${sheetActionButtonClass} no-print whitespace-nowrap`}
+              <div className="mt-4 grid grid-cols-2 gap-4 text-[12px]">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-24 font-semibold">Monitor ID :</span>
+                    {isViewMode ? (
+                      <span className="min-w-[120px] border border-black px-3 py-1 text-center font-semibold">{header.monitorId || '-'}</span>
+                    ) : (
+                      <div className="flex flex-1 items-center gap-2">
+                        <input
+                          className={`${sheetControlClass} bg-yellow-200 font-semibold`}
+                          value={header.monitorId}
+                          onChange={(e) => handleHeaderChange('monitorId', e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void loadNextMonitorId(true)}
+                          className={`${sheetActionButtonClass} no-print whitespace-nowrap`}
+                        >
+                          Refresh ID
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Customer :</span>
+                    {isViewMode ? (
+                      <span>{customerDisplay || '-'}</span>
+                    ) : (
+                      <select
+                        className={sheetControlClass}
+                        value={header.customer}
+                        onChange={(e) => handleCustomerChange(e.target.value)}
                       >
-                        Refresh ID
-                      </button>
-                    </div>
-                  )}
+                        <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
+                        {customerCodes.map((customer) => (
+                          <option key={customer.customerId} value={customer.customerId}>
+                            {customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed Customer'}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Po No :</span>
+                    {isViewMode ? (
+                      <span>{header.poNo || '-'}</span>
+                    ) : (
+                      <input
+                        className={sheetControlClass}
+                        value={header.poNo}
+                        onChange={(e) => handleHeaderChange('poNo', e.target.value)}
+                      />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Destination :</span>
+                    {isViewMode ? (
+                      <span>{destinationDisplay || '-'}</span>
+                    ) : (
+                      <select
+                        className={sheetControlClass}
+                        value={header.destination}
+                        onChange={(e) => handleHeaderChange('destination', e.target.value)}
+                      >
+                        <option value="">{isLoadingCodes ? 'Loading destinations...' : 'Select destination code'}</option>
+                        {destinationCodes.map((destination) => (
+                          <option key={destination.destId} value={destination.destId}>
+                            {destination.destId} - {destination.destination || destination.location || 'Unnamed Destination'}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Delivered to :</span>
+                    {isViewMode ? (
+                      <span>{deliveredToDisplay || '-'}</span>
+                    ) : (
+                      <select
+                        className={sheetControlClass}
+                        value={header.deliveredTo}
+                        onChange={(e) => handleHeaderChange('deliveredTo', e.target.value)}
+                      >
+                        <option value="">{isLoadingCodes ? 'Loading delivered to...' : 'Select delivered to code'}</option>
+                        {endUserCodes.map((endUser) => (
+                          <option key={endUser.eUserId} value={endUser.eUserId}>
+                            {endUser.eUserId} - {endUser.eUserName || endUser.shortName || 'Unnamed End User'}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Payment Term :</span>
+                    {isViewMode ? (
+                      <span>{paymentTermDisplay || '-'}</span>
+                    ) : (
+                      <input className={sheetControlClass} value={paymentTermDisplay} readOnly />
+                    )}
+                  </div>
                 </div>
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Customer :</span>
-                  {isViewMode ? (
-                    <span>{customerDisplay || '-'}</span>
-                  ) : (
-                    <select
-                      className={sheetControlClass}
-                      value={header.customer}
-                      onChange={(e) => handleCustomerChange(e.target.value)}
-                    >
-                      <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
-                      {customerCodes.map((customer) => (
-                        <option key={customer.customerId} value={customer.customerId}>
-                          {customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed Customer'}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Po No :</span>
-                  {isViewMode ? (
-                    <span>{header.poNo || '-'}</span>
-                  ) : (
-                    <input
-                      className={sheetControlClass}
-                      value={header.poNo}
-                      onChange={(e) => handleHeaderChange('poNo', e.target.value)}
-                    />
-                  )}
-                </div>
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Destination :</span>
-                  {isViewMode ? (
-                    <span>{destinationDisplay || '-'}</span>
-                  ) : (
-                    <select
-                      className={sheetControlClass}
-                      value={header.destination}
-                      onChange={(e) => handleHeaderChange('destination', e.target.value)}
-                    >
-                      <option value="">{isLoadingCodes ? 'Loading destinations...' : 'Select destination code'}</option>
-                      {destinationCodes.map((destination) => (
-                        <option key={destination.destId} value={destination.destId}>
-                          {destination.destId} - {destination.destination || destination.location || 'Unnamed Destination'}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Delivered to :</span>
-                  {isViewMode ? (
-                    <span>{header.deliveredTo || '-'}</span>
-                  ) : (
-                    <input
-                      className={sheetControlClass}
-                      value={header.deliveredTo}
-                      onChange={(e) => handleHeaderChange('deliveredTo', e.target.value)}
-                    />
-                  )}
-                </div>
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Payment Term :</span>
-                  {isViewMode ? (
-                    <span>{paymentTermDisplay || '-'}</span>
-                  ) : (
-                    <input className={sheetControlClass} value={paymentTermDisplay} readOnly />
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Issued Date :</span>
-                  {isViewMode ? (
-                    <span>{formatPrintDate(header.issuedDate)}</span>
-                  ) : (
-                    <input
-                      type="date"
-                      className={sheetControlClass}
-                      value={header.issuedDate}
-                      onChange={(e) => handleHeaderChange('issuedDate', e.target.value)}
-                    />
-                  )}
-                </div>
-                <div className="h-6" />
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Po Date :</span>
-                  {isViewMode ? (
-                    <span>{formatPrintDate(header.poDate)}</span>
-                  ) : (
-                    <input
-                      type="date"
-                      className={sheetControlClass}
-                      value={header.poDate}
-                      onChange={(e) => handleHeaderChange('poDate', e.target.value)}
-                    />
-                  )}
-                </div>
-                <div className="grid grid-cols-[96px,1fr] items-center gap-2">
-                  <span className="font-semibold">Request Date :</span>
-                  {isViewMode ? (
-                    <span>{formatPrintDate(header.requestDate)}</span>
-                  ) : (
-                    <input
-                      type="date"
-                      className={sheetControlClass}
-                      value={header.requestDate}
-                      onChange={(e) => handleHeaderChange('requestDate', e.target.value)}
-                    />
-                  )}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Issued Date :</span>
+                    {isViewMode ? (
+                      <span>{formatPrintDate(header.issuedDate)}</span>
+                    ) : (
+                      <input
+                        type="date"
+                        className={sheetControlClass}
+                        value={header.issuedDate}
+                        onChange={(e) => handleHeaderChange('issuedDate', e.target.value)}
+                      />
+                    )}
+                  </div>
+                  <div className="h-6" />
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Po Date :</span>
+                    {isViewMode ? (
+                      <span>{formatPrintDate(header.poDate)}</span>
+                    ) : (
+                      <input
+                        type="date"
+                        className={sheetControlClass}
+                        value={header.poDate}
+                        onChange={(e) => handleHeaderChange('poDate', e.target.value)}
+                      />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[96px,1fr] items-center gap-2">
+                    <span className="font-semibold">Request Date :</span>
+                    {isViewMode ? (
+                      <span>{formatPrintDate(header.requestDate)}</span>
+                    ) : (
+                      <input
+                        type="date"
+                        className={sheetControlClass}
+                        value={header.requestDate}
+                        onChange={(e) => handleHeaderChange('requestDate', e.target.value)}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <table className="w-full mt-4 border border-black border-collapse text-[12px]">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border border-black px-2 py-1 w-10">Item</th>
-                  <th className="border border-black px-2 py-1 w-16">ID</th>
-                  <th className="border border-black px-2 py-1">Product</th>
-                  <th className="border border-black px-2 py-1 w-28">Quantity</th>
-                  <th className="border border-black px-2 py-1 w-24">Price</th>
-                  <th className="border border-black px-2 py-1 w-24">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {printItems.length === 0 ? (
-                  <tr>
-                    <td className="border border-black px-2 py-2 text-center" colSpan={6}>-</td>
+              <hr className="my-4 border-t border-dashed border-black" />
+              <table className="w-full mt-4 text-[12px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-black px-2 py-1 w-10">Item</th>
+                    <th className="border border-black px-2 py-1 w-16">ID</th>
+                    <th className="border border-black px-2 py-1">Product</th>
+                    <th className="border border-black px-2 py-1 w-28">Quantity</th>
+                    <th className="border border-black px-2 py-1 w-24">Price</th>
+                    <th className="border border-black px-2 py-1 w-24">Total</th>
                   </tr>
-                ) : (
-                  printItems.map((item, idx) => (
-                    <tr key={`print-${idx}`}>
-                      <td className="border border-black px-2 py-1 text-center align-top">{idx + 1}</td>
-                      <td className="border border-black px-2 py-1 text-center align-top">
-                        {isViewMode ? (
-                          item.id || '-'
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedItemIndex(idx);
-                              setProductModalOpen(true);
-                            }}
-                            className="no-print w-full rounded border border-black px-1 py-1 text-left text-[11px]"
-                          >
-                            {item.id || 'Select...'}
-                          </button>
-                        )}
-                      </td>
-                      <td className="border border-black px-2 py-1 align-top">
-                        {isViewMode ? (
-                          <>
-                            <div>{item.product || '-'}</div>
-                            {item.packing && <div><span className="font-semibold">Packing :</span> {item.packing}</div>}
-                          </>
-                        ) : (
-                          <div className="space-y-2">
-                            <input className={sheetControlClass} value={item.product} readOnly />
+                </thead>
+                <tbody>
+                  {tableItems.length === 0 ? (
+                    <tr>
+                      <td className=" px-2 py-2 text-center" colSpan={6}>-</td>
+                    </tr>
+                  ) : (
+                    tableItems.map((item, idx) => {
+                      const resolvedItem = getResolvedItemDisplay(item);
+
+                      return (
+                      <tr key={`print-${idx}`}>
+                        <td className=" px-2 py-1 text-center align-top">{idx + 1}</td>
+                        <td className=" px-2 py-1 text-center align-top">
+                          {isViewMode ? (
+                            item.id || '-'
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedItemIndex(idx);
+                                setProductModalOpen(true);
+                              }}
+                              className="no-print w-full rounded border border-black px-1 py-1 text-left text-[11px]"
+                            >
+                              {item.id || 'Select...'}
+                            </button>
+                          )}
+                        </td>
+                        <td className=" px-2 py-1 align-top">
+                          {isViewMode ? (
+                            <>
+                              <div>{resolvedItem.productName || '-'}</div>
+                              {resolvedItem.packing && <div><span className="font-semibold">Packing :</span> {resolvedItem.packing}</div>}
+                            </>
+                          ) : (
+                            <div className="space-y-2">
+                              <input className={sheetControlClass} value={resolvedItem.productName} readOnly />
+                              <input
+                                className={sheetControlClass}
+                                placeholder="Packing"
+                                value={resolvedItem.packing}
+                                onChange={(e) => handleItemChange(idx, 'packing', e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </td>
+                        <td className=" px-2 py-1 text-right align-top">
+                          {isViewMode ? (
+                            Number(item.quantity || 0).toFixed(3)
+                          ) : (
                             <input
-                              className={sheetControlClass}
-                              placeholder="Packing"
-                              value={item.packing}
-                              onChange={(e) => handleItemChange(idx, 'packing', e.target.value)}
+                              type="number"
+                              className={`${sheetControlClass} text-right`}
+                              value={item.quantity}
+                              onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
                             />
-                          </div>
-                        )}
-                      </td>
-                      <td className="border border-black px-2 py-1 text-right align-top">
-                        {isViewMode ? (
-                          Number(item.quantity || 0).toFixed(3)
-                        ) : (
-                          <input
-                            type="number"
-                            className={`${sheetControlClass} text-right`}
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                          />
-                        )}
-                      </td>
-                      <td className="border border-black px-2 py-1 text-right align-top">
-                        {isViewMode ? (
-                          Number(item.price || 0).toFixed(2)
-                        ) : (
-                          <input
-                            type="number"
-                            step="0.01"
-                            className={`${sheetControlClass} text-right`}
-                            value={item.price}
-                            onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
-                          />
-                        )}
-                      </td>
-                      <td className="border border-black px-2 py-1 text-right align-top">
-                        {isViewMode ? (
-                          Number(item.total || 0).toFixed(2)
-                        ) : (
-                          <div className="space-y-2">
+                          )}
+                        </td>
+                        <td className=" px-2 py-1 text-right align-top">
+                          {isViewMode ? (
+                            Number(item.price || 0).toFixed(2)
+                          ) : (
                             <input
                               type="number"
                               step="0.01"
                               className={`${sheetControlClass} text-right`}
-                              value={item.total}
-                              onChange={(e) => handleItemChange(idx, 'total', e.target.value)}
+                              value={item.price}
+                              onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
                             />
-                            {items.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeItemRow(idx)}
-                                className="no-print w-full rounded border border-red-600 px-1 py-1 text-[11px] text-red-600"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                          )}
+                        </td>
+                        <td className=" px-2 py-1 text-right align-top">
+                          {isViewMode ? (
+                            Number(item.total || 0).toFixed(2)
+                          ) : (
+                            <div className="space-y-2">
+                              <input
+                                type="number"
+                                step="0.01"
+                                className={`${sheetControlClass} text-right`}
+                                value={item.total}
+                                onChange={(e) => handleItemChange(idx, 'total', e.target.value)}
+                              />
+                              {items.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeItemRow(idx)}
+                                  className="no-print w-full rounded border border-red-600 px-1 py-1 text-[11px] text-red-600"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        </tr>
+                      )})
+                  )}
+                </tbody>
+              </table>
+              <hr className="my-4 border-t border-dashed border-black" />
 
-            {!isViewMode && (
-              <div className="no-print mt-3 flex justify-between">
-                <button
-                  type="button"
-                  onClick={addItemRow}
-                  className={sheetActionButtonClass}
-                >
-                  + Add Item
-                </button>
-              </div>
-            )}
+              {!isViewMode && (
+                <div className="no-print mt-3 flex justify-between">
+                  <button
+                    type="button"
+                    onClick={addItemRow}
+                    className={sheetActionButtonClass}
+                  >
+                    + Add Item
+                  </button>
+                </div>
+              )}
 
-            <div className="mt-4 grid grid-cols-2 gap-6">
-              <div>
-                <div className="font-semibold">Instruction : ARRANGE DELIVERY</div>
-                <div className="font-semibold mt-2">Remark :</div>
-              </div>
-              <div className="space-y-1 text-[13px]">
-                <div className="flex justify-between"><span className="font-semibold">Total Quantity (MT) :</span><span className="font-semibold">{totalQuantity.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span className="font-semibold">Total Sales :</span><span className="font-semibold">{totalSales.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span className="font-semibold">Add GST @ 0% :</span><span className="font-semibold">0.00</span></div>
-                <div className="flex justify-between"><span className="font-semibold">Total Amount Due :</span><span className="font-semibold">{totalSales.toFixed(2)}</span></div>
-                <div className="pt-8 text-center border-t border-black mt-8">Approval Sign by Authorized Person</div>
+              <div className="mt-4 grid grid-cols-2 gap-6">
+                <div>
+                  <div className="font-semibold">Instruction : ARRANGE DELIVERY</div>
+                  <div className="font-semibold mt-2">Remark :</div>
+                </div>
+                <div className="space-y-1 text-[13px]">
+                  <div className="flex justify-between"><span className="font-semibold">Total Quantity (MT) :</span><span className="font-semibold">{totalQuantity.toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span className="font-semibold">Total Sales :</span><span className="font-semibold">{totalSales.toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span className="font-semibold">Add GST @ 0% :</span><span className="font-semibold">0.00</span></div>
+                  <div className="flex justify-between"><span className="font-semibold">Total Amount Due :</span><span className="font-semibold">{totalSales.toFixed(2)}</span></div>
+                  <div className="pt-8 text-center border-t border-black mt-8">Approval Sign by Authorized Person</div>
+                </div>
               </div>
             </div>
 
-            <table className="w-full mt-6 border border-black border-collapse text-[12px]">
-              <thead>
-                <tr>
-                  <th className="border border-black px-2 py-1 text-center" colSpan={6}>Balance Outstanding By Due</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border border-black px-2 py-1">Current</th>
-                  <th className="border border-black px-2 py-1">1-30 Days<br />Past Due</th>
-                  <th className="border border-black px-2 py-1">31-60 Days<br />Past Due</th>
-                  <th className="border border-black px-2 py-1">61-90 Days<br />Past Due</th>
-                  <th className="border border-black px-2 py-1">Over 90 Days<br />Past Due</th>
-                  <th className="border border-black px-2 py-1">Total Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="border border-black px-2 py-1 text-right">0.00</td>
-                  <td className="border border-black px-2 py-1 text-right">0.00</td>
-                  <td className="border border-black px-2 py-1 text-right">0.00</td>
-                  <td className="border border-black px-2 py-1 text-right">0.00</td>
-                  <td className="border border-black px-2 py-1 text-right">0.00</td>
-                  <td className="border border-black px-2 py-1 text-right">0.00</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="mt-auto pt-6">
+              <table className="w-full border border-black border-collapse text-[12px]">
+                <thead>
+                  <tr>
+                    <th className="border border-black px-2 py-1 text-center" colSpan={6}>Balance Outstanding By Due</th>
+                  </tr>
+                  <tr className="bg-gray-100">
+                    <th className="border border-black px-2 py-1">Current</th>
+                    <th className="border border-black px-2 py-1">1-30 Days<br />Past Due</th>
+                    <th className="border border-black px-2 py-1">31-60 Days<br />Past Due</th>
+                    <th className="border border-black px-2 py-1">61-90 Days<br />Past Due</th>
+                    <th className="border border-black px-2 py-1">Over 90 Days<br />Past Due</th>
+                    <th className="border border-black px-2 py-1">Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-black px-2 py-1 text-right">0.00</td>
+                    <td className="border border-black px-2 py-1 text-right">0.00</td>
+                    <td className="border border-black px-2 py-1 text-right">0.00</td>
+                    <td className="border border-black px-2 py-1 text-right">0.00</td>
+                    <td className="border border-black px-2 py-1 text-right">0.00</td>
+                    <td className="border border-black px-2 py-1 text-right">0.00</td>
+                  </tr>
+                </tbody>
+              </table>
 
-            <table className="w-full mt-3 border border-black border-collapse text-[11px]">
-              <thead>
-                <tr>
-                  <th className="border border-black px-2 py-1 text-center" colSpan={12}>Monthly Outstanding</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  {Array.from({ length: 12 }).map((_, idx) => (
-                    <td key={`month-${idx}`} className="border border-black px-1 py-1 text-right">0.00</td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+              <table className="w-full mt-3 border border-black border-collapse text-[11px]">
+                <thead>
+                  <tr>
+                    <th className="border border-black px-2 py-1 text-center" colSpan={12}>Monthly Outstanding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {Array.from({ length: 12 }).map((_, idx) => (
+                      <td key={`month-${idx}`} className="border border-black px-1 py-1 text-right">0.00</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           {codeError && (
             <div className="no-print mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
@@ -656,18 +737,18 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                   const monitorId = header.monitorId?.trim();
 
                   if (!monitorId) {
-                    alert('Monitor ID is missing. Please wait for auto-generated ID from server.');
+                    await showAppAlert({ title: 'Missing Monitor ID', message: 'Monitor ID is missing. Please wait for auto-generated ID from server.', tone: 'warning' });
                     return;
                   }
 
                   if (!header.customer?.trim()) {
-                    alert('Please fill Customer before saving.');
+                    await showAppAlert({ title: 'Validation', message: 'Please fill Customer before saving.', tone: 'warning' });
                     return;
                   }
 
                   const validItems = items.filter((it) => it.id || it.product);
                   if (validItems.length === 0) {
-                    alert('Please add at least 1 item before saving.');
+                    await showAppAlert({ title: 'Validation', message: 'Please add at least 1 item before saving.', tone: 'warning' });
                     return;
                   }
 
@@ -684,11 +765,11 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
                   };
 
                   try {
-                    await monitorService.save(payload);
-                    alert('💾 Monitor document saved successfully!');
-                    goBackToDocuments();
+                    const response = await monitorService.save(payload);
+                    await showAppAlert({ title: 'Saved', message: 'Monitor document saved successfully.', tone: 'success' });
+                    goBackToDocumentsWithSavedRecord(response?.data?.data || payload.header);
                   } catch (_error) {
-                    alert('Failed to save monitor document');
+                    await showAppAlert({ title: 'Save Failed', message: 'Failed to save monitor document.', tone: 'danger' });
                   }
                 }}
                 className="flex items-center gap-2 rounded-lg bg-green-600 px-6 py-2 font-medium text-white transition-colors hover:bg-green-700"
@@ -709,8 +790,16 @@ export default function KeyDocumentMonitor({ onNavigate = () => {}, initialData 
             )}
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm('❌ Cancel? Any unsaved changes will be lost.')) {
+              onClick={async () => {
+                const confirmed = await showAppConfirm({
+                  title: 'Cancel Changes',
+                  message: 'Any unsaved changes will be lost. Do you want to continue?',
+                  confirmText: 'Yes, Cancel',
+                  cancelText: 'No',
+                  tone: 'warning',
+                });
+
+                if (confirmed) {
                   goBackToDocuments();
                 }
               }}

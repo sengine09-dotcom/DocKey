@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminInitToken {
+  id            String   @id @db.Char(26)
+  token         String   @unique @db.VarChar(191)
+  customerName  String?  @db.VarChar(255)
+  customerEmail String?  @db.VarChar(191)
+  description   String?  @db.VarChar(255)
+  isActive      Boolean  @default(true)
+  expiresAt     DateTime?
+  usedAt        DateTime?
+  usedByEmail   String?  @db.VarChar(191)
+  lastSeenAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("tblAdminInitToken")
+}

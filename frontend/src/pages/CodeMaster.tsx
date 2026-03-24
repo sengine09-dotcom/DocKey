@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
+import { showAppConfirm } from '../services/dialogService';
 
 const usedOptions = [
   { value: 'Y', label: 'Active' },
@@ -151,6 +152,33 @@ const pageConfigs: Record<string, any> = {
       termId: '', termName: '', shortName: '', days: '', used: 'Y',
     },
   },
+  'end-user-code': {
+    apiType: 'end-user',
+    title: 'End User Codes',
+    icon: '👤',
+    cardDescription: 'เลือกรหัสผู้รับปลายทางเพื่อใช้กับ Delivered to ใน Monitor Document',
+    description: 'Master end user codes used for Delivered to in monitor documents.',
+    searchPlaceholder: 'Search end user code or name',
+    listTitle: 'Recent End User Codes',
+    createLabel: 'Add End User Code',
+    idField: 'eUserId',
+    nameField: 'eUserName',
+    columns: [
+      { key: 'eUserId', label: 'Code' },
+      { key: 'eUserName', label: 'End User Name' },
+      { key: 'shortName', label: 'Short Name' },
+      { key: 'used', label: 'Status', type: 'status' },
+    ],
+    fields: [
+      { key: 'eUserId', label: 'End User ID', required: true },
+      { key: 'eUserName', label: 'End User Name', required: true },
+      { key: 'shortName', label: 'Short Name' },
+      { key: 'used', label: 'Status', type: 'select', options: usedOptions },
+    ],
+    initialValues: {
+      eUserId: '', eUserName: '', shortName: '', used: 'Y',
+    },
+  },
 };
 
 const toDateInputValue = (value: any) => {
@@ -182,7 +210,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const [error, setError] = useState('');
   const [paymentTermOptions, setPaymentTermOptions] = useState<{ value: string; label: string }[]>([]);
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
-  const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, destination: 0, paymentTerm: 0 });
+  const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, destination: 0, paymentTerm: 0, endUser: 0 });
 
   const config = pageConfigs[currentPage] || pageConfigs['customer-code'];
 
@@ -194,7 +222,12 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
       const loaded = response.data.data || [];
       setRecords(loaded);
       // refresh that type's count in the summary cards
-      setCodeCounts((prev) => ({ ...prev, [config.apiType === 'payment-term' ? 'paymentTerm' : config.apiType]: loaded.length }));
+      const countKey = config.apiType === 'payment-term'
+        ? 'paymentTerm'
+        : config.apiType === 'end-user'
+        ? 'endUser'
+        : config.apiType;
+      setCodeCounts((prev) => ({ ...prev, [countKey]: loaded.length }));
     } catch (loadError: any) {
       setError(loadError?.response?.data?.message || loadError.message || 'Failed to load codes');
     } finally {
@@ -227,12 +260,14 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
       codeService.getAll('product'),
       codeService.getAll('destination'),
       codeService.getAll('payment-term'),
-    ]).then(([cust, prod, dest, term]) => {
+      codeService.getAll('end-user'),
+    ]).then(([cust, prod, dest, term, endUser]) => {
       setCodeCounts({
         customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
         product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
         destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
         paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
+        endUser:     endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
       });
     });
   }, []);
@@ -290,7 +325,15 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
 
   const handleDelete = async (record: any) => {
     const codeId = record[config.idField];
-    if (!window.confirm(`Delete ${codeId}?`)) {
+    const confirmed = await showAppConfirm({
+      title: 'Delete Code',
+      message: `Delete ${codeId}?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -328,6 +371,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     { id: 'product-code', icon: '📦', label: 'Product', count: codeCounts.product, description: pageConfigs['product-code'].cardDescription },
     { id: 'destination-code', icon: '📍', label: 'Destination', count: codeCounts.destination, description: pageConfigs['destination-code'].cardDescription },
     { id: 'payment-term-code', icon: '💳', label: 'Payment Term', count: codeCounts.paymentTerm, description: pageConfigs['payment-term-code'].cardDescription },
+    { id: 'end-user-code', icon: '👤', label: 'End User', count: codeCounts.endUser, description: pageConfigs['end-user-code'].cardDescription },
   ];
 
   return (
@@ -341,7 +385,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="max-w-7xl mx-auto px-6 py-8">
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mb-8">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5 mb-8">
             {codeCards.map((card) => (
               <button
                 key={card.id}
