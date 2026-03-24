@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import Layout from '../components/Layout/Layout';
 import useThemePreference from '../hooks/useThemePreference';
+import { formatDate, formatDateTime } from '../utils/date';
 
 type TokenStatusResponse = {
   token: string;
@@ -16,13 +17,6 @@ type TokenStatusResponse = {
   usedAt?: string | null;
   warningLevel: 'none' | 'healthy' | 'warning' | 'critical' | 'expired';
   daysUntilExpiry: number | null;
-};
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '-';
-  return parsed.toLocaleString();
 };
 
 export default function TokenStatus({ onNavigate = () => {}, currentPage = 'token-status' }: any) {
@@ -156,7 +150,7 @@ export default function TokenStatus({ onNavigate = () => {}, currentPage = 'toke
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Vendor Reachable</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.vendorReachable ? 'Yes' : 'No'}</dd></div>
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Customer Name</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.customerName || '-'}</dd></div>
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Customer Email</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.customerEmail || '-'}</dd></div>
-                    <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Expires At</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{formatDateTime(status.expiresAt)}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Expires At</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{formatDate(status.expiresAt)}</dd></div>
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Status Reason</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.reason || '-'}</dd></div>
                   </dl>
                 </div>

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { formatDate } from '../utils/date';
 
 type TokenStatus = {
   valid: boolean;
@@ -17,19 +18,6 @@ const reasonMessageMap: Record<string, string> = {
   used: 'This admin activation link has already been used.',
   expired: 'This admin activation link has expired.',
   'admin-configured': 'Administrator has already been configured for this system.',
-};
-
-const formatDateTime = (value?: string | null) => {
-  if (!value) {
-    return '-';
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return '-';
-  }
-
-  return parsed.toLocaleString();
 };
 
 export default function InitAdmin() {
@@ -129,7 +117,7 @@ export default function InitAdmin() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Token Expiry</p>
-                <p className="mt-2">{formatDateTime(status?.expiresAt)}</p>
+                <p className="mt-2">{formatDate(status?.expiresAt)}</p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Note</p>

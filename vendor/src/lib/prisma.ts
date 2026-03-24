@@ -1,7 +1,12 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import path from 'path';
+import type { PrismaClient as PrismaClientType } from '../generated/prisma';
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const { PrismaClient } = require(path.resolve(__dirname, '../../src/generated/prisma')) as {
+  PrismaClient: typeof PrismaClientType;
+};
+
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientType };
 
 export const prisma =
   globalForPrisma.prisma ??

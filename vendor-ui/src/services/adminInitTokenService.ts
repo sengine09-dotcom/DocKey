@@ -39,6 +39,21 @@ const adminInitTokenService = {
     const response = await api.patch(`/admin-init-tokens/${id}/disable`);
     return response.data.data as AdminInitToken;
   },
+  update: async (
+    id: string,
+    payload: {
+      customerName?: string;
+      customerEmail?: string;
+      description?: string;
+      expiresAt?: string;
+    }
+  ) => {
+    const response = await api.patch(`/admin-init-tokens/${id}`, payload);
+    return response.data.data as AdminInitToken;
+  },
+  remove: async (id: string) => {
+    await api.delete(`/admin-init-tokens/${id}`);
+  },
 };
 
 export default adminInitTokenService;

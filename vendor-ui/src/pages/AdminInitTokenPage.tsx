@@ -1,5 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import adminInitTokenService, { AdminInitToken } from '../services/adminInitTokenService';
+import { formatDate, toApiDateInput, toPickerDateInput } from '../utils/date';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const formatDateTime = (value?: string | null) => {
   if (!value) {
@@ -43,10 +46,62 @@ const getPresenceLabel = (tokenRecord: AdminInitToken) => {
   return { label: 'Offline', dotClass: 'bg-rose-500', textClass: 'text-rose-700' };
 };
 
+const validateTokenForm = (form: {
+  customerName: string;
+  customerEmail: string;
+  description: string;
+  expiresAt: string;
+}) => {
+  const customerName = form.customerName.trim();
+  const customerEmail = form.customerEmail.trim().toLowerCase();
+  const description = form.description.trim();
+  const expiresAt = toApiDateInput(form.expiresAt);
+
+  if (!customerName) {
+    return { valid: false, message: 'Customer name is required.' };
+  }
+
+  if (customerName.length > 255) {
+    return { valid: false, message: 'Customer name must be 255 characters or fewer.' };
+  }
+
+  if (!customerEmail) {
+    return { valid: false, message: 'Customer email is required.' };
+  }
+
+  if (customerEmail.length > 191) {
+    return { valid: false, message: 'Customer email must be 191 characters or fewer.' };
+  }
+
+  if (!EMAIL_PATTERN.test(customerEmail)) {
+    return { valid: false, message: 'Customer email format is invalid.' };
+  }
+
+  if (description.length > 255) {
+    return { valid: false, message: 'Description must be 255 characters or fewer.' };
+  }
+
+  if (expiresAt === null) {
+    return { valid: false, message: 'Please select a valid expiry date.' };
+  }
+
+  return {
+    valid: true,
+    data: {
+      customerName,
+      customerEmail,
+      description,
+      expiresAt,
+    },
+  };
+};
+
 export default function AdminInitTokenPage() {
   const [tokens, setTokens] = useState<AdminInitToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
+  const [editingId, setEditingId] = useState('');
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState('');
   const [form, setForm] = useState({
@@ -98,25 +153,73 @@ export default function AdminInitTokenPage() {
     };
   }, []);
 
+  const resetForm = () => {
+    setEditingId('');
+    setForm({
+      customerName: '',
+      customerEmail: '',
+      description: '',
+      expiresAt: '',
+    });
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    const validation = validateTokenForm(form);
+
+    if (!validation.valid) {
+      setError(validation.message);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      editingId
+        ? `Confirm updating token for ${validation.data.customerName}?`
+        : `Confirm creating token for ${validation.data.customerName}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     setSaving(true);
     setError('');
 
     try {
-      const created = await adminInitTokenService.create(form);
-      setTokens((prev) => [created, ...prev]);
-      setForm({
-        customerName: '',
-        customerEmail: '',
-        description: '',
-        expiresAt: '',
-      });
+      if (editingId) {
+        const updated = await adminInitTokenService.update(editingId, {
+          ...validation.data,
+        });
+        setTokens((prev) => prev.map((item) => (item.id === editingId ? updated : item)));
+      } else {
+        const created = await adminInitTokenService.create({
+          ...validation.data,
+        });
+        setTokens((prev) => [created, ...prev]);
+      }
+      resetForm();
     } catch (saveError: any) {
-      setError(saveError?.response?.data?.message || 'Failed to create token');
+      setError(saveError?.response?.data?.message || (editingId ? 'Failed to update token' : 'Failed to create token'));
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEdit = (tokenRecord: AdminInitToken) => {
+    setEditingId(tokenRecord.id);
+    setError('');
+    setForm({
+      customerName: tokenRecord.customerName || '',
+      customerEmail: tokenRecord.customerEmail || '',
+      description: tokenRecord.description || '',
+      expiresAt: toPickerDateInput(tokenRecord.expiresAt),
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setError('');
+    resetForm();
   };
 
   const handleDisable = async (tokenId: string) => {
@@ -125,6 +228,26 @@ export default function AdminInitTokenPage() {
       setTokens((prev) => prev.map((item) => (item.id === tokenId ? updated : item)));
     } catch (disableError: any) {
       setError(disableError?.response?.data?.message || 'Failed to disable token');
+    }
+  };
+
+  const handleDelete = async (tokenRecord: AdminInitToken) => {
+    const confirmed = window.confirm(
+      `Confirm deleting token for ${tokenRecord.customerName || tokenRecord.customerEmail || tokenRecord.token}?`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingId(tokenRecord.id);
+      setError('');
+      await adminInitTokenService.remove(tokenRecord.id);
+      setTokens((prev) => prev.filter((item) => item.id !== tokenRecord.id));
+    } catch (deleteError: any) {
+      setError(deleteError?.response?.data?.message || 'Failed to delete token');
+    } finally {
+      setDeletingId('');
     }
   };
 
@@ -176,8 +299,8 @@ export default function AdminInitTokenPage() {
 
         <div className="space-y-8">
           <div className="vendor-panel p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">Create Token</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">New customer link</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">{editingId ? 'Edit Token' : 'Create Token'}</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{editingId ? 'Update customer link' : 'New customer link'}</h2>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
@@ -187,6 +310,8 @@ export default function AdminInitTokenPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, customerName: event.target.value }))}
                   className="vendor-field"
                   placeholder="Acme Trading Sdn. Bhd."
+                  maxLength={255}
+                  required
                 />
               </div>
 
@@ -198,17 +323,22 @@ export default function AdminInitTokenPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, customerEmail: event.target.value }))}
                   className="vendor-field"
                   placeholder="owner@customer.com"
+                  maxLength={191}
+                  required
                 />
               </div>
 
               <div>
                 <label className="vendor-label">Expire Date</label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={form.expiresAt}
                   onChange={(event) => setForm((prev) => ({ ...prev, expiresAt: event.target.value }))}
-                  className="vendor-field"
+                  className="vendor-field"                  
                 />
+                <p className="mt-2 text-xs text-slate-500">
+                  {form.expiresAt ? `Selected date: ${formatDate(form.expiresAt)}` : 'Select the expiry date from the calendar dialog.'}
+                </p>
               </div>
 
               <div>
@@ -218,7 +348,9 @@ export default function AdminInitTokenPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
                   className="vendor-field min-h-[110px]"
                   placeholder="Internal note for this customer activation"
+                  maxLength={255}
                 />
+                <p className="mt-2 text-xs text-slate-500">Description is optional, up to 255 characters.</p>
               </div>
 
               <button
@@ -226,8 +358,17 @@ export default function AdminInitTokenPage() {
                 disabled={saving}
                 className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? 'Generating token...' : 'Generate Token'}
+                {saving ? (editingId ? 'Saving changes...' : 'Generating token...') : editingId ? 'Save Changes' : 'Generate Token'}
               </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Cancel Edit
+                </button>
+              )}
             </form>
           </div>
 
@@ -293,7 +434,7 @@ export default function AdminInitTokenPage() {
                               Last Seen: {formatDateTime(tokenRecord.lastSeenAt)}
                             </div>
                           </td>
-                          <td className="px-6 py-5 text-xs text-slate-600">{formatDateTime(tokenRecord.expiresAt)}</td>
+                          <td className="px-6 py-5 text-xs text-slate-600">{formatDate(tokenRecord.expiresAt)}</td>
                           <td className="px-6 py-5">
                             <div className="max-w-[320px] break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-600">
                               {tokenRecord.claimUrl}
@@ -328,11 +469,26 @@ export default function AdminInitTokenPage() {
                               </button>
                               <button
                                 type="button"
+                                onClick={() => handleEdit(tokenRecord)}
+                                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:border-amber-400 hover:bg-amber-100"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => void handleDisable(tokenRecord.id)}
                                 disabled={!tokenRecord.isActive || Boolean(tokenRecord.usedAt)}
                                 className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                               >
                                 Disable
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDelete(tokenRecord)}
+                                disabled={deletingId === tokenRecord.id}
+                                className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                              >
+                                {deletingId === tokenRecord.id ? 'Deleting...' : 'Delete'}
                               </button>
                             </div>
                           </td>
