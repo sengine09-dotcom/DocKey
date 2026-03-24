@@ -9,6 +9,8 @@ router.get('/admin-init-tokens/runtime-status', AdminInitTokenController.runtime
 router.get('/admin-init-tokens/status', AdminInitTokenController.status);
 router.get('/admin-init-tokens', AdminInitTokenController.list);
 router.post('/admin-init-tokens', AdminInitTokenController.create);
+router.patch('/admin-init-tokens/:id', AdminInitTokenController.update);
 router.patch('/admin-init-tokens/:id/disable', AdminInitTokenController.disable);
+router.delete('/admin-init-tokens/:id', AdminInitTokenController.remove);
 
 export default router;

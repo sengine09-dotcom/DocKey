@@ -4,6 +4,97 @@ import { prisma } from '../lib/prisma';
 
 const PRESENCE_WINDOW_MS = 30 * 1000;
 const tokenPresence = new Map<string, { lastHeartbeatAt: number; disconnectedAt: number | null }>();
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeOptionalText = (value: unknown) => {
+  if (value == null) {
+    return '';
+  }
+
+  return String(value).trim();
+};
+
+const parseExpiryDate = (value: unknown) => {
+  if (value == null || value === '') {
+    return { value: null as Date | null, error: null as string | null };
+  }
+
+  const raw = String(value).trim();
+  const datePattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+  const match = datePattern.exec(raw);
+
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const parsed = new Date(year, month - 1, day, 23, 59, 59, 999);
+
+    if (
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day
+    ) {
+      return { value: null as Date | null, error: 'Expire date must use a valid dd/mm/yyyy value.' };
+    }
+
+    return { value: parsed, error: null as string | null };
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return { value: null as Date | null, error: 'Expire date must use dd/mm/yyyy format.' };
+  }
+
+  return { value: parsed, error: null as string | null };
+};
+
+const validateTokenPayload = (payload: {
+  customerName: unknown;
+  customerEmail: unknown;
+  description: unknown;
+  expiresAt: Date | null;
+}) => {
+  const customerName = normalizeOptionalText(payload.customerName);
+  const customerEmail = normalizeOptionalText(payload.customerEmail).toLowerCase();
+  const description = normalizeOptionalText(payload.description);
+
+  if (!customerName) {
+    return { valid: false, message: 'Customer name is required.' };
+  }
+
+  if (customerName.length > 255) {
+    return { valid: false, message: 'Customer name must be 255 characters or fewer.' };
+  }
+
+  if (!customerEmail) {
+    return { valid: false, message: 'Customer email is required.' };
+  }
+
+  if (customerEmail.length > 191) {
+    return { valid: false, message: 'Customer email must be 191 characters or fewer.' };
+  }
+
+  if (!EMAIL_PATTERN.test(customerEmail)) {
+    return { valid: false, message: 'Customer email format is invalid.' };
+  }
+
+  if (description.length > 255) {
+    return { valid: false, message: 'Description must be 255 characters or fewer.' };
+  }
+
+  if (payload.expiresAt && payload.expiresAt.getTime() <= Date.now()) {
+    return { valid: false, message: 'Expire date must be later than the current time.' };
+  }
+
+  return {
+    valid: true,
+    data: {
+      customerName,
+      customerEmail,
+      description,
+    },
+  };
+};
 
 const getRecordedActivityAt = (token: string, lastSeenAt?: Date | string | null) => {
   const presence = tokenPresence.get(token);
@@ -118,15 +209,31 @@ class AdminInitTokenController {
   static async create(req: Request, res: Response) {
     try {
       const { customerName, customerEmail, description, expiresAt } = req.body;
+      const parsedExpiryDate = parseExpiryDate(expiresAt);
+
+      if (parsedExpiryDate.error) {
+        return res.status(400).json({ success: false, message: parsedExpiryDate.error });
+      }
+
+      const validation = validateTokenPayload({
+        customerName,
+        customerEmail,
+        description,
+        expiresAt: parsedExpiryDate.value,
+      });
+
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, message: validation.message });
+      }
 
       const tokenRecord = await prisma.adminInitToken.create({
         data: {
           id: ulid(),
           token: ulid(),
-          customerName: customerName?.trim() || null,
-          customerEmail: customerEmail?.trim() || null,
-          description: description?.trim() || null,
-          expiresAt: expiresAt ? new Date(expiresAt) : null,
+          customerName: validation.data.customerName,
+          customerEmail: validation.data.customerEmail,
+          description: validation.data.description || null,
+          expiresAt: parsedExpiryDate.value,
           isActive: true,
         },
       });
@@ -137,6 +244,55 @@ class AdminInitTokenController {
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to create token' });
+    }
+  }
+
+  static async update(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { customerName, customerEmail, description, expiresAt } = req.body;
+
+      const existing = await prisma.adminInitToken.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Token not found' });
+      }
+
+      const parsedExpiryDate = parseExpiryDate(expiresAt);
+
+      if (parsedExpiryDate.error) {
+        return res.status(400).json({ success: false, message: parsedExpiryDate.error });
+      }
+
+      const validation = validateTokenPayload({
+        customerName,
+        customerEmail,
+        description,
+        expiresAt: parsedExpiryDate.value,
+      });
+
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, message: validation.message });
+      }
+
+      const updated = await prisma.adminInitToken.update({
+        where: { id },
+        data: {
+          customerName: validation.data.customerName,
+          customerEmail: validation.data.customerEmail,
+          description: validation.data.description || null,
+          expiresAt: parsedExpiryDate.value,
+        },
+      });
+
+      return res.json({
+        success: true,
+        data: toTokenResponse(updated),
+      });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || 'Failed to update token' });
     }
   }
 
@@ -155,6 +311,33 @@ class AdminInitTokenController {
       });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Failed to disable token' });
+    }
+  }
+
+  static async remove(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const tokenRecord = await prisma.adminInitToken.findUnique({
+        where: { id },
+      });
+
+      if (!tokenRecord) {
+        return res.status(404).json({ success: false, message: 'Token not found' });
+      }
+
+      await prisma.adminInitToken.delete({
+        where: { id },
+      });
+
+      tokenPresence.delete(tokenRecord.token);
+
+      return res.json({
+        success: true,
+        message: 'Token deleted successfully',
+      });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || 'Failed to delete token' });
     }
   }
 
