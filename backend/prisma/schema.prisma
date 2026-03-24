@@ -169,3 +169,12 @@ model PaymentTerm {
 
   @@map("tblPaymentTerm")
 }
+
+model EndUser {
+  eUserId   String  @id @map("EUserID") @db.VarChar(3)
+  eUserName String  @map("EUserName") @db.VarChar(255)
+  shortName String? @map("ShortName") @db.VarChar(100)
+  used      String? @map("Used") @db.VarChar(1)
+
+  @@map("tblEndUser")
+}

@@ -15,6 +15,18 @@ interface ProductSelectionModalProps {
   isLoading: boolean;
 }
 
+const buildProductName = (product: Product) => {
+  const marking = String(product.marking || product.Marking || '').trim();
+  const type = String(product.type || product.Type || '').trim();
+  const fallback = String(product.productName || product.ProductName || product.productId || '').trim();
+  const combined = [marking, type].filter(Boolean).join(' ').trim();
+  return combined || fallback;
+};
+
+const buildProductPacking = (product: Product) => {
+  return String(product.bagSize || product.BagSize || '').trim();
+};
+
 export default function ProductSelectionModal({
   isOpen,
   products,
@@ -32,7 +44,9 @@ export default function ProductSelectionModal({
     return products.filter((product) => {
       const id = (product.productId || '').toLowerCase();
       const name = (product.productName || '').toLowerCase();
-      return id.includes(term) || name.includes(term);
+      const formattedName = buildProductName(product).toLowerCase();
+      const bagSize = buildProductPacking(product).toLowerCase();
+      return id.includes(term) || name.includes(term) || formattedName.includes(term) || bagSize.includes(term);
     });
   }, [products, searchTerm]);
 
@@ -106,7 +120,10 @@ export default function ProductSelectionModal({
                   <div>
                     <div className="font-semibold text-sm">{product.productId}</div>
                     <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {product.productName}
+                      {buildProductName(product)}
+                    </div>
+                    <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                      Packing : {buildProductPacking(product) || '-'}
                     </div>
                   </div>
                   <span className={`text-lg leading-none ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>

@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #0f172a;
+  background:
+    radial-gradient(circle at top left, rgba(168, 85, 247, 0.24), transparent 32%),
+    radial-gradient(circle at top right, rgba(192, 132, 252, 0.22), transparent 28%),
+    linear-gradient(180deg, #f5edff 0%, #f8f5ff 52%, #fcfaff 100%);
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@layer components {
+  .vendor-panel {
+    @apply rounded-3xl border border-black bg-white shadow-2xl shadow-slate-300/30;
+  }
+
+  .vendor-label {
+    @apply mb-2 block text-sm font-semibold text-slate-800;
+  }
+
+  .vendor-field {
+    @apply w-full rounded-xl border border-black bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-sky-600 focus:ring-4 focus:ring-sky-200;
+  }
+
+  .vendor-button-secondary {
+    @apply rounded-xl border border-black bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-700 hover:bg-slate-50;
+  }
+}

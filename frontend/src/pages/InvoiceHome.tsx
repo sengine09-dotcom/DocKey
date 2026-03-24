@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 import invoiceService from '../services/invoiceService';
 import useThemePreference from '../hooks/useThemePreference';
+import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
 export default function InvoiceHome({ onNavigate = () => {} }: any) {
   const [invoices, setInvoices] = useState([]);
@@ -15,7 +16,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
         const response = await invoiceService.getAll();
         setInvoices(response.data.data || []);
       } catch (error) {
-        alert('Failed to load invoices from API');
+        void showAppAlert({ title: 'Load Failed', message: 'Failed to load invoices from API.', tone: 'danger' });
       } finally {
         setIsLoading(false);
       }
@@ -32,14 +33,25 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
     onNavigate('key-invoice', { ...invoice, __mode: 'edit' });
   };
 
-  const handleDeleteInvoice = (invoice) => {
-    if (window.confirm(`🗑️ Delete Invoice: ${invoice.invoiceId}?\n\nCustomer: ${invoice.customer}\n\nThis action cannot be undone.`)) {
-      invoiceService.delete(invoice.invoiceNo).then(() => {
-        setInvoices(invoices.filter((i: any) => i.invoiceNo !== invoice.invoiceNo));
-        alert('✅ Invoice deleted successfully!');
-      }).catch(() => {
-        alert('Failed to delete invoice');
-      });
+  const handleDeleteInvoice = async (invoice) => {
+    const confirmed = await showAppConfirm({
+      title: 'Delete Invoice',
+      message: `Delete ${invoice.invoiceId}?\n\nCustomer: ${invoice.customer}\n\nThis action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await invoiceService.delete(invoice.invoiceNo);
+      setInvoices((prev: any) => prev.filter((i: any) => i.invoiceNo !== invoice.invoiceNo));
+      await showAppAlert({ title: 'Deleted', message: 'Invoice deleted successfully.', tone: 'success' });
+    } catch (_error) {
+      await showAppAlert({ title: 'Delete Failed', message: 'Failed to delete invoice.', tone: 'danger' });
     }
   };
 

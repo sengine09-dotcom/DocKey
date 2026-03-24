@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import monitorService from '../../services/monitorService';
 import invoiceService from '../../services/invoiceService';
 import codeService from '../../services/codeService';
+import { showAppAlert } from '../../services/dialogService';
 
 export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard', topBarCaption = '' }: any) {
   const location = useLocation();
@@ -33,7 +34,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   });
   const [sidebarCounts, setSidebarCounts] = useState({
     monitor: 0, invoice: 0,
-    customer: 0, product: 0, destination: 0, paymentTerm: 0,
+    customer: 0, product: 0, destination: 0, paymentTerm: 0, endUser: 0,
   });
   const [user, setUser] = useState({
     name: 'User',
@@ -65,8 +66,30 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
     loadCurrentUser();
 
+    const heartbeat = async () => {
+      try {
+        await axios.post('/api/auth/user-presence/heartbeat');
+      } catch (_error) {
+        // Presence failures should not interrupt usage.
+      }
+    };
+
+    void heartbeat();
+
+    const intervalId = window.setInterval(() => {
+      void heartbeat();
+    }, 10000);
+
+    const handlePageHide = () => {
+      navigator.sendBeacon('/api/auth/user-presence/disconnect');
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('pagehide', handlePageHide);
     };
   }, []);
 
@@ -93,6 +116,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     { id: 'product-code', label: 'Product', icon: '📦', href: '/codes/product', count: sidebarCounts.product, isActive: currentPage === 'product-code' },
     { id: 'destination-code', label: 'Destination', icon: '📍', href: '/codes/destination', count: sidebarCounts.destination, isActive: currentPage === 'destination-code' },
     { id: 'payment-term-code', label: 'Payment Term', icon: '💳', href: '/codes/payment-term', count: sidebarCounts.paymentTerm, isActive: currentPage === 'payment-term-code' },
+    { id: 'end-user-code', label: 'End User', icon: '👤', href: '/codes/end-user', count: sidebarCounts.endUser, isActive: currentPage === 'end-user-code' },
   ];
 
   const isDocumentSectionActive =
@@ -107,7 +131,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     currentPage === 'customer-code' ||
     currentPage === 'product-code' ||
     currentPage === 'destination-code' ||
-    currentPage === 'payment-term-code';
+    currentPage === 'payment-term-code' ||
+    currentPage === 'end-user-code';
 
   useEffect(() => {
     localStorage.setItem('doc-key-sidebar-open', String(sidebarOpen));
@@ -119,13 +144,14 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   useEffect(() => {
     const fetchCounts = async () => {
-      const [mon, inv, cust, prod, dest, term] = await Promise.allSettled([
+      const [mon, inv, cust, prod, dest, term, endUser] = await Promise.allSettled([
         monitorService.getAll(),
         invoiceService.getAll(),
         codeService.getAll('customer'),
         codeService.getAll('product'),
         codeService.getAll('destination'),
         codeService.getAll('payment-term'),
+        codeService.getAll('end-user'),
       ]);
       setSidebarCounts({
         monitor:     mon.status  === 'fulfilled' ? (mon.value?.data?.data?.length  ?? 0) : 0,
@@ -134,6 +160,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
         destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
         paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
+        endUser:     endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
       });
     };
     fetchCounts();
@@ -167,16 +194,18 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('destination-code');
     } else if (id === 'payment-term-code') {
       onNavigate('payment-term-code');
+    } else if (id === 'end-user-code') {
+      onNavigate('end-user-code');
     } else if (id === 'key-monitor') {
       onNavigate('key-monitor');
     } else if (id === 'key-invoice') {
       onNavigate('key-invoice');
     } else if (id === 'reports') {
-      alert('📈 Reports - Coming Soon!');
+      void showAppAlert({ title: 'Coming Soon', message: 'Reports page is coming soon.', tone: 'info' });
     } else if (id === 'upload') {
-      alert('⬆️ Upload - Coming Soon!');
+      void showAppAlert({ title: 'Coming Soon', message: 'Upload page is coming soon.', tone: 'info' });
     } else if (id === 'settings') {
-      alert('⚙️ Settings - Coming Soon!');
+      void showAppAlert({ title: 'Coming Soon', message: 'Settings page is coming soon.', tone: 'info' });
     }
   };
 
@@ -267,7 +296,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
                         isCodeSectionActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                       }`}>
-                        {sidebarCounts.customer + sidebarCounts.product + sidebarCounts.destination + sidebarCounts.paymentTerm}
+                        {sidebarCounts.customer + sidebarCounts.product + sidebarCounts.destination + sidebarCounts.paymentTerm + sidebarCounts.endUser}
                       </span>
                     )}
                     {/* Submenu toggle button */}
@@ -357,6 +386,10 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 if (!label && currentPage === 'customer-code') label = '🏢 Customer Codes';
                 if (!label && currentPage === 'product-code') label = '📦 Product Codes';
                 if (!label && currentPage === 'destination-code') label = '📍 Destination Codes';
+                if (!label && currentPage === 'payment-term-code') label = '💳 Payment Term Codes';
+                if (!label && currentPage === 'end-user-code') label = '👤 End User Codes';
+                if (!label && currentPage === 'user-management') label = '👥 User Management';
+                if (!label && currentPage === 'token-status') label = '🪪 Token Status';
                 return label || 'Dashboard';
               })()}
             </h1>
@@ -421,7 +454,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   href="#profile"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert('👤 Profile Page - Coming Soon!');
+                    void showAppAlert({ title: 'Coming Soon', message: 'Profile page is coming soon.', tone: 'info' });
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
                     darkMode
@@ -435,7 +468,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   href="#edit-profile"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert('✏️ Edit Profile - Coming Soon!');
+                    void showAppAlert({ title: 'Coming Soon', message: 'Edit profile page is coming soon.', tone: 'info' });
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
                     darkMode
@@ -449,7 +482,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   href="#change-password"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert('🔐 Change Password - Coming Soon!');
+                    void showAppAlert({ title: 'Coming Soon', message: 'Change password page is coming soon.', tone: 'info' });
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
                     darkMode
@@ -460,10 +493,44 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   🔐 Change Password
                 </a>
                 <a
+                  href="#user-management"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowUserMenu(false);
+                    onNavigate('user-management');
+                  }}
+                  className={`block px-4 py-2 text-sm transition-colors ${
+                    String(user.role).toLowerCase() === 'admin'
+                      ? darkMode
+                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        : 'text-gray-700 hover:bg-gray-50'
+                      : 'hidden'
+                  }`}
+                >
+                  👥 Manage Users
+                </a>
+                <a
+                  href="#token-status"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowUserMenu(false);
+                    onNavigate('token-status');
+                  }}
+                  className={`block px-4 py-2 text-sm transition-colors ${
+                    String(user.role).toLowerCase() === 'admin'
+                      ? darkMode
+                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        : 'text-gray-700 hover:bg-gray-50'
+                      : 'hidden'
+                  }`}
+                >
+                  🪪 Token Status
+                </a>
+                <a
                   href="#settings"
                   onClick={(e) => {
                     e.preventDefault();
-                    alert('⚙️ Settings - Coming Soon!');
+                    void showAppAlert({ title: 'Coming Soon', message: 'Settings page is coming soon.', tone: 'info' });
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
                     darkMode

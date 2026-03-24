@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 import monitorService from '../services/monitorService';
 import useThemePreference from '../hooks/useThemePreference';
+import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
 export default function MonitorHome({ onNavigate = () => {} }: any) {
   const [monitors, setMonitors] = useState([]);
@@ -15,7 +16,7 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
         const response = await monitorService.getAll();
         setMonitors(response.data.data || []);
       } catch (error) {
-        alert('Failed to load monitors from API');
+        void showAppAlert({ title: 'Load Failed', message: 'Failed to load monitors from API.', tone: 'danger' });
       } finally {
         setIsLoading(false);
       }
@@ -32,14 +33,25 @@ export default function MonitorHome({ onNavigate = () => {} }: any) {
     onNavigate('key-monitor', { ...monitor, __mode: 'edit' });
   };
 
-  const handleDeleteMonitor = (monitor) => {
-    if (window.confirm(`🗑️ Delete Monitor Document: ${monitor.monitorId}?\n\nCustomer: ${monitor.customer}\n\nThis action cannot be undone.`)) {
-      monitorService.delete(monitor.monitorId).then(() => {
-        setMonitors(monitors.filter((m: any) => m.monitorId !== monitor.monitorId));
-        alert('✅ Monitor document deleted successfully!');
-      }).catch(() => {
-        alert('Failed to delete monitor');
-      });
+  const handleDeleteMonitor = async (monitor) => {
+    const confirmed = await showAppConfirm({
+      title: 'Delete Monitor Document',
+      message: `Delete ${monitor.monitorId}?\n\nCustomer: ${monitor.customer}\n\nThis action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await monitorService.delete(monitor.monitorId);
+      setMonitors((prev: any) => prev.filter((m: any) => m.monitorId !== monitor.monitorId));
+      await showAppAlert({ title: 'Deleted', message: 'Monitor document deleted successfully.', tone: 'success' });
+    } catch (_error) {
+      await showAppAlert({ title: 'Delete Failed', message: 'Failed to delete monitor.', tone: 'danger' });
     }
   };
 
