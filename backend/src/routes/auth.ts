@@ -13,6 +13,13 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-dockey-2026';
 const TOKEN_COOKIE_NAME = 'auth_token';
 type AuthTokenPayload = { id: string };
+type VendorExpirySummary = {
+  warningLevel?: 'none' | 'healthy' | 'warning' | 'critical' | 'expired';
+  daysUntilExpiry?: number | null;
+  expiryMessage?: string | null;
+  expiryShortLabel?: string | null;
+  expiryDateLabel?: string | null;
+};
 
 const getTokenFromRequest = (req: Request): string | null => {
   const cookieToken = req.cookies?.[TOKEN_COOKIE_NAME];
@@ -80,17 +87,21 @@ const requireAdminFromRequest = async (req: Request) => {
   return { user, error: null };
 };
 
+const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
 const getExpiryWarningLevel = (expiresAt: Date | string | null | undefined) => {
   if (!expiresAt) {
     return { warningLevel: 'none', daysUntilExpiry: null };
   }
 
-  const expiresAtMs = new Date(expiresAt).getTime();
-  if (Number.isNaN(expiresAtMs)) {
+  const parsedExpiry = new Date(expiresAt);
+  if (Number.isNaN(parsedExpiry.getTime())) {
     return { warningLevel: 'none', daysUntilExpiry: null };
   }
 
-  const daysUntilExpiry = Math.ceil((expiresAtMs - Date.now()) / (24 * 60 * 60 * 1000));
+  const today = startOfDay(new Date());
+  const expiryDay = startOfDay(parsedExpiry);
+  const daysUntilExpiry = Math.ceil((expiryDay.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
 
   if (daysUntilExpiry < 0) {
     return { warningLevel: 'expired', daysUntilExpiry };
@@ -105,6 +116,111 @@ const getExpiryWarningLevel = (expiresAt: Date | string | null | undefined) => {
   }
 
   return { warningLevel: 'healthy', daysUntilExpiry };
+};
+
+const getExpirySummaryFallback = (expiresAt: Date | string | null | undefined): Required<VendorExpirySummary> => {
+  const warning = getExpiryWarningLevel(expiresAt);
+  const expiryDateLabel = !expiresAt || Number.isNaN(new Date(expiresAt).getTime())
+    ? '-'
+    : `${String(new Date(expiresAt).getDate()).padStart(2, '0')}/${String(new Date(expiresAt).getMonth() + 1).padStart(2, '0')}/${new Date(expiresAt).getFullYear()}`;
+
+  if (warning.warningLevel === 'expired') {
+    return {
+      warningLevel: 'expired',
+      daysUntilExpiry: warning.daysUntilExpiry,
+      expiryMessage: 'หมดอายุแล้ว',
+      expiryShortLabel: 'หมดอายุแล้ว',
+      expiryDateLabel,
+    };
+  }
+
+  if (warning.warningLevel === 'critical' && warning.daysUntilExpiry === 0) {
+    return {
+      warningLevel: 'critical',
+      daysUntilExpiry: warning.daysUntilExpiry,
+      expiryMessage: 'หมดอายุวันนี้',
+      expiryShortLabel: 'หมดอายุวันนี้',
+      expiryDateLabel,
+    };
+  }
+
+  if (warning.warningLevel === 'critical' && warning.daysUntilExpiry === 1) {
+    return {
+      warningLevel: 'critical',
+      daysUntilExpiry: warning.daysUntilExpiry,
+      expiryMessage: 'พรุ่งนี้หมดอายุ',
+      expiryShortLabel: 'พรุ่งนี้หมดอายุ',
+      expiryDateLabel,
+    };
+  }
+
+  if (warning.warningLevel === 'critical') {
+    return {
+      warningLevel: 'critical',
+      daysUntilExpiry: warning.daysUntilExpiry,
+      expiryMessage: `ใกล้หมดอายุในอีก ${warning.daysUntilExpiry} วัน`,
+      expiryShortLabel: `อีก ${warning.daysUntilExpiry} วัน`,
+      expiryDateLabel,
+    };
+  }
+
+  if (warning.warningLevel === 'warning') {
+    return {
+      warningLevel: 'warning',
+      daysUntilExpiry: warning.daysUntilExpiry,
+      expiryMessage: `ใกล้หมดอายุในอีก ${warning.daysUntilExpiry} วัน`,
+      expiryShortLabel: `อีก ${warning.daysUntilExpiry} วัน`,
+      expiryDateLabel,
+    };
+  }
+
+  if (warning.warningLevel === 'healthy') {
+    return {
+      warningLevel: 'healthy',
+      daysUntilExpiry: warning.daysUntilExpiry,
+      expiryMessage: null,
+      expiryShortLabel: warning.daysUntilExpiry == null ? 'No expiry limit' : `เหลือ ${warning.daysUntilExpiry} วัน`,
+      expiryDateLabel,
+    };
+  }
+
+  return {
+    warningLevel: 'none',
+    daysUntilExpiry: null,
+    expiryMessage: null,
+    expiryShortLabel: 'No expiry limit',
+    expiryDateLabel,
+  };
+};
+
+const resolveVendorTokenSnapshot = async (adminToken: string) => {
+  let vendorReachable = true;
+  let runtimeStatus: any = null;
+
+  try {
+    runtimeStatus = await getVendorRuntimeTokenStatus(adminToken);
+  } catch (_error) {
+    vendorReachable = false;
+  }
+
+  const directStatus = await getAdminInitTokenStatus(adminToken);
+  const tokenRecord = directStatus.token;
+
+  return {
+    vendorReachable,
+    active: runtimeStatus?.active ?? directStatus.valid,
+    reason: runtimeStatus?.reason ?? directStatus.reason ?? null,
+    expiresAt: runtimeStatus?.expiresAt ?? tokenRecord?.expiresAt ?? null,
+    customerName: runtimeStatus?.customerName ?? tokenRecord?.customerName ?? null,
+    customerEmail: runtimeStatus?.customerEmail ?? tokenRecord?.customerEmail ?? null,
+    usedAt: runtimeStatus?.usedAt ?? tokenRecord?.usedAt ?? null,
+    lastSeenAt: runtimeStatus?.lastSeenAt ?? null,
+    warningLevel: runtimeStatus?.warningLevel,
+    daysUntilExpiry: runtimeStatus?.daysUntilExpiry,
+    expiryMessage: runtimeStatus?.expiryMessage,
+    expiryShortLabel: runtimeStatus?.expiryShortLabel,
+    expiryDateLabel: runtimeStatus?.expiryDateLabel,
+  };
 };
 
 const hasConfiguredAdmin = async () => {
@@ -335,17 +451,17 @@ router.get('/token-status', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Activation token is missing' });
     }
 
-    let vendorReachable = true;
-    let runtimeStatus: any = null;
-
-    try {
-      runtimeStatus = await getVendorRuntimeTokenStatus(localActivation.adminToken);
-    } catch (_error) {
-      vendorReachable = false;
-    }
-
-    const expiresAt = runtimeStatus?.expiresAt || null;
-    const warning = getExpiryWarningLevel(expiresAt);
+    const vendorSnapshot = await resolveVendorTokenSnapshot(localActivation.adminToken);
+    const expiresAt = vendorSnapshot.expiresAt;
+    const expirySummary = vendorSnapshot.warningLevel
+      ? {
+          warningLevel: vendorSnapshot.warningLevel,
+          daysUntilExpiry: vendorSnapshot.daysUntilExpiry ?? null,
+          expiryMessage: vendorSnapshot.expiryMessage ?? null,
+          expiryShortLabel: vendorSnapshot.expiryShortLabel ?? null,
+          expiryDateLabel: vendorSnapshot.expiryDateLabel ?? null,
+        }
+      : getExpirySummaryFallback(expiresAt);
 
     return res.json({
       success: true,
@@ -353,19 +469,70 @@ router.get('/token-status', async (req: Request, res: Response) => {
         token: localActivation.adminToken,
         adminEmail: localActivation.adminEmail || null,
         activatedAt: localActivation.activatedAt,
-        vendorReachable,
-        active: runtimeStatus?.active ?? true,
-        reason: runtimeStatus?.reason || null,
+        vendorReachable: vendorSnapshot.vendorReachable,
+        active: vendorSnapshot.active,
+        reason: vendorSnapshot.reason,
         expiresAt,
-        customerName: runtimeStatus?.customerName || null,
-        customerEmail: runtimeStatus?.customerEmail || null,
-        usedAt: runtimeStatus?.usedAt || null,
-        warningLevel: warning.warningLevel,
-        daysUntilExpiry: warning.daysUntilExpiry,
+        customerName: vendorSnapshot.customerName,
+        customerEmail: vendorSnapshot.customerEmail,
+        usedAt: vendorSnapshot.usedAt,
+        warningLevel: expirySummary.warningLevel,
+        daysUntilExpiry: expirySummary.daysUntilExpiry,
+        expiryMessage: expirySummary.expiryMessage,
+        expiryShortLabel: expirySummary.expiryShortLabel,
+        expiryDateLabel: expirySummary.expiryDateLabel,
       },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message || 'Failed to load token status' });
+  }
+});
+
+router.get('/token-expiry', async (req: Request, res: Response) => {
+  try {
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey license is inactive', reason: activationState.reason });
+    }
+
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const localActivation = await getStoredSystemActivation();
+    if (!localActivation) {
+      return res.status(404).json({ success: false, message: 'Activation token is missing' });
+    }
+
+    const vendorSnapshot = await resolveVendorTokenSnapshot(localActivation.adminToken);
+    const expiresAt = vendorSnapshot.expiresAt;
+    const expirySummary = vendorSnapshot.warningLevel
+      ? {
+          warningLevel: vendorSnapshot.warningLevel,
+          daysUntilExpiry: vendorSnapshot.daysUntilExpiry ?? null,
+          expiryMessage: vendorSnapshot.expiryMessage ?? null,
+          expiryShortLabel: vendorSnapshot.expiryShortLabel ?? null,
+          expiryDateLabel: vendorSnapshot.expiryDateLabel ?? null,
+        }
+      : getExpirySummaryFallback(expiresAt);
+
+    return res.json({
+      success: true,
+      data: {
+        active: vendorSnapshot.active,
+        reason: vendorSnapshot.reason,
+        expiresAt,
+        vendorReachable: vendorSnapshot.vendorReachable,
+        warningLevel: expirySummary.warningLevel,
+        daysUntilExpiry: expirySummary.daysUntilExpiry,
+        expiryMessage: expirySummary.expiryMessage,
+        expiryShortLabel: expirySummary.expiryShortLabel,
+        expiryDateLabel: expirySummary.expiryDateLabel,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Failed to load token expiry status' });
   }
 });
 

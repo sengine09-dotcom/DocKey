@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { formatDate } from '../utils/date';
 
+const API_VENDOR_URL = 'http://localhost:5100/api';
+
 type TokenStatus = {
   valid: boolean;
   reason?: string | null;
@@ -40,9 +42,8 @@ export default function InitAdmin() {
         setIsChecking(false);
         return;
       }
-
-      try {
-        const response = await axios.get('/api/auth/init-admin/status', { params: { id: token } });
+      try {        
+        const response =  await axios.post(`${API_VENDOR_URL}/admin-init-tokens/first-time`,{ token : token } );
         const nextStatus = response.data?.data || { valid: false, reason: 'not-found' };
         setStatus(nextStatus);
         if (nextStatus.customerEmail) {

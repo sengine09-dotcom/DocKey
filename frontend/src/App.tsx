@@ -7,8 +7,6 @@ import InitAdmin from './pages/InitAdmin';
 import ActivationLocked from './pages/ActivationLocked';
 import Dashboard from './pages/Dashboard';
 import Documents from './pages/Documents';
-import MonitorHome from './pages/MonitorHome';
-import KeyDocumentMonitor from './pages/KeyDocumentMonitor';
 import InvoiceHome from './pages/InvoiceHome';
 import KeyInvoice from './pages/KeyInvoice';
 import CodeMaster from './pages/CodeMaster';
@@ -20,8 +18,6 @@ import './index.css';
 const pageRouteMap: Record<string, string> = {
   dashboard: '/dashboard',
   documents: '/documents',
-  'monitor-home': '/documents/monitor',
-  'key-monitor': '/documents/monitor/detail',
   'invoice-home': '/documents/invoice',
   'key-invoice': '/documents/invoice/detail',
   'customer-code': '/codes/customer',
@@ -64,12 +60,10 @@ function ActivationAwareRoutes() {
 
   useEffect(() => {
     let mounted = true;
-
     const run = async () => {
       if (!mounted) {
         return;
       }
-
       await loadActivationStatus();
     };
 
@@ -120,14 +114,6 @@ function ActivationAwareRoutes() {
         element={<RoutedPage component={Documents} currentPage="documents" useLocationState={true} />}
       />
       <Route
-        path="/documents/monitor"
-        element={<RoutedPage component={MonitorHome} currentPage="monitor-home" />}
-      />
-      <Route
-        path="/documents/monitor/detail"
-        element={<RoutedPage component={KeyDocumentMonitor} currentPage="key-monitor" useLocationState={true} />}
-      />
-      <Route
         path="/documents/invoice"
         element={<RoutedPage component={InvoiceHome} currentPage="invoice-home" />}
       />
@@ -135,8 +121,6 @@ function ActivationAwareRoutes() {
         path="/documents/invoice/detail"
         element={<RoutedPage component={KeyInvoice} currentPage="key-invoice" useLocationState={true} />}
       />
-      <Route path="/monitors" element={<Navigate to="/documents/monitor" replace />} />
-      <Route path="/monitors/detail" element={<Navigate to="/documents/monitor/detail" replace />} />
       <Route path="/invoices" element={<Navigate to="/documents/invoice" replace />} />
       <Route path="/invoices/detail" element={<Navigate to="/documents/invoice/detail" replace />} />
       <Route

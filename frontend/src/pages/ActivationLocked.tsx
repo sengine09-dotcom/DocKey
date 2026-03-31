@@ -63,7 +63,7 @@ export default function ActivationLocked({
   const statusCopy = statusCopyMap[String(reason || 'activation-token-missing')] || statusCopyMap['activation-token-missing'];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.22),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.18),_transparent_26%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-10">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(30,41,59,0.55),_transparent_40%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.55),_transparent_40%),linear-gradient(180deg,_#1e293b_0%,_#0f172a_100%)] px-4 py-10">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl items-center justify-center">
         <div className="grid w-full overflow-hidden rounded-[32px] border border-white/70 bg-white/90 shadow-2xl shadow-slate-300/40 backdrop-blur lg:grid-cols-[1.05fr_0.95fr]">
           <div className="px-8 py-10 md:px-12 md:py-14">
@@ -73,7 +73,7 @@ export default function ActivationLocked({
               ระบบนี้ยังไม่ได้ผ่านขั้นตอนเปิดใช้งานครั้งแรก ลูกค้าจะต้องเปิดลิงก์ activation ที่ได้รับจาก owner/vendor และตั้งค่า administrator ให้เสร็จก่อน จึงจะสามารถเข้าใช้งาน DocKey ได้
             </p>
 
-            <div className={`mt-8 rounded-3xl border px-6 py-5 text-sm ${toneClassMap[statusCopy.tone] || toneClassMap.amber}`}>
+            <div className={`mt-8 rounded-3xl border border-yellow-400 px-6 py-5 text-sm ${toneClassMap[statusCopy.tone] || toneClassMap.amber}`}>
               <p className="font-semibold">{statusCopy.title}</p>
               <p className="mt-3 leading-7">{statusCopy.summary}</p>
               <p className="mt-3 font-medium">{statusCopy.action}</p>

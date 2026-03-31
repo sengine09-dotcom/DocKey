@@ -1,29 +1,4 @@
-import mysql from 'mysql2/promise';
-
-type AdminInitTokenRow = {
-  id: string;
-  token: string;
-  customerName: string | null;
-  customerEmail: string | null;
-  description: string | null;
-  isActive: number | boolean;
-  expiresAt: Date | null;
-  usedAt: Date | null;
-  usedByEmail: string | null;
-};
-
-const getVendorPool = () => mysql.createPool({
-  host: process.env.VENDOR_DB_HOST || process.env.DB_HOST || 'localhost',
-  user: process.env.VENDOR_DB_USER || process.env.DB_USER || 'root',
-  password: process.env.VENDOR_DB_PASSWORD || process.env.DB_PASSWORD || '',
-  database: process.env.VENDOR_DB_NAME || 'dbDockerVendor',
-  port: Number(process.env.VENDOR_DB_PORT || process.env.DB_PORT || 3306),
-  waitForConnections: true,
-  connectionLimit: 5,
-  queueLimit: 0,
-});
-
-const vendorPool = getVendorPool();
+// Vendor API base URL
 const vendorApiBaseUrl = (process.env.VENDOR_API_BASE_URL || 'http://localhost:5100/api').replace(/\/$/, '');
 
 const resolveStatusReason = (tokenRow: AdminInitTokenRow | null) => {
@@ -47,51 +22,41 @@ const resolveStatusReason = (tokenRow: AdminInitTokenRow | null) => {
 };
 
 export const getAdminInitTokenStatus = async (token: string) => {
-  const [rows] = await vendorPool.query(
-    `
-      SELECT id, token, customerName, customerEmail, description, isActive, expiresAt, usedAt, usedByEmail
-      FROM tblAdminInitToken
-      WHERE token = ?
-      LIMIT 1
-    `,
-    [token]
-  );
-
-  const tokenRow = ((rows as AdminInitTokenRow[]) || [])[0] || null;
-  const reason = resolveStatusReason(tokenRow);
-
-  return {
-    valid: !reason,
-    reason,
-    token: tokenRow,
-  };
+  const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/status?id=${encodeURIComponent(token)}`);
+  if (!response.ok) {
+    throw new Error(`Vendor token status check failed with status ${response.status}`);
+  }
+  const payload = await response.json();
+  return payload?.data || { valid: false, reason: 'vendor-check-failed', token: null };
 };
 
 export const consumeAdminInitToken = async (token: string, email: string) => {
-  const [result] = await vendorPool.execute(
-    `
-      UPDATE tblAdminInitToken
-      SET usedAt = CURRENT_TIMESTAMP(3), usedByEmail = ?, updatedAt = CURRENT_TIMESTAMP(3)
-      WHERE token = ?
-        AND isActive = true
-        AND usedAt IS NULL
-        AND (expiresAt IS NULL OR expiresAt > CURRENT_TIMESTAMP(3))
-    `,
-    [email, token]
-  );
+  
+  console.log('consumeAdminInitToken', token, email);
 
-  return Number((result as mysql.ResultSetHeader).affectedRows || 0) === 1;
+  const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/consume`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, email }),
+  });
+  if (!response.ok) {
+    return false;
+  }
+  const payload = await response.json();
+  return payload?.success === true;
 };
 
 export const releaseAdminInitToken = async (token: string) => {
-  await vendorPool.execute(
-    `
-      UPDATE tblAdminInitToken
-      SET usedAt = NULL, usedByEmail = NULL, updatedAt = CURRENT_TIMESTAMP(3)
-      WHERE token = ?
-    `,
-    [token]
-  );
+  const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/release`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!response.ok) {
+    return false;
+  }
+  const payload = await response.json();
+  return payload?.success === true;
 };
 
 export const getVendorRuntimeTokenStatus = async (token: string) => {

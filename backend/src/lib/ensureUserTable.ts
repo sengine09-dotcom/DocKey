@@ -8,7 +8,7 @@ export const ensureUserTableExists = async () => {
   }
 
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS tblUser (
+    CREATE TABLE IF NOT EXISTS \`User\` (
       id CHAR(26) NOT NULL,
       email VARCHAR(191) NOT NULL,
       password VARCHAR(191) NOT NULL,
@@ -16,7 +16,8 @@ export const ensureUserTableExists = async () => {
       role VARCHAR(191) NOT NULL DEFAULT 'user',
       createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updatedAt DATETIME(3) NOT NULL,
-      UNIQUE INDEX tblUser_email_key (email),
+      UNIQUE INDEX \`User_email_key\` (email),
+      INDEX \`User_email_idx\` (email),
       PRIMARY KEY (id)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);

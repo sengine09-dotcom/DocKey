@@ -3,101 +3,90 @@ import { showAppAlert } from '../services/dialogService';
 type PrintDocumentOptions = {
   bodyPadding?: string;
   extraCss?: string;
+  title?: string;
+  fileName?: string;
 };
 
-export const printDocumentContent = (title: string, html: string, options: PrintDocumentOptions = {}) => {
-  const styleMarkup = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-    .map((node) => node.outerHTML)
-    .join('\n');
+export const printDocumentContent = async (title: string = '', html: string, options: PrintDocumentOptions = {}) => {
+  const resolvedTitle = options.title ?? title ?? '';
   const bodyPadding = options.bodyPadding ?? '12mm';
   const extraCss = options.extraCss ?? '';
-  let contentReady = false;
-  let printTriggered = false;
-  let cleanedUp = false;
+  const renderHost = document.createElement('div');
+  const safeBaseName = (options.fileName || resolvedTitle || 'document')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-') || 'document';
 
-  const iframe = document.createElement('iframe');
-  iframe.setAttribute('title', title);
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  iframe.style.visibility = 'hidden';
+  renderHost.setAttribute('aria-hidden', 'true');
+  renderHost.style.position = 'fixed';
+  renderHost.style.left = '-200vw';
+  renderHost.style.top = '0';
+  renderHost.style.width = '210mm';
+  renderHost.style.background = '#ffffff';
+  renderHost.style.pointerEvents = 'none';
+  renderHost.style.opacity = '0';
+  renderHost.innerHTML = `
+    <style>
+      .pdf-print-root {
+        background: #ffffff;
+        padding: ${bodyPadding};
+      }
 
-  const cleanup = () => {
-    if (cleanedUp) {
-      return;
+      .pdf-print-root * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      ${extraCss}
+    </style>
+    <div class="pdf-print-root">${html}</div>
+  `;
+
+  document.body.appendChild(renderHost);
+
+  try {
+    const html2pdfModule = await import('html2pdf.js');
+    const html2pdf = html2pdfModule.default;
+    const pdfRoot = renderHost.querySelector('.pdf-print-root');
+
+    if (!(pdfRoot instanceof HTMLElement)) {
+      throw new Error('PDF root element is not available');
     }
-    cleanedUp = true;
+
+    const worker = html2pdf()
+      .set({
+        margin: 0,
+        filename: `${safeBaseName}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+        },
+      })
+      .from(pdfRoot);
+
+    const pdfBlob = await worker.outputPdf('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
     window.setTimeout(() => {
-      iframe.remove();
-    }, 300);
-  };
-
-  const triggerPrint = () => {
-    if (!contentReady || printTriggered) {
-      return;
-    }
-
-    const frameWindow = iframe.contentWindow;
-    if (!frameWindow) {
-      cleanup();
-      void showAppAlert({ title: 'Print Error', message: 'Unable to prepare print document.', tone: 'danger' });
-      return;
-    }
-
-    printTriggered = true;
-    frameWindow.onafterprint = cleanup;
-    frameWindow.focus();
-
-    window.setTimeout(() => {
-      frameWindow.print();
-      window.setTimeout(cleanup, 1000);
-    }, 250);
-  };
-
-  iframe.onload = () => {
-    triggerPrint();
-  };
-
-  document.body.appendChild(iframe);
-
-  const frameDocument = iframe.contentDocument;
-  if (!frameDocument) {
-    cleanup();
-    void showAppAlert({ title: 'Print Error', message: 'Unable to prepare print document.', tone: 'danger' });
-    return;
+      URL.revokeObjectURL(pdfUrl);
+    }, 60000);
+  } catch (_error) {
+    void showAppAlert({ title: 'Print Error', message: 'Unable to generate PDF for printing.', tone: 'danger' });
+  } finally {
+    renderHost.remove();
   }
-
-  frameDocument.open();
-  frameDocument.write(`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${title}</title>
-        ${styleMarkup}
-        <style>
-          html, body {
-            background: #ffffff;
-            margin: 0;
-            padding: 0;
-          }
-          body {
-            padding: ${bodyPadding};
-          }
-          ${extraCss}
-        </style>
-      </head>
-      <body>
-        ${html}
-      </body>
-    </html>
-  `);
-  frameDocument.close();
-  contentReady = true;
-  triggerPrint();
 };

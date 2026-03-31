@@ -34,9 +34,10 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
   };
 
   const handleDeleteInvoice = async (invoice) => {
+    const invoiceIdentifier = invoice.documentId || invoice.id || invoice.invoiceNo || invoice.invoiceId;
     const confirmed = await showAppConfirm({
       title: 'Delete Invoice',
-      message: `Delete ${invoice.invoiceId}?\n\nCustomer: ${invoice.customer}\n\nThis action cannot be undone.`,
+      message: `Delete ${invoice.documentNumber || invoice.invoiceNo || invoice.invoiceId}?\n\nCustomer: ${invoice.customer}\n\nThis action cannot be undone.`,
       confirmText: 'Delete',
       cancelText: 'Cancel',
       tone: 'danger',
@@ -47,8 +48,8 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
     }
 
     try {
-      await invoiceService.delete(invoice.invoiceNo);
-      setInvoices((prev: any) => prev.filter((i: any) => i.invoiceNo !== invoice.invoiceNo));
+      await invoiceService.delete(invoiceIdentifier);
+      setInvoices((prev: any) => prev.filter((i: any) => (i.documentId || i.id || i.invoiceNo) !== invoiceIdentifier));
       await showAppAlert({ title: 'Deleted', message: 'Invoice deleted successfully.', tone: 'success' });
     } catch (_error) {
       await showAppAlert({ title: 'Delete Failed', message: 'Failed to delete invoice.', tone: 'danger' });
@@ -144,7 +145,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
               {invoices.map((invoice) => (
                 <div
-                  key={invoice.invoiceNo}
+                  key={invoice.documentId || invoice.id || invoice.invoiceNo}
                   className={`${darkMode ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-50'} border-2 ${getColorClass(invoice.color)} rounded-lg overflow-hidden transition-all`}
                 >
                   {/* Card Header */}
@@ -156,7 +157,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
                       </span>
                     </div>
                     <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                      {invoice.invoiceId}
+                      {invoice.documentNumber || invoice.invoiceNo || invoice.invoiceId}
                     </h3>
                   </div>
 
@@ -179,7 +180,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
                           INVOICE NO
                         </p>
                         <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                          {invoice.invoiceNo}
+                          {invoice.documentNumber || invoice.invoiceNo || '-'}
                         </p>
                       </div>
                       <div>
