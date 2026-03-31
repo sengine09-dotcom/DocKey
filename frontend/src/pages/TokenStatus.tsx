@@ -17,6 +17,9 @@ type TokenStatusResponse = {
   usedAt?: string | null;
   warningLevel: 'none' | 'healthy' | 'warning' | 'critical' | 'expired';
   daysUntilExpiry: number | null;
+  expiryMessage?: string | null;
+  expiryShortLabel?: string | null;
+  expiryDateLabel?: string | null;
 };
 
 export default function TokenStatus({ onNavigate = () => {}, currentPage = 'token-status' }: any) {
@@ -68,25 +71,117 @@ export default function TokenStatus({ onNavigate = () => {}, currentPage = 'toke
     ];
   }, [status]);
 
+  const expiryStatus = useMemo(() => {
+    if (!status) {
+      return {
+        formattedDate: '-',
+        daysUntilExpiry: null as number | null,
+        level: 'none' as 'none' | 'healthy' | 'warning' | 'critical' | 'expired',
+        message: '',
+      };
+    }
+
+    if (!status.expiresAt) {
+      return {
+        formattedDate: status.expiryDateLabel || '-',
+        daysUntilExpiry: null as number | null,
+        level: 'none' as 'none' | 'healthy' | 'warning' | 'critical' | 'expired',
+        message: status.expiryMessage || 'Token นี้ไม่มีวันหมดอายุ',
+      };
+    }
+
+    if (status.expiryMessage) {
+      return {
+        formattedDate: status.expiryDateLabel || formatDate(status.expiresAt),
+        daysUntilExpiry: status.daysUntilExpiry,
+        level: status.warningLevel,
+        message: status.expiryMessage,
+      };
+    }
+
+    if (status.warningLevel === 'expired') {
+      return {
+        formattedDate: formatDate(status.expiresAt),
+        daysUntilExpiry: status.daysUntilExpiry,
+        level: 'expired' as const,
+        message: 'Token นี้หมดอายุแล้ว กรุณาติดต่อ vendor เพื่อออก token ใหม่',
+      };
+    }
+
+    if (status.warningLevel === 'critical' && status.daysUntilExpiry === 0) {
+      return {
+        formattedDate: formatDate(status.expiresAt),
+        daysUntilExpiry: status.daysUntilExpiry,
+        level: 'critical' as const,
+        message: 'Token นี้หมดอายุวันนี้',
+      };
+    }
+
+    if (status.warningLevel === 'critical' && status.daysUntilExpiry === 1) {
+      return {
+        formattedDate: formatDate(status.expiresAt),
+        daysUntilExpiry: status.daysUntilExpiry,
+        level: 'critical' as const,
+        message: 'Token นี้จะหมดอายุพรุ่งนี้',
+      };
+    }
+
+    if (status.warningLevel === 'critical') {
+      return {
+        formattedDate: formatDate(status.expiresAt),
+        daysUntilExpiry: status.daysUntilExpiry,
+        level: 'critical' as const,
+        message: `Token นี้ใกล้หมดอายุ เหลืออีก ${status.daysUntilExpiry} วัน`,
+      };
+    }
+
+    if (status.warningLevel === 'warning') {
+      return {
+        formattedDate: formatDate(status.expiresAt),
+        daysUntilExpiry: status.daysUntilExpiry,
+        level: 'warning' as const,
+        message: `Token นี้ใกล้หมดอายุในอีก ${status.daysUntilExpiry} วัน`,
+      };
+    }
+
+    return {
+      formattedDate: formatDate(status.expiresAt),
+      daysUntilExpiry: status.daysUntilExpiry,
+      level: 'healthy' as const,
+      message: status.daysUntilExpiry == null
+        ? 'Token นี้ยังใช้งานได้'
+        : `Token นี้ยังใช้งานได้ อีก ${status.daysUntilExpiry} วันก่อนหมดอายุ`,
+    };
+  }, [status]);
+
   const warningCardClass = useMemo(() => {
     if (!status) return '';
-    if (status.warningLevel === 'expired' || status.warningLevel === 'critical') {
+    if (expiryStatus.level === 'expired' || expiryStatus.level === 'critical') {
       return darkMode ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-red-200 bg-red-50 text-red-700';
     }
-    if (status.warningLevel === 'warning') {
+    if (expiryStatus.level === 'warning') {
       return darkMode ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-700';
     }
     return darkMode ? 'border-green-500/40 bg-green-500/10 text-green-200' : 'border-green-200 bg-green-50 text-green-700';
-  }, [darkMode, status]);
+  }, [darkMode, expiryStatus.level, status]);
 
   const warningText = useMemo(() => {
     if (!status) return '';
-    if (!status.expiresAt) return 'This token does not have an expiry date.';
-    if (status.warningLevel === 'expired') return 'This token has already expired. Please contact the vendor immediately.';
-    if (status.warningLevel === 'critical') return `This token will expire very soon. ${status.daysUntilExpiry} day(s) remaining.`;
-    if (status.warningLevel === 'warning') return `This token is approaching expiry. ${status.daysUntilExpiry} day(s) remaining.`;
-    return 'Token status is healthy and no expiry warning is active.';
-  }, [status]);
+    return expiryStatus.message;
+  }, [expiryStatus.message, status]);
+
+  const expiryDateClass = useMemo(() => {
+    if (expiryStatus.level === 'expired') {
+      return darkMode ? 'font-semibold text-red-300' : 'font-semibold text-red-600';
+    }
+    if (expiryStatus.level === 'critical') {
+      return darkMode ? 'font-semibold text-red-300' : 'font-semibold text-red-600';
+    }
+    if (expiryStatus.level === 'warning') {
+      return darkMode ? 'font-semibold text-amber-300' : 'font-semibold text-amber-600';
+    }
+    return darkMode ? 'text-white' : 'text-gray-900';
+  }, [darkMode, expiryStatus.level]);
 
   return (
     <Layout darkMode={darkMode} setDarkMode={setDarkMode} onNavigate={onNavigate} currentPage={currentPage} topBarCaption="🪪 Token Status">
@@ -115,6 +210,26 @@ export default function TokenStatus({ onNavigate = () => {}, currentPage = 'toke
             </div>
           ) : status ? (
             <>
+              <div className={`mb-8 overflow-hidden rounded-3xl border ${warningCardClass}`}>
+                <div className="flex flex-col gap-5 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] opacity-80">Expiry Status</p>
+                    <h2 className="mt-2 text-2xl font-semibold">{warningText}</h2>
+                  </div>
+                  <div className={`min-w-[220px] rounded-2xl border px-4 py-4 text-right ${darkMode ? 'border-white/10 bg-black/10' : 'border-white/70 bg-white/70'}`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">Expire Date</p>
+                    <p className={`mt-2 text-2xl font-bold ${expiryDateClass}`}>{expiryStatus.formattedDate}</p>
+                    <p className="mt-1 text-xs opacity-80">
+                      {expiryStatus.daysUntilExpiry == null
+                        ? 'No expiry limit'
+                        : expiryStatus.daysUntilExpiry < 0
+                        ? 'Expired'
+                        : `${expiryStatus.daysUntilExpiry} day(s) remaining`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
                 {summary.map((item) => (
                   <div key={item.label} className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
@@ -127,10 +242,6 @@ export default function TokenStatus({ onNavigate = () => {}, currentPage = 'toke
                     </div>
                   </div>
                 ))}
-              </div>
-
-              <div className={`mb-6 rounded-xl border px-4 py-3 text-sm ${warningCardClass}`}>
-                {warningText}
               </div>
 
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -150,7 +261,7 @@ export default function TokenStatus({ onNavigate = () => {}, currentPage = 'toke
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Vendor Reachable</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.vendorReachable ? 'Yes' : 'No'}</dd></div>
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Customer Name</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.customerName || '-'}</dd></div>
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Customer Email</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.customerEmail || '-'}</dd></div>
-                    <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Expires At</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{formatDate(status.expiresAt)}</dd></div>
+                    <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Expires At</dt><dd className={expiryDateClass}>{expiryStatus.formattedDate}</dd></div>
                     <div className="flex justify-between gap-4"><dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>Status Reason</dt><dd className={darkMode ? 'text-white' : 'text-gray-900'}>{status.reason || '-'}</dd></div>
                   </dl>
                 </div>

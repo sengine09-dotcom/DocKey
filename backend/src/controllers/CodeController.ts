@@ -24,41 +24,55 @@ const parseString = (value: any) => {
 
 const mapCustomer = (row: any) => ({
   customerId: row.customerId,
-  agentId: row.agentId || '',
+  customerCode: row.customerId || '',
+  agentId: '',
   customerName: row.customerName || '',
-  shortName: row.shortName || '',
-  registerDate: row.registerDate,
-  registrationNo: row.registrationNo || '',
+  shortName: row.branch || '',
+  registerDate: row.createdAt,
+  registrationNo: '',
   address: row.address || '',
   phone: row.phone || '',
-  fax: row.fax || '',
+  fax: '',
   email: row.email || '',
-  contactPerson: row.contactPerson || '',
-  creditLimit: row.creditLimit == null ? '' : String(row.creditLimit),
-  idTerm: row.idTerm || '',
-  internalTerm: row.internalTerm == null ? '' : String(row.internalTerm),
-  remark: row.remark || '',
+  contactPerson: row.contactName || '',
+  creditLimit: '',
+  idTerm: '',
+  internalTerm: '',
+  remark: '',
   used: row.used || 'Y',
-  totalShare: row.totalShare == null ? '' : String(row.totalShare),
-  gstId: row.gstId || '',
-  isGuarantee: row.isGuaratee == null ? '' : String(row.isGuaratee),
-  guaranteePrice: row.guarateePrice == null ? '' : String(row.guarateePrice),
-  guaranteeDateStart: row.guarateeDateStart,
-  guaranteeDateEnd: row.guarateeDateEnd,
+  totalShare: '',
+  gstId: row.taxId || '',
+  isGuarantee: '',
+  guaranteePrice: '',
+  guaranteeDateStart: null,
+  guaranteeDateEnd: null,
+  year: '',
+  runningNo: '',
+  updatedAt: row.updatedAt,
 });
 
 const mapProduct = (row: any) => ({
   productId: row.productId,
   productName: row.productName || '',
-  marking: row.marking || '',
-  type: row.type || '',
-  bagSize: row.bagSize || '',
-  pWeight: row.pWeight == null ? '' : String(row.pWeight),
-  comValue: row.comValue || '',
-  description: row.description || '',
-  idSupplier: row.idSupplier || '',
-  showInStock: row.showInStock || 'Y',
-  used: row.used || 'Y',
+  marking: row.brand || '',
+  type: row.category || '',
+  bagSize: row.model || '',
+  pWeight: '',
+  comValue: '',
+  description: '',
+  idSupplier: '',
+  showInStock: 'Y',
+  used: 'Y',
+  category: row.category || '',
+  brand: row.brand || '',
+  model: row.model || '',
+  price: row.price == null ? 0 : Number(row.price),
+  cost: row.cost == null ? 0 : Number(row.cost),
+  stockQty: row.stockQty == null ? 0 : Number(row.stockQty),
+  minQty: row.minQty == null ? 0 : Number(row.minQty),
+  maxQty: row.maxQty == null ? 0 : Number(row.maxQty),
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
 });
 
 const mapDestination = (row: any) => ({
@@ -83,6 +97,23 @@ const mapEndUser = (row: any) => ({
   used: row.used || 'Y',
 });
 
+const listEndUsers = async () => [] as any[];
+
+const createEndUser = async (payload: any) => {
+  throw new Error('End User master is not available in the current database schema');
+};
+
+const updateEndUser = async (eUserId: string, payload: any) => {
+  void eUserId;
+  void payload;
+  throw new Error('End User master is not available in the current database schema');
+};
+
+const deleteEndUser = async (eUserId: string) => {
+  void eUserId;
+  throw new Error('End User master is not available in the current database schema');
+};
+
 const codeConfigs: Record<string, any> = {
   customer: {
     model: prisma.customer,
@@ -90,28 +121,16 @@ const codeConfigs: Record<string, any> = {
     orderBy: { customerId: 'asc' },
     mapRecord: mapCustomer,
     toData: (payload: any) => ({
-      customerId: parseString(payload.customerId),
-      agentId: parseString(payload.agentId),
-      customerName: parseString(payload.customerName),
-      shortName: parseString(payload.shortName),
-      registerDate: parseDate(payload.registerDate),
-      registrationNo: parseString(payload.registrationNo),
-      address: parseString(payload.address),
+      customerId: parseString(payload.customerId || payload.companyId),
+      customerName: parseString(payload.customerName || payload.name) || 'Unnamed Customer',
+      contactName: parseString(payload.contactPerson || payload.contactName),
       phone: parseString(payload.phone),
-      fax: parseString(payload.fax),
       email: parseString(payload.email),
-      contactPerson: parseString(payload.contactPerson),
-      creditLimit: parseNumber(payload.creditLimit),
-      idTerm: parseString(payload.idTerm),
-      internalTerm: parseInteger(payload.internalTerm),
-      remark: parseString(payload.remark),
+      address: parseString(payload.address),
+      taxId: parseString(payload.gstId || payload.taxId),
+      branch: parseString(payload.shortName || payload.branch),
+      createdAt: parseDate(payload.registerDate),
       used: parseString(payload.used) || 'Y',
-      totalShare: parseNumber(payload.totalShare),
-      gstId: parseString(payload.gstId),
-      isGuaratee: parseInteger(payload.isGuarantee),
-      guarateePrice: parseNumber(payload.guaranteePrice),
-      guarateeDateStart: parseDate(payload.guaranteeDateStart),
-      guarateeDateEnd: parseDate(payload.guaranteeDateEnd),
     }),
   },
   product: {
@@ -122,15 +141,14 @@ const codeConfigs: Record<string, any> = {
     toData: (payload: any) => ({
       productId: parseString(payload.productId),
       productName: parseString(payload.productName),
-      marking: parseString(payload.marking),
-      type: parseString(payload.type),
-      bagSize: parseString(payload.bagSize),
-      pWeight: parseNumber(payload.pWeight),
-      comValue: parseString(payload.comValue),
-      description: parseString(payload.description),
-      idSupplier: parseString(payload.idSupplier),
-      showInStock: parseString(payload.showInStock) || 'Y',
-      used: parseString(payload.used) || 'Y',
+      category: parseString(payload.category || payload.type) || 'General',
+      brand: parseString(payload.brand || payload.marking) || 'General',
+      model: parseString(payload.model || payload.bagSize),
+      price: parseNumber(payload.price) ?? 0,
+      cost: parseNumber(payload.cost),
+      stockQty: parseInteger(payload.stockQty) ?? 0,
+      minQty: parseInteger(payload.minQty) ?? 0,
+      maxQty: parseInteger(payload.maxQty) ?? 0,
     }),
   },
   destination: {
@@ -158,18 +176,6 @@ const codeConfigs: Record<string, any> = {
       used: parseString(payload.used) || 'Y',
     }),
   },
-  'end-user': {
-    model: prisma.endUser,
-    idField: 'eUserId',
-    orderBy: { eUserId: 'asc' },
-    mapRecord: mapEndUser,
-    toData: (payload: any) => ({
-      eUserId: parseString(payload.eUserId),
-      eUserName: parseString(payload.eUserName),
-      shortName: parseString(payload.shortName),
-      used: parseString(payload.used) || 'Y',
-    }),
-  },
 };
 
 const getConfig = (type: string) => codeConfigs[type];
@@ -177,6 +183,11 @@ const getConfig = (type: string) => codeConfigs[type];
 class CodeController {
   static async getAll(req: Request, res: Response) {
     try {
+      if (req.params.type === 'end-user') {
+        const rows = await listEndUsers();
+        return res.json({ success: true, data: rows.map(mapEndUser) });
+      }
+
       const config = getConfig(req.params.type);
       if (!config) {
         return res.status(400).json({ success: false, message: 'Invalid code type' });
@@ -191,6 +202,11 @@ class CodeController {
 
   static async create(req: Request, res: Response) {
     try {
+      if (req.params.type === 'end-user') {
+        const created = await createEndUser(req.body);
+        return res.json({ success: true, data: created ? mapEndUser(created) : null });
+      }
+
       const config = getConfig(req.params.type);
       if (!config) {
         return res.status(400).json({ success: false, message: 'Invalid code type' });
@@ -211,6 +227,11 @@ class CodeController {
 
   static async update(req: Request, res: Response) {
     try {
+      if (req.params.type === 'end-user') {
+        const updated = await updateEndUser(req.params.id, req.body);
+        return res.json({ success: true, data: updated ? mapEndUser(updated) : null });
+      }
+
       const config = getConfig(req.params.type);
       if (!config) {
         return res.status(400).json({ success: false, message: 'Invalid code type' });
@@ -230,6 +251,11 @@ class CodeController {
 
   static async delete(req: Request, res: Response) {
     try {
+      if (req.params.type === 'end-user') {
+        await deleteEndUser(req.params.id);
+        return res.json({ success: true, message: 'Code deleted' });
+      }
+
       const config = getConfig(req.params.type);
       if (!config) {
         return res.status(400).json({ success: false, message: 'Invalid code type' });

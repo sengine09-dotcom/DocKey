@@ -16,6 +16,11 @@ export type AdminInitToken = {
   usedAt?: string | null;
   usedByEmail?: string | null;
   lastSeenAt?: string | null;
+  warningLevel?: 'none' | 'healthy' | 'warning' | 'critical' | 'expired';
+  daysUntilExpiry?: number | null;
+  expiryMessage?: string | null;
+  expiryShortLabel?: string | null;
+  expiryDateLabel?: string | null;
   createdAt: string;
   updatedAt: string;
   claimUrl: string;

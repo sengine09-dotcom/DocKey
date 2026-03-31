@@ -1,12 +1,10 @@
-import axios from 'axios';
-
-const API_BASE_URL = '/api';
+import documentService from './documentService';
 
 const invoiceService = {
-  getAll: () => axios.get(`${API_BASE_URL}/invoices`),
-  getById: (id: string) => axios.get(`${API_BASE_URL}/invoices/${id}`),
-  save: (payload: any) => axios.post(`${API_BASE_URL}/invoices`, payload),
-  delete: (id: string) => axios.delete(`${API_BASE_URL}/invoices/${id}`),
+  getAll: () => documentService.getAll('invoice'),
+  getById: (id: string) => documentService.getById('invoice', id),
+  save: (payload: any) => documentService.save('invoice', payload),
+  delete: (id: string) => documentService.delete('invoice', id),
 };
 
 export default invoiceService;

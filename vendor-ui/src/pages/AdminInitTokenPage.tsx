@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import adminInitTokenService, { AdminInitToken } from '../services/adminInitTokenService';
-import { formatDate, toApiDateInput, toPickerDateInput } from '../utils/date';
+import { formatDate, getExpiryWarning, toApiDateInput, toPickerDateInput } from '../utils/date';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -44,6 +44,35 @@ const getPresenceLabel = (tokenRecord: AdminInitToken) => {
   }
 
   return { label: 'Offline', dotClass: 'bg-rose-500', textClass: 'text-rose-700' };
+};
+
+const getExpiryDisplay = (tokenRecord: AdminInitToken) => {
+  if (tokenRecord.warningLevel) {
+    const textClass = tokenRecord.warningLevel === 'expired'
+      ? 'text-slate-400'
+      : tokenRecord.warningLevel === 'critical'
+      ? 'font-semibold text-rose-600'
+      : tokenRecord.warningLevel === 'warning'
+      ? 'font-semibold text-amber-600'
+      : 'text-slate-600';
+
+    const messageClass = tokenRecord.warningLevel === 'expired'
+      ? 'text-slate-400'
+      : tokenRecord.warningLevel === 'critical'
+      ? 'text-rose-600'
+      : tokenRecord.warningLevel === 'warning'
+      ? 'text-amber-600'
+      : 'text-slate-500';
+
+    return {
+      formattedDate: tokenRecord.expiryDateLabel || formatDate(tokenRecord.expiresAt),
+      textClass,
+      message: tokenRecord.expiryMessage || null,
+      messageClass,
+    };
+  }
+
+  return getExpiryWarning(tokenRecord.expiresAt);
 };
 
 const validateTokenForm = (form: {
@@ -275,9 +304,9 @@ export default function AdminInitTokenPage() {
       <div className="mx-auto max-w-7xl space-y-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-700">Vendor Console</p>
-            <h1 className="mt-2 text-4xl font-semibold text-slate-900">Admin Init Token Manager</h1>
-            <p className="mt-3 max-w-2xl text-sm text-slate-600">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-300">Vendor Console</p>
+            <h1 className="mt-2 text-4xl font-semibold text-white">Admin Init Token Manager</h1>
+            <p className="mt-3 max-w-2xl text-sm text-slate-300">
               สร้าง one-time token สำหรับลูกค้า แล้วส่งลิงก์ setup admin ครั้งแรกให้ใช้งานได้ทันที
             </p>
           </div>
@@ -292,7 +321,7 @@ export default function AdminInitTokenPage() {
         </div>
 
         {error && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+          <div className="rounded-2xl border-2 border-rose-400 bg-rose-50 px-5 py-4 text-sm text-rose-700 shadow-sm">
             {error}
           </div>
         )}
@@ -356,7 +385,7 @@ export default function AdminInitTokenPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl border-2 border-slate-950 bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (editingId ? 'Saving changes...' : 'Generating token...') : editingId ? 'Save Changes' : 'Generate Token'}
               </button>
@@ -364,7 +393,7 @@ export default function AdminInitTokenPage() {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                  className="w-full rounded-xl border-2 border-slate-400 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
                 >
                   Cancel Edit
                 </button>
@@ -373,9 +402,9 @@ export default function AdminInitTokenPage() {
           </div>
 
           <div className="vendor-panel overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+            <div className="flex items-center justify-between border-b-2 border-slate-300 px-6 py-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Token Registry</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-800">Token Registry</p>
                 <h2 className="mt-1 text-xl font-semibold text-slate-900">Issued admin claim links</h2>
               </div>
               <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -389,8 +418,8 @@ export default function AdminInitTokenPage() {
               <div className="px-6 py-14 text-center text-sm text-slate-500">No admin init tokens created yet.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <table className="min-w-full divide-y-2 divide-slate-500 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-700">
                     <tr>
                       <th className="px-6 py-4">Customer</th>
                       <th className="px-6 py-4">Status</th>
@@ -399,9 +428,10 @@ export default function AdminInitTokenPage() {
                       <th className="px-6 py-4 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
+                  <tbody className="divide-y-2 divide-slate-600 bg-white text-slate-700">
                     {tokens.map((tokenRecord) => {
                       const presence = getPresenceLabel(tokenRecord);
+                      const expiryWarning = getExpiryDisplay(tokenRecord);
                       const statusLabel = tokenRecord.usedAt
                         ? 'Used'
                         : tokenRecord.isActive
@@ -434,10 +464,17 @@ export default function AdminInitTokenPage() {
                               Last Seen: {formatDateTime(tokenRecord.lastSeenAt)}
                             </div>
                           </td>
-                          <td className="px-6 py-5 text-xs text-slate-600">{formatDate(tokenRecord.expiresAt)}</td>
                           <td className="px-6 py-5">
-                            <div className="max-w-[320px] break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                              {tokenRecord.claimUrl}
+                            <div className={`text-xs ${expiryWarning.textClass}`}>{expiryWarning.formattedDate}</div>
+                            {expiryWarning.message && (
+                              <div className={`mt-1 text-xs font-medium ${expiryWarning.messageClass}`}>
+                                {expiryWarning.message}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="max-w-[320px] rounded-2xl border-2 border-slate-300 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+                              Activation link ready
                             </div>
                             {tokenRecord.description && (
                               <div className="mt-2 text-xs text-slate-500">{tokenRecord.description}</div>
@@ -448,7 +485,7 @@ export default function AdminInitTokenPage() {
                               <button
                                 type="button"
                                 onClick={() => window.open(tokenRecord.claimUrl, '_blank', 'noopener,noreferrer')}
-                                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                                className="rounded-xl border-2 border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
                               >
                                 Open Link
                               </button>
@@ -456,21 +493,21 @@ export default function AdminInitTokenPage() {
                                 type="button"
                                 onClick={() => handleSendEmail(tokenRecord)}
                                 disabled={!tokenRecord.customerEmail}
-                                className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-700 transition hover:border-sky-400 hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                className="rounded-xl border-2 border-sky-400 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-700 transition hover:border-sky-500 hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
                               >
                                 Send Email
                               </button>
                               <button
                                 type="button"
                                 onClick={() => void handleCopy(tokenRecord)}
-                                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                                className="rounded-xl border-2 border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
                               >
                                 {copiedId === tokenRecord.id ? 'Copied' : 'Copy Link'}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleEdit(tokenRecord)}
-                                className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:border-amber-400 hover:bg-amber-100"
+                                className="rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 transition hover:border-amber-500 hover:bg-amber-100"
                               >
                                 Edit
                               </button>
@@ -478,7 +515,7 @@ export default function AdminInitTokenPage() {
                                 type="button"
                                 onClick={() => void handleDisable(tokenRecord.id)}
                                 disabled={!tokenRecord.isActive || Boolean(tokenRecord.usedAt)}
-                                className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                                className="rounded-xl border-2 border-rose-700 bg-rose-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
                               >
                                 Disable
                               </button>
@@ -486,7 +523,7 @@ export default function AdminInitTokenPage() {
                                 type="button"
                                 onClick={() => void handleDelete(tokenRecord)}
                                 disabled={deletingId === tokenRecord.id}
-                                className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                className="rounded-xl border-2 border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-700 transition hover:border-rose-400 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
                               >
                                 {deletingId === tokenRecord.id ? 'Deleting...' : 'Delete'}
                               </button>

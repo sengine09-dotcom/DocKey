@@ -125,6 +125,9 @@ export default function ProductSelectionModal({
                     <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
                       Packing : {buildProductPacking(product) || '-'}
                     </div>
+                    <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                      Cost : {Number(product.cost || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
                   </div>
                   <span className={`text-lg leading-none ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     →

@@ -3,17 +3,19 @@
 @tailwind utilities;
 
 :root {
-  color: #0f172a;
+  color: hwb(210 89% 6%);
   background:
-    radial-gradient(circle at top left, rgba(168, 85, 247, 0.24), transparent 32%),
-    radial-gradient(circle at top right, rgba(192, 132, 252, 0.22), transparent 28%),
-    linear-gradient(180deg, #f5edff 0%, #f8f5ff 52%, #fcfaff 100%);
+    radial-gradient(circle at top left, rgba(168, 85, 247, 0.22), transparent 30%),
+    radial-gradient(circle at top right, rgba(182, 122, 235, 0.18), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(88, 28, 135, 0.18), transparent 28%),
+    linear-gradient(180deg, #560b93 0%, #b4329f 52%, #cb53a9 100%);
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  background: transparent;
 }
 
 #root {
@@ -22,7 +24,7 @@ body {
 
 @layer components {
   .vendor-panel {
-    @apply rounded-3xl border border-black bg-white shadow-2xl shadow-slate-300/30;
+    @apply rounded-3xl bg-white shadow-2xl shadow-slate-300/30;
   }
 
   .vendor-label {
@@ -30,10 +32,10 @@ body {
   }
 
   .vendor-field {
-    @apply w-full rounded-xl border border-black bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-sky-600 focus:ring-4 focus:ring-sky-200;
+    @apply w-full rounded-xl border border-slate-900 bg-slate-50 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-sky-700 focus:ring-4 focus:ring-sky-200;
   }
 
   .vendor-button-secondary {
-    @apply rounded-xl border border-black bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-700 hover:bg-slate-50;
+    @apply rounded-xl  bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-700 hover:bg-slate-50;
   }
 }

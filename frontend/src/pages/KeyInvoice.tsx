@@ -27,6 +27,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
   const [mode, setMode] = useState('create');
 
   const [header, setHeader] = useState({
+    documentId: '',
+    documentNumber: '',
     invoiceId: '',
     invoiceDate: getTodayDateInputValue(),
     customer: '',
@@ -77,6 +79,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
     if (!initialData) {
       setMode('create');
       setHeader({
+        documentId: '',
+        documentNumber: '',
         invoiceId: '',
         invoiceDate: getTodayDateInputValue(),
         customer: '',
@@ -96,10 +100,12 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
 
     setHeader((prev) => ({
       ...prev,
+      documentId: initialData.documentId || initialData.id || '',
+      documentNumber: initialData.documentNumber || initialData.invoiceNo || initialData.invoiceId || '',
       invoiceId: initialData.invoiceId || '',
-      invoiceDate: initialData.invoiceDate || '',
+      invoiceDate: initialData.invoiceDate || initialData.documentDate || '',
       customer: initialData.customer || '',
-      invoiceNo: initialData.invoiceNo || '',
+      invoiceNo: initialData.invoiceNo || initialData.documentNumber || '',
       dueDate: initialData.dueDate || '',
       billTo: initialData.billTo || '',
       shipTo: initialData.shipTo || '',
@@ -217,7 +223,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
       return;
     }
 
-    printDocumentContent(`Invoice ${header.invoiceNo || header.invoiceId || ''}`, printSheetRef.current.outerHTML);
+    printDocumentContent('', printSheetRef.current.outerHTML);
   };
 
   const content = (
@@ -323,14 +329,18 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                 </div>
               )}
 
-              {/* Top row: Invoice ID / Invoice Date */}
+              {/* Top row: Invoice No / Invoice Date */}
               <div className="grid grid-cols-2 gap-5">
                 <div className="flex items-center gap-3">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice ID :</span>
+                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice No :</span>
                   <input
                     className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
-                    value={header.invoiceId}
-                    onChange={(e) => handleHeaderChange('invoiceId', e.target.value)}
+                    value={header.invoiceNo || header.documentNumber || header.invoiceId}
+                    onChange={(e) => {
+                      handleHeaderChange('invoiceNo', e.target.value);
+                      handleHeaderChange('invoiceId', e.target.value);
+                      handleHeaderChange('documentNumber', e.target.value);
+                    }}
                   />
                 </div>
                 <div className="flex items-center gap-3 justify-end">
@@ -369,15 +379,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
               </div>
 
               {/* Invoice row */}
-              <div className="grid grid-cols-3 gap-5">
-                <div className="flex items-center gap-3">
-                  <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Invoice No :</span>
-                  <input
-                    className={`flex-1 rounded-md border px-3 py-2 text-xs ${formControlClass}`}
-                    value={header.invoiceNo}
-                    onChange={(e) => handleHeaderChange('invoiceNo', e.target.value)}
-                  />
-                </div>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="flex items-center gap-3">
                   <span className={darkMode ? 'text-gray-200' : 'text-gray-900'}>Due Date :</span>
                   <input
@@ -575,6 +577,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                     onClick={async () => {
                       const invoiceNo =
                         header.invoiceNo?.trim() ||
+                        header.documentNumber?.trim() ||
                         header.invoiceId?.trim() ||
                         `I${Date.now().toString().slice(-7)}`;
 
@@ -592,6 +595,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                       const payload = {
                         header: {
                           ...header,
+                          documentId: header.documentId || initialData?.documentId || initialData?.id || '',
+                          documentNumber: invoiceNo,
                           invoiceNo,
                           invoiceId: invoiceNo,
                           total,
@@ -604,9 +609,16 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
 
                       try {
                         const response = await invoiceService.save(payload);
+                        const savedRecord = response?.data?.data || payload.header;
                         await showAppAlert({ title: 'Saved', message: 'Invoice saved successfully.', tone: 'success' });
-                        setHeader((prev) => ({ ...prev, invoiceNo, invoiceId: invoiceNo }));
-                        goBackToDocumentsWithSavedRecord(response?.data?.data || payload.header);
+                        setHeader((prev) => ({
+                          ...prev,
+                          documentId: savedRecord.documentId || savedRecord.id || prev.documentId,
+                          documentNumber: savedRecord.documentNumber || invoiceNo,
+                          invoiceNo,
+                          invoiceId: invoiceNo,
+                        }));
+                        goBackToDocumentsWithSavedRecord(savedRecord);
                       } catch (error) {
                         await showAppAlert({ title: 'Save Failed', message: 'Failed to save invoice.', tone: 'danger' });
                       }

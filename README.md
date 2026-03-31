@@ -11,17 +11,24 @@ A production-ready full-stack document management system with manual data entry 
 mysql -u root -p < docs/schema.sql
 ```
 
-### 2. Start Backend
+### 2. Install Dependencies
 ```bash
-cd backend && npm install && npm run dev
+npm run install:all
 ```
 
-### 3. Start Frontend (new terminal)
+### 3. Start All Projects
 ```bash
-cd frontend && npm install && npm run dev
+npm run dev
 ```
 
-Visit: **http://localhost:5173**
+Services started by this command:
+
+- backend
+- frontend
+- vendor
+- vendor-ui
+
+Visit: **http://localhost:5173** and **http://localhost:5174**
 
 [📖 Full Setup Guide](./docs/README.md) | [⚡ Quick Start](./docs/QUICKSTART.md)
 
@@ -61,14 +68,19 @@ doc-key/
 
 ## Development
 
-Both frontend and backend support hot-reload during development.
+All four projects support hot-reload during development.
 
 ```bash
-# Terminal 1: Backend
-cd backend && npm run dev
+npm run dev
+```
 
-# Terminal 2: Frontend
-cd frontend && npm run dev
+If you need to run only one service:
+
+```bash
+npm run dev:backend
+npm run dev:frontend
+npm run dev:vendor
+npm run dev:vendor-ui
 ```
 
 ## Next Phase: AI Integration

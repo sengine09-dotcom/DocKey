@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   engineType = "binary"
 }
 
@@ -8,173 +8,179 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum DocumentType {
+  QUOTATION
+  INVOICE
+  RECEIPT
+  PURCHASE_ORDER
+  WORK_ORDER
+}
+
 model User {
-  id        String  @id @db.Char(26)
-  email     String  @unique
+  id        String   @id @db.Char(26)
+  email     String   @unique
   password  String
   name      String
-  role      String  @default("user")
+  role      String   @default("user")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("tblUser")
-}
-
-model Monitor {
-  monitorId      String          @id @map("MonitorID") @db.VarChar(10)
-  isCancel       String?         @map("isCancel") @db.VarChar(1)
-  issDate        DateTime?       @map("IssDate")
-  customerId     String?         @map("CustomerID") @db.VarChar(5)
-  supplierId     String?         @map("SupplierID") @db.VarChar(3)
-  termId         String?         @map("TermID") @db.VarChar(3)
-  poNo           String?         @map("PoNo") @db.VarChar(50)
-  poDate         DateTime?       @map("PoDate")
-  reqDate        DateTime?       @map("ReqDate")
-  eUserId        String?         @map("EUserID") @db.VarChar(3)
-  destinationId  String?         @map("DestinationID") @db.VarChar(3)
-  totalQuantity  Decimal?        @map("TotalQuantity") @db.Decimal(18, 2)
-  totalAmount    Decimal?        @map("TotalAmount") @db.Decimal(19, 4)
-  isArranged     String?         @map("isArranged") @db.VarChar(1)
-  remark         String?         @map("Remark") @db.VarChar(300)
-  status         Int?            @map("Status")
-  vat            Int             @map("Vat")
-  monitorDetails MonitorDetail[]
-
-  @@map("tblMonitor")
-}
-
-model MonitorDetail {
-  mdId       Int      @id @default(autoincrement()) @map("MDID")
-  idMonitor  String   @map("IDMonitor") @db.VarChar(10)
-  item       Int?     @map("Item")
-  productId  String   @map("ProductID") @db.VarChar(5)
-  quantity   Decimal? @map("Quantity") @db.Decimal(18, 3)
-  unitCount  String?  @map("UnitCount") @db.VarChar(3)
-  price      Decimal? @map("Price") @db.Decimal(10, 3)
-  total      Decimal? @map("Total") @db.Decimal(18, 3)
-  supplierId String?  @map("SupplierID") @db.VarChar(10)
-
-  monitor Monitor @relation(fields: [idMonitor], references: [monitorId], onDelete: Restrict, onUpdate: Cascade)
-
-  @@index([idMonitor])
-  @@map("tblMonitorDetail")
-}
-
-model Invoice {
-  invoiceNo      String          @id @map("InvoiceNo") @db.VarChar(8)
-  codeNo         String?         @map("CodeNo") @db.VarChar(20)
-  idMonitor      String          @map("IDMonitor") @db.VarChar(8)
-  isCancel       String?         @map("isCancel") @db.VarChar(1)
-  invDate        DateTime?       @map("InvDate")
-  poNo           String?         @map("PoNo") @db.VarChar(50)
-  doNo           String?         @map("DoNo") @db.VarChar(255)
-  customerId     String?         @map("CustomerID") @db.VarChar(10)
-  agentId        String?         @map("AgentID") @db.VarChar(5)
-  supplierId     String?         @map("SupplierID") @db.VarChar(3)
-  termId         String?         @map("TermID") @db.VarChar(10)
-  transportId    String?         @map("TransportID") @db.VarChar(10)
-  period         Int?            @map("Period")
-  destinationId  String?         @map("DestinationID") @db.VarChar(10)
-  eUserId        String?         @map("eUserID") @db.VarChar(10)
-  totalContainer Decimal?        @map("TotalContainer") @db.Decimal(18, 0)
-  totalAmount    Decimal?        @map("TotalAmount") @db.Decimal(19, 4)
-  totalQuantity  Decimal?        @map("TotalQuantity") @db.Decimal(18, 2)
-  comRate        Decimal?        @map("ComRate") @db.Decimal(19, 4)
-  remark         String?         @map("Remark") @db.VarChar(255)
-  vat            Int             @map("Vat")
-  statusOnline   Int             @map("StatusOnline")
-  invoiceDetails InvoiceDetail[]
-
-  @@map("tblInvoice")
-}
-
-model InvoiceDetail {
-  iid        Int      @id @default(autoincrement()) @map("IID")
-  invoiceNo  String   @map("InvoiceNo") @db.VarChar(8)
-  item       String?  @map("Item") @db.VarChar(2)
-  productId  String   @map("ProductID") @db.VarChar(5)
-  quantity   Decimal? @map("Quantity") @db.Decimal(18, 3)
-  weight     Decimal? @map("Weight") @db.Decimal(18, 3)
-  price      Decimal? @map("Price") @db.Decimal(10, 3)
-  unitId     String?  @map("UnitID") @db.VarChar(3)
-  total      Decimal? @map("Total") @db.Decimal(18, 3)
-  supplierId String?  @map("SupplierID") @db.VarChar(10)
-  comRate    Decimal? @map("ComRate") @db.Decimal(18, 2)
-  bag        Int?     @map("Bag")
-
-  invoice Invoice @relation(fields: [invoiceNo], references: [invoiceNo], onDelete: Restrict, onUpdate: Cascade)
-
-  @@index([invoiceNo])
-  @@map("tblInvoiceDetail")
+  @@index([email])
 }
 
 model Customer {
-  customerId          String    @id @map("CustomerID") @db.VarChar(5)
-  agentId             String?   @map("AgentID") @db.VarChar(5)
-  customerName        String?   @map("CustomerName") @db.VarChar(255)
-  shortName           String?   @map("ShortName") @db.VarChar(255)
-  registerDate        DateTime? @map("RegisterDate")
-  registrationNo      String?   @map("RegistrationNo") @db.VarChar(20)
-  address             String?   @map("Address") @db.VarChar(500)
-  phone               String?   @map("Phone") @db.VarChar(50)
-  fax                 String?   @map("Fax") @db.VarChar(20)
-  email               String?   @map("Email") @db.VarChar(255)
-  contactPerson       String?   @map("ContactPerson") @db.VarChar(50)
-  creditLimit         Decimal?  @map("CreditLimit") @db.Decimal(19, 4)
-  idTerm              String?   @map("IDTerm") @db.VarChar(3)
-  internalTerm        Int?      @map("InternalTerm")
-  remark              String?   @map("Remark") @db.VarChar(255)
-  used                String?   @map("Used") @db.VarChar(1)
-  totalShare          Decimal?  @map("TotalShare") @db.Decimal(19, 4)
-  gstId               String?   @map("GSTid") @db.VarChar(15)
-  isGuaratee          Int?      @map("IsGuaratee")
-  guarateePrice       Decimal?  @map("GuarateePrice") @db.Decimal(19, 4)
-  guarateeDateStart   DateTime? @map("GuarateeDateStart")
-  guarateeDateEnd     DateTime? @map("GuarateeDateEnd")
+  customerId   String   @id @map("CustomerID") @db.VarChar(6)
+  customerName String   @map("CustomerName") @db.VarChar(255)
+  contactName  String?  @map("ContactName") @db.VarChar(255)
+  phone        String?  @map("Phone") @db.VarChar(50)
+  email        String?  @map("Email") @db.VarChar(100)
+  address      String?  @map("Address") @db.Text
+  taxId        String?  @map("TaxID") @db.VarChar(50)
+  branch       String?  @map("Branch") @db.VarChar(50)
+  used         String?  @map("Used") @db.VarChar(1)
+  createdAt    DateTime @default(now()) @map("CreatedAt")
+  updatedAt    DateTime @updatedAt @map("UpdatedAt")
 
-  @@map("tblCustomer")
+  @@unique([customerId])
+  @@index([customerId])
 }
 
 model Product {
-  productId    String   @id @map("ProductID") @db.VarChar(5)
-  productName  String?  @map("ProductName") @db.VarChar(100)
-  marking      String?  @map("Marking") @db.VarChar(100)
-  type         String?  @map("Type") @db.VarChar(100)
-  bagSize      String?  @map("BagSize") @db.VarChar(100)
-  pWeight      Float?   @map("PWeight")
-  comValue     String?  @map("ComValue") @db.VarChar(1)
-  description  String?  @map("Description") @db.VarChar(255)
-  idSupplier   String?  @map("IDSupplier") @db.VarChar(3)
-  showInStock  String?  @map("ShowInStock") @db.VarChar(1)
-  used         String?  @map("Used") @db.VarChar(1)
+  productId   String   @id @map("ProductId") @db.VarChar(6)
+  productName String   @map("ProductName") @db.VarChar(255)
+  category    String   @map("Category") @db.VarChar(255)
+  brand       String   @map("Brand") @db.VarChar(255)
+  model       String?  @map("Model") @db.VarChar(255)
+  price       Decimal  @map("Price") @db.Decimal(19, 4)
+  cost        Decimal? @map("Cost") @db.Decimal(19, 4)
+  stockQty    Int      @default(0) @map("StockQty")
+  minQty      Int      @default(0) @map("MinQty")
+  maxQty      Int      @default(0) @map("MaxQty")
+  createdAt   DateTime @default(now()) @map("CreatedAt")
+  updatedAt   DateTime @updatedAt @map("UpdatedAt")
 
-  @@map("tblProduct")
+  @@unique([productId])
+  @@index([productId])
 }
 
 model Destination {
-  destId        String   @id @map("DestID") @db.VarChar(3)
-  destination   String?  @map("Destination") @db.VarChar(50)
-  location      String?  @map("Location") @db.VarChar(50)
-  used          String?  @map("Used") @db.VarChar(1)
-
-  @@map("tblDestination")
+  destId      String  @id @map("DestID") @db.VarChar(6)
+  destination String? @map("Destination") @db.VarChar(50)
+  location    String? @map("Location") @db.VarChar(50)
+  used        String? @map("Used") @db.VarChar(1)
 }
 
 model PaymentTerm {
-  termId      String   @id @map("TermID") @db.VarChar(3)
-  termName    String?  @map("TermName") @db.VarChar(50)
-  shortName   String?  @map("ShortName") @db.VarChar(20)
-  days        String?  @map("Days") @db.VarChar(3)
-  used        String?  @map("Used") @db.VarChar(1)
-
-  @@map("tblPaymentTerm")
+  termId    String  @id @map("TermID") @db.VarChar(6)
+  termName  String? @map("TermName") @db.VarChar(50)
+  shortName String? @map("ShortName") @db.VarChar(20)
+  days      String? @map("Days") @db.VarChar(3)
+  used      String? @map("Used") @db.VarChar(1)
 }
 
-model EndUser {
-  eUserId   String  @id @map("EUserID") @db.VarChar(3)
-  eUserName String  @map("EUserName") @db.VarChar(255)
-  shortName String? @map("ShortName") @db.VarChar(100)
-  used      String? @map("Used") @db.VarChar(1)
+model Document {
+  id                    String                 @id @map("DocumentID") @db.Char(26)
+  documentType          DocumentType           @map("DocumentType")
+  documentNumber        String                 @map("DocumentNumber") @db.VarChar(50)
+  legacySourceId        String?                @map("LegacySourceId") @db.VarChar(50)
+  title                 String?                @map("Title") @db.VarChar(255)
+  documentDate          DateTime?              @map("DocumentDate")
+  customerId            String?                @map("CustomerID") @db.VarChar(10)
+  billTo                String?                @map("BillTo") @db.VarChar(255)
+  shipTo                String?                @map("ShipTo") @db.VarChar(255)
+  destinationId         String?                @map("DestinationID") @db.VarChar(10)
+  paymentTermId         String?                @map("PaymentTermID") @db.VarChar(10)
+  paymentMethod         String?                @map("PaymentMethod") @db.VarChar(100)
+  referenceNo           String?                @map("ReferenceNo") @db.VarChar(100)
+  status                String?                @map("Status") @db.VarChar(30)
+  remark                String?                @map("Remark") @db.VarChar(500)
+  totalCost             Decimal?               @map("TotalCost") @db.Decimal(19, 4)
+  totalSellingPrice     Decimal?               @map("TotalSellingPrice") @db.Decimal(19, 4)
+  totalProfit           Decimal?               @map("TotalProfit") @db.Decimal(19, 4)
+  margin                Decimal?               @map("Margin") @db.Decimal(19, 4)
+  taxRate               Decimal?               @map("TaxRate") @db.Decimal(10, 4)
+  taxAmount             Decimal?               @map("TaxAmount") @db.Decimal(19, 4)
+  totalAmount           Decimal?               @map("TotalAmount") @db.Decimal(19, 4)
+  totalQuantity         Decimal?               @map("TotalQuantity") @db.Decimal(18, 2)
+  createdAt             DateTime               @default(now()) @map("CreatedAt")
+  updatedAt             DateTime               @updatedAt @map("UpdatedAt")
+  items                 DocumentItem[]
+  quotationDocument     QuotationDocument?
+  invoiceDocument       InvoiceDocument?
+  receiptDocument       ReceiptDocument?
+  purchaseOrderDocument PurchaseOrderDocument?
+  workOrderDocument     WorkOrderDocument?
 
-  @@map("tblEndUser")
+  @@unique([documentType, documentNumber])
+  @@unique([documentType, legacySourceId])
+  @@index([documentType, documentDate])
+}
+
+model DocumentItem {
+  id                String   @id @map("DocumentItemID") @db.Char(26)
+  documentId        String   @map("DocumentID") @db.Char(26)
+  lineNo            Int      @map("LineNo")
+  productId         String?  @map("ProductID") @db.VarChar(10)
+  description       String?  @map("Description") @db.VarChar(500)
+  cost              Decimal? @map("Cost") @db.Decimal(19, 4)
+  quantity          Decimal? @map("Quantity") @db.Decimal(19, 4)
+  margin            Decimal? @map("Margin") @db.Decimal(19, 4)
+  sellingPrice      Decimal? @map("SellingPrice") @db.Decimal(19, 4)
+  totalCost         Decimal? @map("TotalCost") @db.Decimal(19, 4)
+  totalSellingPrice Decimal? @map("TotalSellingPrice") @db.Decimal(19, 4)
+  unitId            String?  @map("UnitID") @db.VarChar(10)
+  createdAt         DateTime @default(now()) @map("CreatedAt")
+  updatedAt         DateTime @updatedAt @map("UpdatedAt")
+  document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([documentId, lineNo])
+  @@unique([id])
+  
+}
+
+model QuotationDocument {
+  documentId  String    @id @map("DocumentID") @db.Char(26)
+  validUntil  DateTime? @map("ValidUntil")
+  attentionTo String?   @map("AttentionTo") @db.VarChar(255)
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model InvoiceDocument {
+  documentId       String    @id @map("DocumentID") @db.Char(26)
+  dueDate          DateTime? @map("DueDate")
+  doNo             String?   @map("DoNo") @db.VarChar(255)
+  monitorReference String?   @map("MonitorReference") @db.VarChar(20)
+  statusOnline     Int?      @map("StatusOnline")
+  legacyInvoiceNo  String?   @map("LegacyInvoiceNo") @db.VarChar(50)
+  document         Document  @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model ReceiptDocument {
+  documentId       String    @id @map("DocumentID") @db.Char(26)
+  receivedDate     DateTime? @map("ReceivedDate")
+  paymentReference String?   @map("PaymentReference") @db.VarChar(100)
+  document         Document  @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model PurchaseOrderDocument {
+  documentId   String    @id @map("DocumentID") @db.Char(26)
+  supplierName String?   @map("SupplierName") @db.VarChar(255)
+  deliveryDate DateTime? @map("DeliveryDate")
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model WorkOrderDocument {
+  documentId    String    @id @map("DocumentID") @db.Char(26)
+  scheduledDate DateTime? @map("ScheduledDate")
+  assignedTo    String?   @map("AssignedTo") @db.VarChar(255)
+  document      Document  @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model SystemActivation {
+  id          String   @id @map("ID") @db.Char(26)
+  adminToken  String   @unique @map("AdminToken") @db.VarChar(191)
+  adminEmail  String?  @map("AdminEmail") @db.VarChar(191)
+  activatedAt DateTime @default(now()) @map("ActivatedAt")
+  createdAt   DateTime @default(now()) @map("CreatedAt")
+  updatedAt   DateTime @updatedAt @map("UpdatedAt")
 }

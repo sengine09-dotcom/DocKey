@@ -7,14 +7,25 @@ dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT || 5100);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
+
+const FRONTEND_URLS = (process.env.FRONTEND_URLS || '')
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: function (origin, callback) {
+      if (!origin || FRONTEND_URLS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
+
 app.use(express.json());
 
 app.use('/api', adminInitTokenRoutes);

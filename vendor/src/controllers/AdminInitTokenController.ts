@@ -1,3 +1,4 @@
+  
 import { Request, Response } from 'express';
 import { ulid } from 'ulid';
 import { prisma } from '../lib/prisma';
@@ -148,8 +149,103 @@ const buildClaimUrl = (token: string) => {
   return `${baseUrl}${separator}id=${encodeURIComponent(token)}`;
 };
 
+const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate());
+
+const formatExpiryDate = (value?: Date | string | null) => {
+  if (!value) {
+    return '-';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '-';
+  }
+
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const year = parsed.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const getExpirySummary = (value?: Date | string | null) => {
+  if (!value) {
+    return {
+      warningLevel: 'none',
+      daysUntilExpiry: null,
+      expiryMessage: null,
+      expiryShortLabel: 'No expiry limit',
+      expiryDateLabel: '-',
+    };
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return {
+      warningLevel: 'none',
+      daysUntilExpiry: null,
+      expiryMessage: null,
+      expiryShortLabel: 'No expiry limit',
+      expiryDateLabel: '-',
+    };
+  }
+
+  const today = startOfDay(new Date());
+  const expiryDay = startOfDay(parsed);
+  const daysUntilExpiry = Math.ceil((expiryDay.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  const expiryDateLabel = formatExpiryDate(parsed);
+
+  if (daysUntilExpiry < 0) {
+    return {
+      warningLevel: 'expired',
+      daysUntilExpiry,
+      expiryMessage: 'หมดอายุแล้ว',
+      expiryShortLabel: 'หมดอายุแล้ว',
+      expiryDateLabel,
+    };
+  }
+
+  if (daysUntilExpiry === 0) {
+    return {
+      warningLevel: 'critical',
+      daysUntilExpiry,
+      expiryMessage: 'หมดอายุวันนี้',
+      expiryShortLabel: 'หมดอายุวันนี้',
+      expiryDateLabel,
+    };
+  }
+
+  if (daysUntilExpiry === 1) {
+    return {
+      warningLevel: 'critical',
+      daysUntilExpiry,
+      expiryMessage: 'พรุ่งนี้หมดอายุ',
+      expiryShortLabel: 'พรุ่งนี้หมดอายุ',
+      expiryDateLabel,
+    };
+  }
+
+  if (daysUntilExpiry <= 7) {
+    return {
+      warningLevel: 'warning',
+      daysUntilExpiry,
+      expiryMessage: `ใกล้หมดอายุในอีก ${daysUntilExpiry} วัน`,
+      expiryShortLabel: `อีก ${daysUntilExpiry} วัน`,
+      expiryDateLabel,
+    };
+  }
+
+  return {
+    warningLevel: 'healthy',
+    daysUntilExpiry,
+    expiryMessage: null,
+    expiryShortLabel: `เหลือ ${daysUntilExpiry} วัน`,
+    expiryDateLabel,
+  };
+};
+
 const toTokenResponse = (tokenRecord: any) => ({
   ...tokenRecord,
+  ...getExpirySummary(tokenRecord?.expiresAt),
   online: isTokenOnline(tokenRecord),
   claimUrl: buildClaimUrl(tokenRecord.token),
 });
@@ -191,6 +287,78 @@ const normalizeRuntimeStatus = (tokenRecord: any) => {
 };
 
 class AdminInitTokenController {
+
+  static async firstTime(req: Request, res: Response) {
+    try {
+      const token = String(req.body?.token || '').trim();
+
+      console.log('firstTime', token);
+
+      if (!token) {
+        return res.status(400).json({ success: false, message: 'Token is required' });
+      }
+      const tokenRecord = await prisma.adminInitToken.findUnique({ where: { token } });
+      if (!tokenRecord) {
+        return res.status(404).json({ success: false, message: 'Token not found' });
+      }
+      return res.json({ success: true, data:{
+        valid: true,
+        reason: null,
+        customerName: tokenRecord.customerName,
+        customerEmail: tokenRecord.customerEmail,
+        expiresAt: tokenRecord.expiresAt,
+        description: tokenRecord.description,        
+      } });
+    }
+    catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || 'Failed to check token' });
+    }
+  }
+
+  static async consume(req: Request, res: Response) {
+    try {
+      const token = String(req.body?.token || req.body?.id || '').trim();
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      if (!token || !email) {
+        return res.status(400).json({ success: false, message: 'Token and email are required' });
+      }
+      const tokenRecord = await prisma.adminInitToken.findUnique({ where: { token } });
+      if (!tokenRecord) {
+        return res.status(404).json({ success: false, message: 'Token not found' });
+      }
+      if (!tokenRecord.isActive || tokenRecord.usedAt || (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt).getTime() <= Date.now())) {
+        return res.status(409).json({ success: false, message: 'Token is not available' });
+      }
+      const updated = await prisma.adminInitToken.update({
+        where: { token },
+        data: { usedAt: new Date(), usedByEmail: email, updatedAt: new Date() },
+      });
+      return res.json({ success: true, data: toTokenResponse(updated) });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || 'Failed to consume token' });
+    }
+  }
+
+  static async release(req: Request, res: Response) {
+    try {
+      const token = String(req.body?.token || req.body?.id || '').trim();
+      if (!token) {
+        return res.status(400).json({ success: false, message: 'Token is required' });
+      }
+      const tokenRecord = await prisma.adminInitToken.findUnique({ where: { token } });
+      if (!tokenRecord) {
+        return res.status(404).json({ success: false, message: 'Token not found' });
+      }
+      const updated = await prisma.adminInitToken.update({
+        where: { token },
+        data: { usedAt: null, usedByEmail: null, updatedAt: new Date() },
+      });
+      return res.json({ success: true, data: toTokenResponse(updated) });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || 'Failed to release token' });
+    }
+  }
+
   static async list(_req: Request, res: Response) {
     try {
       const tokens = await prisma.adminInitToken.findMany({
@@ -362,6 +530,7 @@ class AdminInitTokenController {
           customerEmail: tokenRecord?.customerEmail || null,
           description: tokenRecord?.description || null,
           expiresAt: tokenRecord?.expiresAt || null,
+          ...getExpirySummary(tokenRecord?.expiresAt),
         },
       });
     } catch (error: any) {
@@ -389,6 +558,7 @@ class AdminInitTokenController {
           customerName: tokenRecord?.customerName || null,
           customerEmail: tokenRecord?.customerEmail || null,
           expiresAt: tokenRecord?.expiresAt || null,
+          ...getExpirySummary(tokenRecord?.expiresAt),
           usedAt: tokenRecord?.usedAt || null,
           lastSeenAt: tokenRecord?.lastSeenAt || null,
           online: isTokenOnline(tokenRecord),

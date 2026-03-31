@@ -1,10 +1,78 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
-import monitorService from '../../services/monitorService';
-import invoiceService from '../../services/invoiceService';
+import documentService from '../../services/documentService';
 import codeService from '../../services/codeService';
 import { showAppAlert } from '../../services/dialogService';
+import { formatDate } from '../../utils/date';
+
+const TOKEN_EXPIRY_CACHE_PREFIX = 'doc-key-token-expiry-v3';
+
+const tokenExpiryMemoryCache = new Map<string, TokenExpirySummary>();
+let latestTokenExpiryCache: {
+  cacheKey: string;
+  userKey: string;
+  value: TokenExpirySummary;
+} | null = null;
+
+type TokenExpirySummary = {
+  active: boolean;
+  reason?: string | null;
+  expiresAt?: string | null;
+  vendorReachable: boolean;
+  warningLevel: 'none' | 'healthy' | 'warning' | 'critical' | 'expired';
+  daysUntilExpiry: number | null;
+  expiryMessage?: string | null;
+  expiryShortLabel?: string | null;
+  expiryDateLabel?: string | null;
+};
+
+const getTodayCacheKey = (userKey: string) => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${TOKEN_EXPIRY_CACHE_PREFIX}:${userKey}:${year}-${month}-${day}`;
+};
+
+const readTokenExpiryCache = (userKey: string) => {
+  try {
+    return tokenExpiryMemoryCache.get(getTodayCacheKey(userKey)) || null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const writeTokenExpiryCache = (userKey: string, value: TokenExpirySummary) => {
+  try {
+    const todayCacheKey = getTodayCacheKey(userKey);
+    tokenExpiryMemoryCache.set(todayCacheKey, value);
+    latestTokenExpiryCache = {
+      cacheKey: todayCacheKey,
+      userKey,
+      value,
+    };
+  } catch (_error) {
+    // Ignore storage write failure.
+  }
+};
+
+const readLatestTokenExpiryCache = () => {
+  try {
+    if (!latestTokenExpiryCache) {
+      return null;
+    }
+
+    const currentDateSuffix = getTodayCacheKey(latestTokenExpiryCache.userKey || '').split(':').pop();
+    if (!latestTokenExpiryCache.cacheKey.endsWith(String(currentDateSuffix))) {
+      return null;
+    }
+
+    return latestTokenExpiryCache.value;
+  } catch (_error) {
+    return null;
+  }
+};
 
 export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard', topBarCaption = '' }: any) {
   const location = useLocation();
@@ -33,7 +101,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     }
   });
   const [sidebarCounts, setSidebarCounts] = useState({
-    monitor: 0, invoice: 0,
+    quotation: 0, invoice: 0, receipt: 0, purchaseOrder: 0, workOrder: 0,
     customer: 0, product: 0, destination: 0, paymentTerm: 0, endUser: 0,
   });
   const [user, setUser] = useState({
@@ -42,6 +110,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     avatar: '👤',
     role: 'User'
   });
+  const [tokenExpiry, setTokenExpiry] = useState<TokenExpirySummary | null>(() => readLatestTokenExpiryCache());
 
   useEffect(() => {
     let mounted = true;
@@ -59,12 +128,47 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
             role: profile.role || 'User'
           });
         }
+
+        return profile || null;
       } catch (_error) {
         // If auth fetch fails, keep fallback user labels.
+        return null;
       }
     };
 
-    loadCurrentUser();
+    const loadTokenExpiry = async (userKey: string) => {
+      const cached = readTokenExpiryCache(userKey);
+      if (cached) {
+        if (mounted) {
+          setTokenExpiry(cached);
+        }
+        writeTokenExpiryCache(userKey, cached);
+        return;
+      }
+
+      try {
+        const response = await axios.get('/api/auth/token-expiry');
+        if (mounted) {
+          const nextValue = response.data?.data || null;
+          setTokenExpiry(nextValue);
+          if (nextValue) {
+            writeTokenExpiryCache(userKey, nextValue);
+          }
+        }
+      } catch (_error) {
+        if (mounted) {
+          setTokenExpiry(null);
+        }
+      }
+    };
+
+    const initializeHeaderState = async () => {
+      const profile = await loadCurrentUser();
+      const userKey = String(profile?.id || profile?.email || 'anonymous');
+      await loadTokenExpiry(userKey);
+    };
+
+    void initializeHeaderState();
 
     const heartbeat = async () => {
       try {
@@ -93,9 +197,18 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     };
   }, []);
 
-  const selectedDocumentTab = location.pathname === '/documents' && (location.state as any)?.selectedType === 'invoice'
-    ? 'invoice'
-    : 'monitor';
+  const selectedDocumentTab = (() => {
+    const selectedType = String((location.state as any)?.selectedType || '').trim().toLowerCase().replace(/-/g, '_');
+    if (location.pathname === '/documents' && ['quotation', 'invoice', 'receipt', 'purchase_order', 'work_order'].includes(selectedType)) {
+      return selectedType;
+    }
+
+    if (currentPage === 'invoice-home' || currentPage === 'key-invoice') {
+      return 'invoice';
+    }
+
+    return 'quotation';
+  })();
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
@@ -107,8 +220,11 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   ];
 
   const documentSubmenu = [
-    { id: 'monitor-home', label: 'Monitor', icon: '🖥️', href: '/documents', count: sidebarCounts.monitor, isActive: currentPage === 'monitor-home' || currentPage === 'key-monitor' || (currentPage === 'documents' && selectedDocumentTab === 'monitor') },
-    { id: 'invoice-home', label: 'Invoice', icon: '🧾', href: '/documents', count: sidebarCounts.invoice, isActive: currentPage === 'invoice-home' || currentPage === 'key-invoice' || (currentPage === 'documents' && selectedDocumentTab === 'invoice') },
+    { id: 'documents-quotation', label: 'Quotation', icon: '📝', href: '/documents', count: sidebarCounts.quotation, isActive: currentPage === 'documents' && selectedDocumentTab === 'quotation' },
+    { id: 'documents-invoice', label: 'Invoice', icon: '🧾', href: '/documents', count: sidebarCounts.invoice, isActive: currentPage === 'invoice-home' || currentPage === 'key-invoice' || (currentPage === 'documents' && selectedDocumentTab === 'invoice') },
+    { id: 'documents-receipt', label: 'Receipt', icon: '💵', href: '/documents', count: sidebarCounts.receipt, isActive: currentPage === 'documents' && selectedDocumentTab === 'receipt' },
+    { id: 'documents-purchase-order', label: 'PO', icon: '📦', href: '/documents', count: sidebarCounts.purchaseOrder, isActive: currentPage === 'documents' && selectedDocumentTab === 'purchase_order' },
+    { id: 'documents-work-order', label: 'Work Order', icon: '🛠️', href: '/documents', count: sidebarCounts.workOrder, isActive: currentPage === 'documents' && selectedDocumentTab === 'work_order' },
   ];
 
   const codeSubmenu = [
@@ -121,8 +237,6 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   const isDocumentSectionActive =
     currentPage === 'documents' ||
-    currentPage === 'monitor-home' ||
-    currentPage === 'key-monitor' ||
     currentPage === 'invoice-home' ||
     currentPage === 'key-invoice';
 
@@ -144,9 +258,12 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   useEffect(() => {
     const fetchCounts = async () => {
-      const [mon, inv, cust, prod, dest, term, endUser] = await Promise.allSettled([
-        monitorService.getAll(),
-        invoiceService.getAll(),
+      const [quotation, invoice, receipt, purchaseOrder, workOrder, cust, prod, dest, term, endUser] = await Promise.allSettled([
+        documentService.getAll('quotation'),
+        documentService.getAll('invoice'),
+        documentService.getAll('receipt'),
+        documentService.getAll('purchase_order'),
+        documentService.getAll('work_order'),
         codeService.getAll('customer'),
         codeService.getAll('product'),
         codeService.getAll('destination'),
@@ -154,8 +271,11 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         codeService.getAll('end-user'),
       ]);
       setSidebarCounts({
-        monitor:     mon.status  === 'fulfilled' ? (mon.value?.data?.data?.length  ?? 0) : 0,
-        invoice:     inv.status  === 'fulfilled' ? (inv.value?.data?.data?.length  ?? 0) : 0,
+        quotation:   quotation.status === 'fulfilled' ? (quotation.value?.data?.data?.length ?? 0) : 0,
+        invoice:     invoice.status === 'fulfilled' ? (invoice.value?.data?.data?.length ?? 0) : 0,
+        receipt:     receipt.status === 'fulfilled' ? (receipt.value?.data?.data?.length ?? 0) : 0,
+        purchaseOrder: purchaseOrder.status === 'fulfilled' ? (purchaseOrder.value?.data?.data?.length ?? 0) : 0,
+        workOrder:   workOrder.status === 'fulfilled' ? (workOrder.value?.data?.data?.length ?? 0) : 0,
         customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
         product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
         destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
@@ -182,10 +302,16 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('documents');
     } else if (id === 'codes') {
       onNavigate('customer-code');
-    } else if (id === 'monitor-home') {
-      onNavigate('documents', { selectedType: 'monitor' });
-    } else if (id === 'invoice-home') {
+    } else if (id === 'documents-quotation') {
+      onNavigate('documents', { selectedType: 'quotation' });
+    } else if (id === 'documents-invoice') {
       onNavigate('documents', { selectedType: 'invoice' });
+    } else if (id === 'documents-receipt') {
+      onNavigate('documents', { selectedType: 'receipt' });
+    } else if (id === 'documents-purchase-order') {
+      onNavigate('documents', { selectedType: 'purchase_order' });
+    } else if (id === 'documents-work-order') {
+      onNavigate('documents', { selectedType: 'work_order' });
     } else if (id === 'customer-code') {
       onNavigate('customer-code');
     } else if (id === 'product-code') {
@@ -196,8 +322,6 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('payment-term-code');
     } else if (id === 'end-user-code') {
       onNavigate('end-user-code');
-    } else if (id === 'key-monitor') {
-      onNavigate('key-monitor');
     } else if (id === 'key-invoice') {
       onNavigate('key-invoice');
     } else if (id === 'reports') {
@@ -240,6 +364,34 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
   );
 
+  const tokenExpiryUnavailable = tokenExpiry === null;
+
+  const tokenExpiryTone = tokenExpiryUnavailable
+    ? darkMode
+      ? 'border-slate-500/30 text-slate-200'
+      : 'border-slate-200  text-slate-700'
+    : tokenExpiry.warningLevel === 'none' || tokenExpiry.warningLevel === 'healthy'
+    ? darkMode
+      ? 'border-emerald-500/30 text-emerald-200'
+      : 'border-emerald-200  text-emerald-700'
+    : tokenExpiry.warningLevel === 'warning'
+    ? darkMode
+      ? 'border-amber-500/30 text-amber-200'
+      : 'border-amber-200 text-amber-700'
+    : darkMode
+    ? 'border-rose-500/30 text-rose-200'
+    : 'border-rose-200 text-rose-700';
+
+  const tokenExpiryLabel = tokenExpiryUnavailable
+    ? 'Unavailable'
+    : tokenExpiry?.expiryShortLabel || (!tokenExpiry?.expiresAt ? 'No expiry limit' : 'Token active');
+
+  const tokenExpiryInlineText = tokenExpiryUnavailable
+    ? 'Expiry : unavailable'
+    : !tokenExpiry?.expiresAt
+    ? 'Expiry : no expiry date'
+    : `Expiry : ${tokenExpiryLabel} ${tokenExpiry.expiryDateLabel || formatDate(tokenExpiry.expiresAt)}`;
+
   return (
     <div className={`flex h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
       {/* Sidebar */}
@@ -247,16 +399,24 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         
         {/* Logo Section */}
         <div className={`p-6 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} transition-all duration-300`}>
-          <div className={`flex items-center ${sidebarOpen ? 'gap-3' : 'justify-center'}`}>
-            <div className="text-4xl">📋</div>
+          <div className={sidebarOpen ? 'space-y-4' : 'flex justify-center'}>
+            <div className={`flex items-center ${sidebarOpen ? 'gap-3' : 'justify-center'}`}>
+              <div className="text-4xl">📋</div>
+              {sidebarOpen && (
+                <div className="min-w-0 overflow-hidden">
+                  <span className={`block font-bold text-lg whitespace-nowrap ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                    Doc Key
+                  </span>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Document Management
+                  </p>
+                </div>
+              )}
+            </div>
+
             {sidebarOpen && (
-              <div className="overflow-hidden">
-                <span className={`font-bold text-lg whitespace-nowrap ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  Doc Key
-                </span>
-                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Document Management
-                </p>
+              <div className={`rounded-2xl border px-3 py-2 ${tokenExpiryTone}`}>
+                <p className="text-xs font-medium leading-5 opacity-90">{tokenExpiryInlineText}</p>
               </div>
             )}
           </div>
@@ -288,7 +448,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
                         isDocumentSectionActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                       }`}>
-                        {sidebarCounts.monitor + sidebarCounts.invoice}
+                        {sidebarCounts.quotation + sidebarCounts.invoice + sidebarCounts.receipt + sidebarCounts.purchaseOrder + sidebarCounts.workOrder}
                       </span>
                     )}
                     {/* Count badge for Codes */}
@@ -379,8 +539,6 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
             <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
               {topBarCaption || (() => {
                 let label = menuItems.find(m => m.id === currentPage)?.label || '';
-                if (!label && currentPage === 'monitor-home') label = '🖥️ Monitor Documents';
-                if (!label && currentPage === 'key-monitor') label = '🖥️ Monitor Document';
                 if (!label && currentPage === 'invoice-home') label = '🧾 Invoice Documents';
                 if (!label && currentPage === 'key-invoice') label = '🧾 Invoice Document';
                 if (!label && currentPage === 'customer-code') label = '🏢 Customer Codes';

@@ -1,7 +1,24 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
+import type { PrismaClient as PrismaClientType } from '@prisma/client';
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+const prismaClientCandidates = [
+  path.resolve(__dirname, '../../../node_modules/.prisma/client'),
+  path.resolve(__dirname, '../../node_modules/.prisma/client'),
+];
+
+const prismaClientModulePath = prismaClientCandidates.find((candidatePath) => fs.existsSync(candidatePath));
+
+if (!prismaClientModulePath) {
+  throw new Error('Unable to locate generated Prisma client module.');
+}
+
+const { PrismaClient } = require(prismaClientModulePath) as {
+  PrismaClient: typeof PrismaClientType;
+};
+
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientType };
 
 export const prisma =
   globalForPrisma.prisma ??

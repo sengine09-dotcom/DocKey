@@ -9,7 +9,8 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:vendor": "npm --prefix vendor run dev",
     "dev:vendor-ui": "npm --prefix vendor-ui run dev",
-    "dev": "echo 'Run in separate terminals:' && echo 'Terminal 1: npm run dev:backend' && echo 'Terminal 2: npm run dev:frontend' && echo 'Terminal 3: npm run dev:vendor' && echo 'Terminal 4: npm run dev:vendor-ui'",
+    "dev:all": "concurrently -n backend,frontend,vendor,vendor-ui -c blue,green,magenta,cyan \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:vendor\" \"npm run dev:vendor-ui\"",
+    "dev": "npm run dev:all",
     "build:backend": "npm --prefix backend run build",
     "build:frontend": "npm --prefix frontend run build",
     "build:vendor": "npm --prefix vendor run build",
@@ -25,5 +26,8 @@
     "frontend",
     "vendor",
     "vendor-ui"
-  ]
+  ],
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }
