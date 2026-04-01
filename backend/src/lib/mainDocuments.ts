@@ -145,17 +145,16 @@ const buildInvoiceStatusOnline = (status: string | null | undefined) => {
 };
 
 const mapDocumentItem = (item: any) => ({
-  id: item.productId || item.itemCode || '',
-  itemCode: item.itemCode || item.productId || '',
-  description: item.description || '',
-  packing: item.packing || '',
-  quantity: toNumber(item.quantity).toFixed(3),
-  costPrice: toNumber(item.costPrice).toFixed(2),
-  unitPrice: toNumber(item.unitPrice).toFixed(2),
-  total: toNumber(item.totalAmount).toFixed(2),
-  weight: toNumber(item.weight).toFixed(3),
-  bag: item.bag == null ? '' : String(item.bag),
   lineNo: item.lineNo,
+  itemCode: item.itemCode || '',
+  description: item.description || '',
+  quantity: toNumber(item.quantity).toFixed(2),
+  margin: toNumber(item.margin).toFixed(2),
+  cost: toNumber(item.cost).toFixed(2),
+  sellingPrice: toNumber(item.sellingPrice).toFixed(2),
+  totalCost: toNumber(item.totalCost).toFixed(2),
+  totalSellingPrice: toNumber(item.totalSellingPrice).toFixed(2),  
+  unit: item.unit || 'x',  
 });
 
 const buildCustomerNameMap = async (documents: any[]) => {
@@ -191,6 +190,7 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
   const items = (document.items || []).map(mapDocumentItem);
   const status = document.status || DOCUMENT_DEFAULT_STATUS[documentType];
   const customerId = document.customerId || '';
+
   const baseRecord = {
     id: document.id,
     documentId: document.id,
@@ -215,6 +215,7 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
     total: toNumber(document.totalAmount),
     amount: toNumber(document.totalAmount),
     totalQuantity: toNumber(document.totalQuantity),
+    margin: toNumber(document.margin),
     itemCount: items.length,
     lastUpdated: document.updatedAt,
     color: buildStatusColor(status),
@@ -282,11 +283,9 @@ const fetchDocumentRecord = async (type: MainDocumentType, identifier: string) =
     where: buildDocumentWhere(type, identifier),
     include: documentInclude,
   });
-
   if (!document) {
     return null;
   }
-
   const customerNameMap = await buildCustomerNameMap([document]);
   return mapDocumentRecord(document, customerNameMap);
 };
@@ -483,7 +482,6 @@ export const listDocumentsByType = async (typeInput: string) => {
     include: documentInclude,
     orderBy: [{ documentDate: 'desc' }, { updatedAt: 'desc' }],
   });
-
   const customerNameMap = await buildCustomerNameMap(documents);
   return documents.map((document) => mapDocumentRecord(document, customerNameMap));
 };
@@ -493,7 +491,6 @@ export const getDocumentById = async (typeInput: string, identifier: string) => 
   if (!type) {
     throw new Error('Invalid document type');
   }
-
   return fetchDocumentRecord(type, identifier);
 };
 
