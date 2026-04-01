@@ -8,7 +8,6 @@ class DocumentController {
       if (!isMainDocumentType(type)) {
         return res.status(400).json({ success: false, message: 'Invalid document type' });
       }
-
       const data = await listDocumentsByType(type);
       return res.json({ success: true, data });
     } catch (error: any) {
@@ -22,7 +21,6 @@ class DocumentController {
       if (!isMainDocumentType(type)) {
         return res.status(400).json({ success: false, message: 'Invalid document type' });
       }
-
       const data = await getDocumentById(type, id);
       if (!data) {
         return res.status(404).json({ success: false, message: 'Document not found' });
@@ -41,9 +39,6 @@ class DocumentController {
         return res.status(400).json({ success: false, message: 'Invalid document type' });
       }
       const data = await saveDocumentByType(type, req.body);
-
-      console.log('[DEBUG] Document saved:', data);
-
       return res.json({ success: true, data });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.message });

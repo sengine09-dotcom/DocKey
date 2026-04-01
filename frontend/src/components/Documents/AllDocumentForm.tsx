@@ -32,7 +32,19 @@ const DOCUMENT_NUMBER_PREFIX: Record<MainDocumentType, string> = {
 };
 
 const QUOTATION_MARGIN_PRESETS = ['5%', '10%', '15%', '20%', '25%', '30%', '35%', '40%', '50%'];
-const QUOTATION_STATUS_OPTIONS = ['Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
+const QUOTATION_STATUS_OPTIONS = [
+  'Draft',
+  'Sent',
+  'Waiting Customer',
+  'Follow Up',
+  'Negotiating',
+  'Approved',
+  'Won',
+  'Rejected',
+  'Lost',
+  'Expired',
+  'Converted'
+];
 
 const escapeHtml = (value: any) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -52,7 +64,8 @@ const formatPrintDate = (value: any) => {
   });
 };
 
-const buildDefaultDocumentNumber = (documentType: MainDocumentType) => `${DOCUMENT_NUMBER_PREFIX[documentType]}-${String(new Date().getFullYear()).slice(-2)}-000001`;
+const buildDefaultDocumentNumber = (documentType: MainDocumentType) =>
+  `${DOCUMENT_NUMBER_PREFIX[documentType]}-${String(new Date().getFullYear()).slice(-2)}-000001`;
 
 const createEmptyItem = () => (
   {
@@ -79,7 +92,7 @@ const sanitizeDecimalInput = (value: string) => value.replace(/[^0-9.]/g, '');
 
 const calculateQuotationSalePrice = (costPrce: any, marginPercent: any) => {
   const cost = parseNumberInput(costPrce);
-  const margin = parseNumberInput(marginPercent);  
+  const margin = parseNumberInput(marginPercent);
   let salePrice = 0;
   if (margin === 0 || margin === 100) {
     salePrice = cost;
@@ -112,30 +125,28 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   referenceNo: '',
   status: DOCUMENT_DEFAULT_STATUS[documentType],
   remark: '',
+  totalCost: '0',
+  totalSellingPrice: '0',
+  totalProfit: '0',
   margin: '0',
-  taxRate: documentType === 'invoice' ? '10' : '0',
-  validUntil: '',
-  attentionTo: '',
+  taxRate: '7',
+  taxAmount: '0',
+  totalAmount: '0',
+  totalQuantity: '0',
   dueDate: '',
-  doNo: '',
   linkedQuotationId: '',
   linkedQuotationNumber: '',
   linkedInvoiceId: '',
   linkedInvoiceNumber: '',
   receivedDate: '',
-  paymentReference: '',
-  supplierName: '',
+  supplierId: '',
   deliveryDate: '',
-  scheduledDate: '',
-  assignedTo: '',  
 });
 
 const getSubtypeFields = (documentType: MainDocumentType) => {
   if (documentType === 'quotation') {
     return [
       { key: 'margin', label: 'Margin (%)', type: 'number' },
-      { key: 'validUntil', label: 'Valid Until', type: 'date' },
-      { key: 'attentionTo', label: 'Attention To', type: 'text' },
     ];
   }
 
@@ -243,22 +254,16 @@ export default function AllDocumentForm({
       referenceNo: initialData.referenceNo || '',
       status: initialData.status || DOCUMENT_DEFAULT_STATUS[documentType],
       remark: initialData.remark || '',
-      margin: String(initialData.profitPercent ?? getEmptyHeader(documentType).margin),
+      margin: String(getEmptyHeader(documentType).margin) || '',
       taxRate: String(initialData.taxRate ?? getEmptyHeader(documentType).taxRate),
-      validUntil: initialData.validUntil ? String(initialData.validUntil).slice(0, 10) : '',
-      attentionTo: initialData.attentionTo || '',
       dueDate: initialData.dueDate ? String(initialData.dueDate).slice(0, 10) : '',
-      doNo: initialData.doNo || '',
       linkedQuotationId: initialData.linkedQuotationId || '',
       linkedQuotationNumber: initialData.linkedQuotationNumber || '',
       linkedInvoiceId: initialData.linkedInvoiceId || '',
       linkedInvoiceNumber: initialData.linkedInvoiceNumber || '',
       receivedDate: initialData.receivedDate ? String(initialData.receivedDate).slice(0, 10) : '',
-      paymentReference: initialData.paymentReference || '',
-      supplierName: initialData.supplierName || '',
+      supplierId: initialData.supplierName || '',
       deliveryDate: initialData.deliveryDate ? String(initialData.deliveryDate).slice(0, 10) : '',
-      scheduledDate: initialData.scheduledDate ? String(initialData.scheduledDate).slice(0, 10) : '',
-      assignedTo: initialData.assignedTo || '',
     });
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
@@ -316,39 +321,24 @@ export default function AllDocumentForm({
 
   const handleHeaderChange = (field: string, value: string) => {
     if (isViewMode) return;
-
     setHeader((prev) => ({ ...prev, [field]: value }));
-
-    if (documentType === 'quotation') {
-      setItems((prev) => prev.map((item) => {
-        const sellingPrice = calculateQuotationSalePrice(item.cost, value);
-        return {
-          ...item,
-          totalCost: calculateLineTotal(item.quantity, item.cost),
-          totalSellingPrice: calculateLineTotal(item.quantity, sellingPrice),
-        };
-      }));
-    }
   };
 
   const handleItemChange = (index: number, field: string, value: string) => {
-    if (isViewMode) return;    
+    if (isViewMode) return;
     setItems((prev) => {
       const next = [...prev];
       const updated = { ...next[index], [field]: value };
-
-      console.log('[DEBUG] handleItemChange margin:', updated.margin);
-
       if (documentType === 'quotation') {
         if (field === 'cost' || field === 'quantity' || field === 'margin') {
           updated.sellingPrice = calculateQuotationSalePrice(updated.cost, updated.margin);
+          updated.totalCost = calculateLineTotal(updated.quantity, updated.cost);
           updated.totalSellingPrice = calculateLineTotal(updated.quantity, updated.sellingPrice);
-          
         }
       } else if (field === 'quantity' || field === 'sellingPrice') {
+        updated.totalCost = calculateLineTotal(updated.quantity, updated.cost);
         updated.totalSellingPrice = calculateLineTotal(updated.quantity, updated.sellingPrice);
       }
-
       next[index] = updated;
       return next;
     });
@@ -364,16 +354,15 @@ export default function AllDocumentForm({
         id: product.productId,
         itemCode: product.productId,
         description: product.productName || '',
+        margin: header.margin,
         cost: product.cost == null ? '' : Number(product.cost).toFixed(2),
         sellingPrice: documentType === 'quotation'
           ? calculateQuotationSalePrice(product.cost == null ? '' : Number(product.cost).toFixed(2), header.margin)
           : next[selectedItemIndex].sellingPrice,
       };
-
       if (documentType === 'quotation') {
         next[selectedItemIndex].totalSellingPrice = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].sellingPrice);
       }
-
       return next;
     });
   };
@@ -571,37 +560,99 @@ export default function AllDocumentForm({
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="space-y-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Document No</span><input readOnly className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600" value={header.documentNumber || suggestedDocumentNumber || buildDefaultDocumentNumber(documentType)} /></label>
-                <label className="space-y-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Document Date</span><input type="date" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.documentDate} onChange={(e) => handleHeaderChange('documentDate', e.target.value)} /></label>
-                <label className="space-y-2 md:col-span-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Title</span><input className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.title} onChange={(e) => handleHeaderChange('title', e.target.value)} /></label>
-                <label className="space-y-2 md:col-span-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Customer</span><select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.customer} onChange={(e) => handleHeaderChange('customer', e.target.value)}><option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>{customerCodes.map((customer) => <option key={customer.customerId} value={customer.customerId}>{customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed'}</option>)}</select></label>
                 <label className="space-y-2">
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{documentType === 'quotation' ? 'Quotation Status' : 'Status'}</span>
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Document No
+                  </span>
+                  <input readOnly
+                    className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+                    value={header.documentNumber || suggestedDocumentNumber || buildDefaultDocumentNumber(documentType)} />
+                </label>
+                <label className="space-y-2">
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Document Date
+                  </span>
+                  <input type="date"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    value={header.documentDate} onChange={(e) => handleHeaderChange('documentDate', e.target.value)} />
+                </label>
+                <label className="space-y-2 md:col-span-2">
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Title
+                  </span>
+                  <input className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    value={header.title} onChange={(e) => handleHeaderChange('title', e.target.value)} />
+                </label>
+                <label className="space-y-2 md:col-span-2">
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Customer
+                  </span>
+                  <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    value={header.customer} onChange={(e) => handleHeaderChange('customer', e.target.value)}>
+                    <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
+                    {customerCodes.map((customer) =>
+                      <option key={customer.customerId}
+                        value={customer.customerId}>{customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed'}
+                      </option>)}
+                  </select>
+                </label>
+                <label className="space-y-2">
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {documentType === 'quotation' ? 'Quotation Status' : 'Status'}
+                  </span>
                   {documentType === 'quotation' ? (
-                    <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.status} onChange={(e) => handleHeaderChange('status', e.target.value)}>
-                      {QUOTATION_STATUS_OPTIONS.map((statusOption) => <option key={statusOption} value={statusOption}>{statusOption}</option>)}
+                    <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={header.status} onChange={(e) => handleHeaderChange('status', e.target.value)}>
+                      {QUOTATION_STATUS_OPTIONS.map((statusOption) =>
+                        <option key={statusOption} value={statusOption}>{statusOption}</option>)}
                     </select>
                   ) : (
-                    <input className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.status} onChange={(e) => handleHeaderChange('status', e.target.value)} />
+                    <input
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={header.status} onChange={(e) => handleHeaderChange('status', e.target.value)} />
                   )}
                 </label>
-                <label className="space-y-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Tax Rate (%)</span><input type="number" step="0.01" className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.taxRate} onChange={(e) => handleHeaderChange('taxRate', e.target.value)} /></label>
+                <label className="space-y-2">
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Tax Rate (%)
+                  </span>
+                  <input type="number" step="0.01"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    value={header.taxRate} onChange={(e) => handleHeaderChange('taxRate', e.target.value)} />
+                </label>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="space-y-2 md:col-span-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Bill To</span><input className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.billTo} onChange={(e) => handleHeaderChange('billTo', e.target.value)} /></label>
-                <label className="space-y-2 md:col-span-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Ship To</span><select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.shipTo} onChange={(e) => handleHeaderChange('shipTo', e.target.value)}><option value="">{isLoadingCodes ? 'Loading destinations...' : 'Select destination code'}</option>{destinationCodes.map((destination) => <option key={destination.destId} value={destination.destId}>{destination.destId} - {destination.destination || destination.location || 'Unnamed'}</option>)}</select></label>
-                <label className="space-y-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Payment Term</span><select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.paymentTerm} onChange={(e) => handleHeaderChange('paymentTerm', e.target.value)}><option value="">{isLoadingCodes ? 'Loading payment terms...' : 'Select payment term'}</option>{paymentTermCodes.map((paymentTerm) => <option key={paymentTerm.termId} value={paymentTerm.termId}>{paymentTerm.termId} - {paymentTerm.termName || paymentTerm.shortName || 'Unnamed'}</option>)}</select></label>
-                <label className="space-y-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Payment Method</span><input className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.paymentMethod} onChange={(e) => handleHeaderChange('paymentMethod', e.target.value)} /></label>
-                <label className="space-y-2 md:col-span-2"><span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Reference No</span><input className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.referenceNo} onChange={(e) => handleHeaderChange('referenceNo', e.target.value)} /></label>
+                <label className="space-y-2">
+                  <span
+                    className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Payment Term
+                  </span>
+                  <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    value={header.paymentTerm}
+                    onChange={(e) => handleHeaderChange('paymentTerm', e.target.value)}>
+                    <option value="">{isLoadingCodes ? 'Loading payment terms...' : 'Select payment term'}</option>
+                    {paymentTermCodes.map((paymentTerm) => <option key={paymentTerm.termId}
+                      value={paymentTerm.termId}>{paymentTerm.termId} - {paymentTerm.termName || paymentTerm.shortName || 'Unnamed'}
+                    </option>)}
+                  </select>
+                </label>
               </div>
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {subtypeFields.map((field) => (
                 <label key={field.key} className="space-y-2">
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{field.label}</span>
-                  {field.key === 'profitPercent' ? (
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {field.label}
+                  </span>
+                  {field.key === 'margin' ? (
                     <>
                       <input
                         type="text"
@@ -613,9 +664,11 @@ export default function AllDocumentForm({
                         placeholder="Select or type margin"
                       />
                       <datalist id="quotation-margin-options">
-                        {QUOTATION_MARGIN_PRESETS.map((margin) => (
-                          <option key={margin} value={margin} />
-                        ))}
+                        {
+                          QUOTATION_MARGIN_PRESETS.map((margin) => (
+                            <option key={margin} value={margin} />
+                          ))
+                        }
                       </datalist>
                     </>
                   ) : (
@@ -632,24 +685,51 @@ export default function AllDocumentForm({
 
             <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4">
               <label className="space-y-2 block">
-                <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Remark</span>
-                <textarea className="min-h-[96px] w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black" value={header.remark} onChange={(e) => handleHeaderChange('remark', e.target.value)} />
+                <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Remark
+                </span>
+                <textarea className="min-h-[96px] w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                  value={header.remark} onChange={(e) => handleHeaderChange('remark', e.target.value)} />
               </label>
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}><p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Customer Name</p><p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{customerDisplay || '-'}</p></div>
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}><p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Ship To</p><p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{shipToDisplay || '-'}</p></div>
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}><p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{documentType === 'quotation' ? 'Margin (%)' : 'Subtotal'}</p><p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{documentType === 'quotation' ? `${parseNumberInput(header.margin).toFixed(2)}%` : totalCost.toFixed(2)}</p></div>
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}><p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Amount</p><p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{total.toFixed(2)}</p></div>
+              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Customer Name</p>
+                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{customerDisplay || '-'}</p>
+              </div>
+              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Ship To</p>
+                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{shipToDisplay || '-'}</p>
+              </div>
+              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {documentType === 'quotation' ? 'Margin (%)' : 'Subtotal'}</p>
+                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {documentType === 'quotation' ? `${parseNumberInput(header.margin).toFixed(2)}%` : totalCost.toFixed(2)}
+                </p>
+              </div>
+              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Amount</p>
+                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {total.toFixed(2)}
+                </p>
+              </div>
             </div>
 
             <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white">
-              <div className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-600'}`} style={{ gridTemplateColumns: documentType === 'quotation' ? '44px 100px minmax(220px,1.6fr) 100px 120px 120px 130px 56px' : '44px 100px minmax(240px,1.8fr) 120px 120px 130px 56px' }}>
+              <div
+                className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-600'}`}
+                style={{
+                  gridTemplateColumns: documentType === 'quotation' ?
+                    '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
+                    '44px 100px minmax(240px,1.8fr) 120px 120px 130px 56px'
+                }}
+              >
                 <div>Item</div>
                 <div>Code</div>
                 <div>Description</div>
-                <div>Quantity</div>
+                <div>Qty</div>
                 {documentType === 'quotation' ?
                   <>
                     <div>Margin(%)</div>
@@ -663,19 +743,21 @@ export default function AllDocumentForm({
               </div>
               {items.map((item, index) => (
                 <div key={`document-item-${index}`}
-                  className={`grid items-start gap-3 px-4 py-3 
+                  className={`grid items-start gap-1 px-4 py-3 
                   ${darkMode ? 'border-t border-gray-700 bg-gray-800' : 'border-t border-gray-200 bg-white'}`}
 
                   style={{
                     gridTemplateColumns: documentType === 'quotation' ?
-                      '44px 100px minmax(220px,1.6fr) 100px 120px 120px 130px 56px' : '44px 100px minmax(240px,1.8fr) 120px 120px 130px 56px'
-                  }}>
-
+                      '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
+                      '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px'
+                  }}
+                >
                   <div className={`pt-2 text-sm font-semibold
-                    ${darkMode ? 'text-white' : 'text-gray-900'}`}>{index + 1}</div>
-                  <button type="button" 
-                  onClick={() => { setSelectedItemIndex(index); setProductModalOpen(true); }} 
-                  className={`rounded-lg border px-3 py-2 text-left text-xs font-medium 
+                    ${darkMode ? 'text-white' : 'text-gray-900'}`}>{index + 1}
+                  </div>
+                  <button type="button"
+                    onClick={() => { setSelectedItemIndex(index); setProductModalOpen(true); }}
+                    className={`rounded-lg border px-3 py-2 text-left text-xs font-medium 
                   ${darkMode ? 'border-blue-500/40 bg-blue-500/10 text-blue-200' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
                     {item.itemCode || item.id || 'Select...'}
                   </button>
@@ -693,12 +775,12 @@ export default function AllDocumentForm({
                     <>
                       <input type="number" step="0.01"
                         className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-right text-sm text-black"
-                        value={item.margin} 
+                        value={item.margin}
                         onChange={(e) => handleItemChange(index, 'margin', e.target.value)}
                       />
                       <input type="number" step="0.01"
                         className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-right text-sm text-black"
-                        value={item.cost} 
+                        value={item.cost}
                         onChange={(e) => handleItemChange(index, 'cost', e.target.value)}
                       />
                     </>
@@ -706,16 +788,17 @@ export default function AllDocumentForm({
                   <input type="number" step="0.01"
                     readOnly={documentType === 'quotation'}
                     className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm 
-                  ${documentType === 'quotation' ? 'bg-gray-100 text-gray-700' : 'bg-white text-black'}`}
+                    ${documentType === 'quotation' ? 'bg-gray-100 text-gray-700' : 'bg-white text-black'}`}
                     value={item.sellingPrice}
                     onChange={(e) => handleItemChange(index, 'sellingPrice', e.target.value)}
                   />
                   <input type="number" step="0.01"
                     readOnly={documentType === 'quotation'}
-                    className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm 
-                  ${documentType === 'quotation' ? 'bg-gray-100 text-gray-700' : 'bg-white text-black'}`}
+                    className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm w-full 
+                    ${documentType === 'quotation' ? 'bg-gray-100 text-gray-700' : 'bg-white text-black'}`}
                     value={item.totalSellingPrice}
-                    onChange={(e) => handleItemChange(index, 'total', e.target.value)} />
+                    onChange={(e) => handleItemChange(index, 'total', e.target.value)}
+                  />
                   <div className="flex justify-center pt-2">
                     {items.length > 1 ?
                       <button type="button"
@@ -725,29 +808,64 @@ export default function AllDocumentForm({
                   </div>
                 </div>
               ))}
-              <div className={`flex items-center justify-between border-t px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                <button type="button" onClick={addItemRow} className="rounded-lg border border-dashed border-purple-500 px-3 py-2 text-xs font-semibold text-purple-600 hover:bg-purple-50">+ Add Item</button>
-                <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Items: {printItems.length || items.length}</div>
+              <div className={`flex items-center justify-between border-t px-4 py-3 
+                ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                <button type="button"
+                  onClick={addItemRow}
+                  className="rounded-lg border border-dashed border-purple-500 px-3 py-2 text-xs font-semibold text-purple-600 hover:bg-purple-50">
+                  + Add Item
+                </button>
+                <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Items: {printItems.length || items.length}
+                </div>
               </div>
             </div>
           </fieldset>
 
           <div className="flex flex-wrap justify-end gap-3 border-t border-gray-200 pt-4">
-            {!isViewMode ? <button type="button" onClick={() => void handleSave()} className="rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">Save {typeLabel}</button> : null}
-            {isViewMode ? <button type="button" onClick={() => setMode('edit')} className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">Enable Edit</button> : null}
-            {isViewMode ? <button type="button" onClick={() => void handlePrint()} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">Print</button> : null}
-            <button type="button" onClick={async () => {
-              const confirmed = await showAppConfirm({
-                title: 'Cancel Changes',
-                message: 'Any unsaved changes will be lost. Do you want to continue?',
-                confirmText: 'Yes, Cancel',
-                cancelText: 'No',
-                tone: 'warning',
-              });
-              if (confirmed) {
-                goBackToDocuments();
-              }
-            }} className="rounded-lg bg-gray-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700">Cancel</button>
+            {!isViewMode ?
+              <button
+                type="button"
+                onClick={() => void handleSave()}
+                className="rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
+                Save {typeLabel}
+              </button> :
+              null
+            }
+            {isViewMode ?
+              <button
+                type="button" onClick={() => setMode('edit')}
+                className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">
+                Enable Edit
+              </button> :
+              null
+            }
+            {isViewMode ?
+              <button
+                type="button"
+                onClick={() => void handlePrint()}
+                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+                Print
+              </button> :
+              null
+            }
+            <button
+              type="button"
+              onClick={async () => {
+                const confirmed = await showAppConfirm({
+                  title: 'Cancel Changes',
+                  message: 'Any unsaved changes will be lost. Do you want to continue?',
+                  confirmText: 'Yes, Cancel',
+                  cancelText: 'No',
+                  tone: 'warning',
+                });
+                if (confirmed) {
+                  goBackToDocuments();
+                }
+              }}
+              className="rounded-lg bg-gray-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700">
+              Cancel
+            </button>
           </div>
         </div>
       </div>

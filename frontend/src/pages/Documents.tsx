@@ -239,18 +239,18 @@ const buildInvoiceDraftFromQuotation = (quotation: any) => {
     linkedQuotationNumber: quotationNumber,
     items: Array.isArray(quotation?.items)
       ? quotation.items.map((item: any) => ({
-          id: item?.id || '',
-          itemCode: item?.itemCode || item?.id || '',
-          description: item?.description || '',
-          packing: item?.packing || '',
-          quantity: item?.quantity || '',
-          cost: item?.cost || '',
-          margin: item?.margin || '',
-          sellingPrice: item?.sellingPrice || '',
-          totalCost: item?.totalCost || '',
-          totalSellingPrice: item?.totalSellingPrice || '',
-          unitId: item?.unitId || '',
-        }))
+        id: item?.id || '',
+        itemCode: item?.itemCode || item?.id || '',
+        description: item?.description || '',
+        packing: item?.packing || '',
+        quantity: item?.quantity || '',
+        cost: item?.cost || '',
+        margin: item?.margin || '',
+        sellingPrice: item?.sellingPrice || '',
+        totalCost: item?.totalCost || '',
+        totalSellingPrice: item?.totalSellingPrice || '',
+        unitId: item?.unitId || '',
+      }))
       : [],
   };
 };
@@ -282,16 +282,16 @@ const buildReceiptDraftFromInvoice = (invoice: any) => {
     linkedInvoiceNumber: invoiceNumber,
     items: Array.isArray(invoice?.items)
       ? invoice.items.map((item: any) => ({
-          id: item?.id || '',
-          itemCode: item?.itemCode || item?.id || '',
-          description: item?.description || '',
-          quantity: item?.quantity || '',
-          margin: item?.margin || '',
-          sellingPrice: item?.sellingPrice || '',
-          totalCost: item?.totalCost || '',
-          totalSellingPrice: item?.totalSellingPrice || '',
-          unitId: item?.unitId || '',
-        }))
+        id: item?.id || '',
+        itemCode: item?.itemCode || item?.id || '',
+        description: item?.description || '',
+        quantity: item?.quantity || '',
+        margin: item?.margin || '',
+        sellingPrice: item?.sellingPrice || '',
+        totalCost: item?.totalCost || '',
+        totalSellingPrice: item?.totalSellingPrice || '',
+        unitId: item?.unitId || '',
+      }))
       : [],
   };
 };
@@ -321,14 +321,12 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     try {
       const results = await Promise.allSettled(DOCUMENT_TYPES.map((type) => documentService.getAll(type)));
       const nextCollections = createEmptyCollections();
-
       results.forEach((result, index) => {
         const type = DOCUMENT_TYPES[index];
         if (result.status === 'fulfilled') {
           nextCollections[type] = result.value?.data?.data || [];
         }
       });
-
       setDocumentsByType(nextCollections);
 
       if (results.some((result) => result.status === 'rejected')) {
@@ -370,17 +368,17 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     const keyword = search.trim().toLowerCase();
     return records.filter((record) => {
       const matchesKeyword = !keyword || [
-      record.documentNumber,
-      record.title,
-      record.customerName,
-      record.customer,
-      record.referenceNo,
-      record.status,
-      record.remark,
-      record.supplierName,
-      record.paymentReference,
-      record.assignedTo,
-    ].some((value) => String(value ?? '').toLowerCase().includes(keyword));
+        record.documentNumber,
+        record.title,
+        record.customerName,
+        record.customer,
+        record.referenceNo,
+        record.status,
+        record.remark,
+        record.supplierName,
+        record.paymentReference,
+        record.assignedTo,
+      ].some((value) => String(value ?? '').toLowerCase().includes(keyword));
 
       const matchesStatus = selectedType !== 'quotation'
         || statusFilter === 'All'
@@ -507,10 +505,10 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     const tone = record?.color === 'green'
       ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700')
       : record?.color === 'red'
-      ? (darkMode ? 'bg-red-500/15 text-red-300' : 'bg-red-100 text-red-700')
-      : record?.color === 'blue'
-      ? (darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700')
-      : (darkMode ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-700');
+        ? (darkMode ? 'bg-red-500/15 text-red-300' : 'bg-red-100 text-red-700')
+        : record?.color === 'blue'
+          ? (darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700')
+          : (darkMode ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-700');
 
     return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tone}`}>{status}</span>;
   };
@@ -554,13 +552,12 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                             key={type}
                             type="button"
                             onClick={() => handleSelectType(type)}
-                            className={`rounded-2xl border p-4 text-left transition-all ${
-                              isActive
-                                ? `${cardToneClasses[typeConfig.accent]} shadow-md`
-                                : darkMode
+                            className={`rounded-2xl border p-4 text-left transition-all ${isActive
+                              ? `${cardToneClasses[typeConfig.accent]} shadow-md`
+                              : darkMode
                                 ? 'border-gray-700 bg-gray-900 text-gray-300 hover:border-gray-500'
                                 : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-400'
-                            }`}
+                              }`}
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div>
@@ -594,11 +591,10 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                       <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
-                        className={`rounded-lg border px-4 py-2 text-sm ${
-                          darkMode
-                            ? 'border-gray-600 bg-gray-800 text-white'
-                            : 'border-gray-300 bg-white text-gray-900'
-                        }`}
+                        className={`rounded-lg border px-4 py-2 text-sm ${darkMode
+                          ? 'border-gray-600 bg-gray-800 text-white'
+                          : 'border-gray-300 bg-white text-gray-900'
+                          }`}
                       >
                         {QUOTATION_STATUS_FILTER_OPTIONS.map((statusOption) => (
                           <option key={statusOption} value={statusOption}>{statusOption}</option>
@@ -610,11 +606,10 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder={`Search ${config.label.toLowerCase()} number, title, customer, status`}
-                    className={`rounded-lg border px-4 py-2 text-sm ${
-                      darkMode
-                        ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-500'
-                        : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-400'
-                    }`}
+                    className={`rounded-lg border px-4 py-2 text-sm ${darkMode
+                      ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-500'
+                      : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-400'
+                      }`}
                   />
                   <button
                     type="button"
@@ -626,11 +621,10 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                   <button
                     type="button"
                     onClick={() => void loadDocuments()}
-                    className={`rounded-lg px-5 py-2 text-sm font-medium transition-colors ${
-                      darkMode
-                        ? 'border border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700'
-                        : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`rounded-lg px-5 py-2 text-sm font-medium transition-colors ${darkMode
+                      ? 'border border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700'
+                      : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     Reload
                   </button>
@@ -737,32 +731,70 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                       <p className={`mt-2 text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{selectedRecord.remark || '-'}</p>
                     </div>
 
-                    <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
-                      <div className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: '56px minmax(120px, 0.9fr) minmax(240px, 1.8fr) 120px 120px 120px' }}>
+                    <div className={`overflow-hidden rounded-2xl border 
+                      ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                      <div className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide 
+                        ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                        style={{ gridTemplateColumns: '56px 56px minmax(200px,1.8fr) 56px 120px 120px 120px 120px 100px 100px 100px' }}>
                         <div>Line</div>
-                        <div>Item</div>
+                        <div>ID</div>
                         <div>Description</div>
                         <div>Qty</div>
                         <div>Margin</div>
                         <div>Cost</div>
                         <div>Selling Price</div>
                         <div>Total Cost</div>
-                        <div>Total Selling Price</div>
                         <div>Unit</div>
                         <div>Total</div>
                       </div>
 
                       {selectedRecord.items?.length ? selectedRecord.items.map((item: any, index: number) => (
-                        <div key={`document-item-${selectedRecord.documentId}-${index}`} className={`grid px-4 py-3 text-sm ${darkMode ? 'border-t border-gray-700 text-gray-200' : 'border-t border-gray-200 text-gray-800'}`} style={{ gridTemplateColumns: '56px minmax(120px, 0.9fr) minmax(240px, 1.8fr) 120px 120px 120px' }}>
+                        <div key={`document-item-${selectedRecord.documentId}-${index}`}
+                          className={`grid px-4 py-3 text-sm 
+                          ${darkMode ? 'border-t border-gray-700 text-gray-200' :
+                              'border-t border-gray-200 text-gray-800'}`}
+                          style={{ gridTemplateColumns: '56px 56px minmax(200px,1.8fr) 56px 120px 120px 120px 120px 100px 100px 100px' }}>
                           <div>{item.lineNo || index + 1}</div>
-                          <div>{item.itemCode || item.id || '-'}</div>
+                          <div>{item.itemCode || '-'}</div>
                           <div>{item.description || '-'}</div>
                           <div>{item.quantity || '-'}</div>
                           <div>{item.margin || '-'}</div>
-                          <div>{item.cost || '-'}</div>
-                          <div>{item.sellingPrice || '-'}</div>
-                          <div>{item.totalCost || '-'}</div>
-                          <div>{item.totalSellingPrice || '-'}</div>
+                          <div>{item.cost ?
+                            Number(item.cost).toLocaleString(
+                              'en-US',
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '-'}
+                          </div>
+                          <div>{item.sellingPrice ?
+                            Number(item.sellingPrice).toLocaleString(
+                              'en-US',
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '-'}
+                          </div>
+                          <div>{item.totalCost ?
+                            Number(item.totalCost).toLocaleString(
+                              'en-US',
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '-'}
+                          </div>
+                          <div>{item.unit || '-'}</div>
+                          <div>{item.totalSellingPrice ?
+                            Number(item.totalSellingPrice).toLocaleString('en-US',
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '-'}
+                          </div>
                         </div>
                       )) : (
                         <div className={`px-4 py-8 text-center text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -807,9 +839,21 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                       <div>{renderStatus(record)}</div>
                       <div>฿{formatCurrency(record.total)}</div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" onClick={() => handleViewRecord(record)} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700">View</button>
+                        <button type="button"
+                          onClick={() => handleViewRecord(record)}
+                          className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700">
+                          View
+                        </button>
                         {record.documentType === 'quotation' ? (
-                          <button type="button" onClick={() => handleLinkQuotationToInvoice(record)} disabled={isLinkedQuotation(record)} className={`rounded-md px-3 py-2 text-xs font-medium text-white ${isLinkedQuotation(record) ? 'cursor-not-allowed bg-gray-500' : 'bg-violet-600 hover:bg-violet-700'}`}>{isLinkedQuotation(record) ? 'Linked' : 'Link Invoice'}</button>
+                          <button
+                            type="button"
+                            onClick={() => handleLinkQuotationToInvoice(record)}
+                            disabled={isLinkedQuotation(record)}
+                            className={`rounded-md px-3 py-2 text-xs font-medium text-white 
+                            ${isLinkedQuotation(record) ? 'cursor-not-allowed bg-gray-500' :
+                                'bg-violet-600 hover:bg-violet-700'}`}>
+                            {isLinkedQuotation(record) ? 'Linked' : 'Link Invoice'}
+                          </button>
                         ) : null}
                         {record.documentType === 'invoice' ? (
                           <button
