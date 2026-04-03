@@ -62,8 +62,8 @@ model Product {
   updatedAt     DateTime       @updatedAt @map("UpdatedAt")
   documentItems DocumentItem[]
 
-  @@unique([id])
-  @@index([id])
+  @@unique([productCode])
+  @@index([productCode])
 }
 
 model Destination {
@@ -124,7 +124,7 @@ model DocumentItem {
   documentNumber    String       @map("DocumentNumber") @db.Char(26)
   documentType      DocumentType @map("DocumentType")
   lineNo            Int          @map("LineNo")
-  productCode       String?      @map("ProductCode") @db.VarChar(26)
+  productCode       String?      @map("ProductCode") @db.VarChar(50)
   cost              Decimal?     @map("Cost") @db.Decimal(19, 4)
   quantity          Decimal?     @map("Quantity") @db.Decimal(19, 4)
   margin            Decimal?     @map("Margin") @db.Decimal(19, 4)
@@ -135,7 +135,7 @@ model DocumentItem {
   createdAt         DateTime     @default(now()) @map("CreatedAt")
   updatedAt         DateTime     @updatedAt @map("UpdatedAt")
   document          Document     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  product           Product?     @relation(fields: [productCode], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  product           Product?     @relation(fields: [productCode], references: [productCode], onDelete: SetNull, onUpdate: Cascade)
 
   @@unique([id, documentType, documentNumber, lineNo])
   @@index([documentNumber, lineNo, documentType])
