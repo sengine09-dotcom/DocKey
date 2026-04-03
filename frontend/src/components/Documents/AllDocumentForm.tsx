@@ -47,11 +47,11 @@ const QUOTATION_STATUS_OPTIONS = [
 ];
 
 const escapeHtml = (value: any) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
+.replace(/&/g, '&amp;')
+.replace(/</g, '&lt;')
+.replace(/>/g, '&gt;')
+.replace(/"/g, '&quot;')
+.replace(/'/g, '&#39;');
 
 const formatPrintDate = (value: any) => {
   if (!value) return '-';
@@ -70,15 +70,19 @@ const buildDefaultDocumentNumber = (documentType: MainDocumentType) =>
 const createEmptyItem = () => (
   {
     id: '',
-    itemCode: '',
-    description: '',
-    quantity: '',
+    productCode: '',
+    productName: '',
+    category: '',
+    brand: '',
+    model: '',
+    price: '',
     cost: '',
+    quantity: '',    
     margin: '',
     sellingPrice: '',
     totalCost: '',
     totalSellingPrice: '',
-    unitId: '',
+    unitID: '',
   }
 );
 
@@ -112,7 +116,7 @@ const calculateLineTotal = (quantity: any, unitPrice: any) => {
 };
 
 const getEmptyHeader = (documentType: MainDocumentType) => ({
-  documentId: '',
+  id: '',
   documentNumber: '',
   title: DOCUMENT_TYPE_LABELS[documentType],
   documentDate: getTodayDateInputValue(),
@@ -217,6 +221,9 @@ export default function AllDocumentForm({
         setPaymentTermCodes(paymentTermResponse.data.data || []);
         setProductCodes(productResponse.data.data || []);
         setCodeError(null);
+
+        console.log('Product codes xxx:', productResponse.data.data);
+
       } catch (_error) {
         setCodeError('Failed to load code lists');
       } finally {
@@ -241,7 +248,7 @@ export default function AllDocumentForm({
     setMode(initialData.__mode || 'edit');
     setHeader({
       ...getEmptyHeader(documentType),
-      documentId: initialData.documentId || initialData.id || '',
+      id: initialData.id || '',
       documentNumber: initialData.documentNumber || '',
       title: initialData.title || DOCUMENT_TYPE_LABELS[documentType],
       documentDate: initialData.documentDate ? String(initialData.documentDate).slice(0, 10) : getTodayDateInputValue(),
@@ -268,16 +275,16 @@ export default function AllDocumentForm({
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
       setItems(initialData.items.map((item: any) => ({
-        id: item.id || item.productId || '',
-        itemCode: item.itemCode || item.id || '',
-        description: item.description || '',
+        id: item.id || '',
+        productCode: item.productCode || '',
+        productName: item.productName || '',
         quantity: item.quantity || '',
         margin: item.margin || '',
         cost: item.cost || '',
         sellingPrice: item.sellingPrice || '',
         totalCost: item.totalCost || '',
         totalSellingPrice: item.totalSellingPrice || '',
-        unitId: item.unitId || '',
+        unitID: item.unitID || '',
       })));
     } else {
       setItems([createEmptyItem()]);
@@ -293,7 +300,7 @@ export default function AllDocumentForm({
   const tax = totalSellingPrice * (taxRate / 100);
   const total = totalSellingPrice + tax;
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
-  const printItems = items.filter((item) => item.id || item.itemCode || item.description || item.quantity || item.cost || item.totalCost);
+  const printItems = items.filter((item) => item.id || item.productName || item.quantity || item.cost || item.totalCost);
 
   const customerDisplay = (() => {
     const customerId = String(header.customer || '').trim();
@@ -351,9 +358,9 @@ export default function AllDocumentForm({
       const next = [...prev];
       next[selectedItemIndex] = {
         ...next[selectedItemIndex],
-        id: product.productId,
-        itemCode: product.productId,
-        description: product.productName || '',
+        id: product.id,
+        productCode: product.productCode || '',
+        productName: product.productName || '',
         margin: header.margin,
         cost: product.cost == null ? '' : Number(product.cost).toFixed(2),
         sellingPrice: documentType === 'quotation'
@@ -419,15 +426,15 @@ export default function AllDocumentForm({
           ${printItems.length === 0 ? '<tr><td colspan="6" class="col-center">-</td></tr>' : printItems.map((item, index) => `
             <tr>
               <td class="col-center">${index + 1}</td>
-              <td class="col-center">${escapeHtml(item.itemCode || item.id || '-')}</td>
-              <td>${escapeHtml(item.description || '-')}</td>
+              <td class="col-center">${escapeHtml(item.id || '-')}</td>
+              <td>${escapeHtml(item.productName || '-')}</td>
               <td class="col-right">${Number(item.quantity || 0).toFixed(3)}</td>
               <td class="col-right">${Number(item.margin || 0).toFixed(2)}</td>
               <td class="col-right">${Number(item.cost || 0).toFixed(2)}</td>
               <td class="col-right">${Number(item.sellingPrice || 0).toFixed(2)}</td>
               <td class="col-right">${Number(item.totalCost || 0).toFixed(2)}</td>
               <td class="col-right">${Number(item.totalSellingPrice || 0).toFixed(2)}</td>
-              <td class="col-center">${item.unitId || '-'}</td>
+              <td class="col-center">${item.unitID || '-'}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -487,7 +494,10 @@ export default function AllDocumentForm({
       return;
     }
 
-    const validItems = items.filter((item) => item.id || item.itemCode || item.description);
+    const validItems = items.filter((item) => item.id || item.productCode || item.productName);
+
+    console.log('validItems', validItems);
+    
     if (validItems.length === 0) {
       await showAppAlert({ title: 'Validation', message: 'Please add at least 1 item before saving.', tone: 'warning' });
       return;
@@ -496,8 +506,8 @@ export default function AllDocumentForm({
     const payload = {
       header: {
         ...header,
-        documentId: header.documentId || initialData?.documentId || initialData?.id || '',
-        documentNumber: header.documentId ? header.documentNumber : '',
+        id: header.id || '',
+        documentNumber: header.documentNumber || '',
         title: header.title || typeLabel,
         total,
         tax,
@@ -514,7 +524,7 @@ export default function AllDocumentForm({
       await showAppAlert({ title: 'Saved', message: `${typeLabel} saved successfully.`, tone: 'success' });
       setHeader((prev) => ({
         ...prev,
-        documentId: savedRecord.documentId || savedRecord.id || prev.documentId,
+        documentId: savedRecord.documentId || savedRecord.id,
         documentNumber: savedRecord.documentNumber || prev.documentNumber,
         title: savedRecord.title || prev.title,
       }));
@@ -719,11 +729,13 @@ export default function AllDocumentForm({
 
             <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white">
               <div
-                className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-600'}`}
+                className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide 
+                  ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-600'}`
+                }
                 style={{
                   gridTemplateColumns: documentType === 'quotation' ?
                     '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
-                    '44px 100px minmax(240px,1.8fr) 120px 120px 130px 56px'
+                    '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
                 }}
               >
                 <div>Item</div>
@@ -745,11 +757,10 @@ export default function AllDocumentForm({
                 <div key={`document-item-${index}`}
                   className={`grid items-start gap-1 px-4 py-3 
                   ${darkMode ? 'border-t border-gray-700 bg-gray-800' : 'border-t border-gray-200 bg-white'}`}
-
                   style={{
                     gridTemplateColumns: documentType === 'quotation' ?
                       '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
-                      '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px'
+                      '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
                   }}
                 >
                   <div className={`pt-2 text-sm font-semibold
@@ -759,10 +770,10 @@ export default function AllDocumentForm({
                     onClick={() => { setSelectedItemIndex(index); setProductModalOpen(true); }}
                     className={`rounded-lg border px-3 py-2 text-left text-xs font-medium 
                   ${darkMode ? 'border-blue-500/40 bg-blue-500/10 text-blue-200' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                    {item.itemCode || item.id || 'Select...'}
+                    {item.productCode || 'Select...'}
                   </button>
                   <input className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
-                    value={item.description}
+                    value={item.productName}
                     placeholder="Description"
                     onChange={(e) => handleItemChange(index, 'description', e.target.value)}
                   />

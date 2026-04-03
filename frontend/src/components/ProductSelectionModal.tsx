@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 
 interface Product {
-  productId: string;
+  productCode: string;
   productName: string;
   [key: string]: any;
 }
@@ -16,15 +16,8 @@ interface ProductSelectionModalProps {
 }
 
 const buildProductName = (product: Product) => {
-  const marking = String(product.marking || product.Marking || '').trim();
-  const type = String(product.type || product.Type || '').trim();
-  const fallback = String(product.productName || product.ProductName || product.productId || '').trim();
-  const combined = [marking, type].filter(Boolean).join(' ').trim();
-  return combined || fallback;
-};
-
-const buildProductPacking = (product: Product) => {
-  return String(product.bagSize || product.BagSize || '').trim();
+  const fallback = String(product.productName || product.productCode || '').trim();
+  return fallback;
 };
 
 export default function ProductSelectionModal({
@@ -38,15 +31,11 @@ export default function ProductSelectionModal({
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return products;
-    
+    if (!searchTerm.trim()) return products;    
     const term = searchTerm.toLowerCase();
     return products.filter((product) => {
-      const id = (product.productId || '').toLowerCase();
-      const name = (product.productName || '').toLowerCase();
       const formattedName = buildProductName(product).toLowerCase();
-      const bagSize = buildProductPacking(product).toLowerCase();
-      return id.includes(term) || name.includes(term) || formattedName.includes(term) || bagSize.includes(term);
+      return formattedName.includes(term);
     });
   }, [products, searchTerm]);
 
@@ -106,7 +95,7 @@ export default function ProductSelectionModal({
             <div className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
               {filteredProducts.map((product) => (
                 <button
-                  key={product.productId}
+                  key={product.productCode}
                   onClick={() => {
                     onSelect(product);
                     onClose();
@@ -118,13 +107,10 @@ export default function ProductSelectionModal({
                   }`}
                 >
                   <div>
-                    <div className="font-semibold text-sm">{product.productId}</div>
+                    <div className="font-semibold text-sm">{product.productCode}</div>
                     <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                       {buildProductName(product)}
-                    </div>
-                    <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                      Packing : {buildProductPacking(product) || '-'}
-                    </div>
+                    </div>                    
                     <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
                       Cost : {Number(product.cost || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
