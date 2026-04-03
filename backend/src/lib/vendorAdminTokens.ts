@@ -1,7 +1,7 @@
 // Vendor API base URL
 const vendorApiBaseUrl = (process.env.VENDOR_API_BASE_URL || 'http://localhost:5100/api').replace(/\/$/, '');
 
-const resolveStatusReason = (tokenRow: AdminInitTokenRow | null) => {
+const resolveStatusReason = (tokenRow: any | null) => {
   if (!tokenRow) {
     return 'not-found';
   }

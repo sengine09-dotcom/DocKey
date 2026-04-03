@@ -23,8 +23,8 @@ const parseString = (value: any) => {
 };
 
 const mapCustomer = (row: any) => ({
-  customerId: row.customerId,
-  customerCode: row.customerId || '',
+  customerId: row.customerCode,
+  customerCode: row.customerCode || '',
   agentId: '',
   customerName: row.customerName || '',
   shortName: row.branch || '',
@@ -52,7 +52,7 @@ const mapCustomer = (row: any) => ({
 });
 
 const mapProduct = (row: any) => ({
-  productId: row.productId,
+  productCode: row.productCode || '',
   productName: row.productName || '',
   marking: row.brand || '',
   type: row.category || '',
@@ -76,14 +76,14 @@ const mapProduct = (row: any) => ({
 });
 
 const mapDestination = (row: any) => ({
-  destId: row.destId,
+  destId: row.destinationCode,
   destination: row.destination || '',
   location: row.location || '',
   used: row.used || 'Y',
 });
 
 const mapPaymentTerm = (row: any) => ({
-  termId: row.termId,
+  termId: row.termCode,
   termName: row.termName || '',
   shortName: row.shortName || '',
   days: row.days || '',
@@ -117,33 +117,33 @@ const deleteEndUser = async (eUserId: string) => {
 const codeConfigs: Record<string, any> = {
   customer: {
     model: prisma.customer,
-    idField: 'customerId',
-    orderBy: { customerId: 'asc' },
+    idField: 'customerCode',
+    orderBy: { customerCode: 'asc' },
     mapRecord: mapCustomer,
     toData: (payload: any) => ({
-      customerId: parseString(payload.customerId || payload.companyId),
-      customerName: parseString(payload.customerName || payload.name) || 'Unnamed Customer',
-      contactName: parseString(payload.contactPerson || payload.contactName),
+      customerCode: parseString(payload.customerCode),
+      customerName: parseString(payload.customerName) || 'Unnamed Customer',
+      contactName: parseString(payload.contactName),
       phone: parseString(payload.phone),
       email: parseString(payload.email),
       address: parseString(payload.address),
-      taxId: parseString(payload.gstId || payload.taxId),
-      branch: parseString(payload.shortName || payload.branch),
-      createdAt: parseDate(payload.registerDate),
+      taxId: parseString(payload.taxId),
+      branch: parseString(payload.branch),
+      createdAt: parseDate(payload.createdAt),
       used: parseString(payload.used) || 'Y',
     }),
   },
   product: {
     model: prisma.product,
-    idField: 'productId',
-    orderBy: { productId: 'asc' },
+    idField: 'productCode',
+    orderBy: { productCode: 'asc' },
     mapRecord: mapProduct,
     toData: (payload: any) => ({
-      productId: parseString(payload.productId),
+      productCode: parseString(payload.productCode),
       productName: parseString(payload.productName),
-      category: parseString(payload.category || payload.type) || 'General',
-      brand: parseString(payload.brand || payload.marking) || 'General',
-      model: parseString(payload.model || payload.bagSize),
+      category: parseString(payload.category) || 'General',
+      brand: parseString(payload.brand) || 'General',
+      model: parseString(payload.model),
       price: parseNumber(payload.price) ?? 0,
       cost: parseNumber(payload.cost),
       stockQty: parseInteger(payload.stockQty) ?? 0,
@@ -153,11 +153,11 @@ const codeConfigs: Record<string, any> = {
   },
   destination: {
     model: prisma.destination,
-    idField: 'destId',
-    orderBy: { destId: 'asc' },
+    idField: 'destinationCode',
+    orderBy: { destinationCode: 'asc' },
     mapRecord: mapDestination,
     toData: (payload: any) => ({
-      destId: parseString(payload.destId),
+      destinationCode: parseString(payload.destinationCode),
       destination: parseString(payload.destination),
       location: parseString(payload.location),
       used: parseString(payload.used) || 'Y',
@@ -165,11 +165,11 @@ const codeConfigs: Record<string, any> = {
   },
   'payment-term': {
     model: prisma.paymentTerm,
-    idField: 'termId',
-    orderBy: { termId: 'asc' },
+    idField: 'termCode',
+    orderBy: { termCode: 'asc' },
     mapRecord: mapPaymentTerm,
     toData: (payload: any) => ({
-      termId: parseString(payload.termId),
+      termCode: parseString(payload.termId),
       termName: parseString(payload.termName),
       shortName: parseString(payload.shortName),
       days: parseString(payload.days),
@@ -194,6 +194,8 @@ class CodeController {
       }
 
       const rows = await config.model.findMany({ orderBy: config.orderBy });
+
+
       res.json({ success: true, data: rows.map(config.mapRecord) });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });

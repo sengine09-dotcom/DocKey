@@ -1,21 +1,22 @@
 -- CreateTable
 CREATE TABLE `User` (
-    `id` CHAR(26) NOT NULL,
-    `email` VARCHAR(191) NOT NULL,
-    `password` VARCHAR(191) NOT NULL,
-    `name` VARCHAR(191) NOT NULL,
-    `role` VARCHAR(191) NOT NULL DEFAULT 'user',
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
+    `ID` CHAR(26) NOT NULL,
+    `Email` VARCHAR(191) NOT NULL,
+    `Password` VARCHAR(255) NOT NULL,
+    `Name` VARCHAR(255) NOT NULL,
+    `Role` VARCHAR(50) NOT NULL DEFAULT 'user',
+    `CreatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `UpdatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `User_email_key`(`email`),
-    INDEX `User_email_idx`(`email`),
-    PRIMARY KEY (`id`)
+    UNIQUE INDEX `User_Email_key`(`Email`),
+    INDEX `User_Email_idx`(`Email`),
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Customer` (
-    `CustomerID` VARCHAR(6) NOT NULL,
+    `ID` VARCHAR(6) NOT NULL,
+    `CustomerCode` VARCHAR(50) NOT NULL,
     `CustomerName` VARCHAR(255) NOT NULL,
     `ContactName` VARCHAR(255) NULL,
     `Phone` VARCHAR(50) NULL,
@@ -27,14 +28,15 @@ CREATE TABLE `Customer` (
     `CreatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `UpdatedAt` DATETIME(3) NOT NULL,
 
-    INDEX `Customer_CustomerID_idx`(`CustomerID`),
-    UNIQUE INDEX `Customer_CustomerID_key`(`CustomerID`),
-    PRIMARY KEY (`CustomerID`)
+    INDEX `Customer_ID_idx`(`ID`),
+    UNIQUE INDEX `Customer_ID_key`(`ID`),
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Product` (
-    `ProductId` VARCHAR(6) NOT NULL,
+    `ID` VARCHAR(6) NOT NULL,
+    `ProductCode` VARCHAR(50) NOT NULL,
     `ProductName` VARCHAR(255) NOT NULL,
     `Category` VARCHAR(255) NOT NULL,
     `Brand` VARCHAR(255) NOT NULL,
@@ -47,38 +49,39 @@ CREATE TABLE `Product` (
     `CreatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `UpdatedAt` DATETIME(3) NOT NULL,
 
-    INDEX `Product_ProductId_idx`(`ProductId`),
-    UNIQUE INDEX `Product_ProductId_key`(`ProductId`),
-    PRIMARY KEY (`ProductId`)
+    INDEX `Product_ID_idx`(`ID`),
+    UNIQUE INDEX `Product_ID_key`(`ID`),
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Destination` (
-    `DestID` VARCHAR(6) NOT NULL,
+    `ID` VARCHAR(6) NOT NULL,
+    `DestinationCode` VARCHAR(50) NOT NULL,
     `Destination` VARCHAR(50) NULL,
     `Location` VARCHAR(50) NULL,
     `Used` VARCHAR(1) NULL,
 
-    PRIMARY KEY (`DestID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `PaymentTerm` (
-    `TermID` VARCHAR(6) NOT NULL,
+    `ID` VARCHAR(6) NOT NULL,
+    `TermCode` VARCHAR(50) NOT NULL,
     `TermName` VARCHAR(50) NULL,
     `ShortName` VARCHAR(20) NULL,
     `Days` VARCHAR(3) NULL,
     `Used` VARCHAR(1) NULL,
 
-    PRIMARY KEY (`TermID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Document` (
-    `DocumentID` CHAR(26) NOT NULL,
+    `ID` CHAR(26) NOT NULL,
     `DocumentType` ENUM('QUOTATION', 'INVOICE', 'RECEIPT', 'PURCHASE_ORDER', 'WORK_ORDER') NOT NULL,
     `DocumentNumber` VARCHAR(50) NOT NULL,
-    `LegacySourceId` VARCHAR(50) NULL,
     `Title` VARCHAR(255) NULL,
     `DocumentDate` DATETIME(3) NULL,
     `CustomerID` VARCHAR(10) NULL,
@@ -103,17 +106,16 @@ CREATE TABLE `Document` (
 
     INDEX `Document_DocumentType_DocumentDate_idx`(`DocumentType`, `DocumentDate`),
     UNIQUE INDEX `Document_DocumentType_DocumentNumber_key`(`DocumentType`, `DocumentNumber`),
-    UNIQUE INDEX `Document_DocumentType_LegacySourceId_key`(`DocumentType`, `LegacySourceId`),
-    PRIMARY KEY (`DocumentID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `DocumentItem` (
-    `DocumentItemID` CHAR(26) NOT NULL,
-    `DocumentID` CHAR(26) NOT NULL,
+    `ID` CHAR(26) NOT NULL,
+    `DocumentNumber` CHAR(26) NOT NULL,
+    `DocumentType` ENUM('QUOTATION', 'INVOICE', 'RECEIPT', 'PURCHASE_ORDER', 'WORK_ORDER') NOT NULL,
     `LineNo` INTEGER NOT NULL,
     `ProductID` VARCHAR(10) NULL,
-    `Description` VARCHAR(500) NULL,
     `Cost` DECIMAL(19, 4) NULL,
     `Quantity` DECIMAL(19, 4) NULL,
     `Margin` DECIMAL(19, 4) NULL,
@@ -124,57 +126,64 @@ CREATE TABLE `DocumentItem` (
     `CreatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `UpdatedAt` DATETIME(3) NOT NULL,
 
-    INDEX `DocumentItem_DocumentID_LineNo_idx`(`DocumentID`, `LineNo`),
-    UNIQUE INDEX `DocumentItem_DocumentItemID_key`(`DocumentItemID`),
-    PRIMARY KEY (`DocumentItemID`)
+    INDEX `DocumentItem_DocumentNumber_LineNo_DocumentType_idx`(`DocumentNumber`, `LineNo`, `DocumentType`),
+    UNIQUE INDEX `DocumentItem_ID_DocumentType_DocumentNumber_LineNo_key`(`ID`, `DocumentType`, `DocumentNumber`, `LineNo`),
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `QuotationDocument` (
-    `DocumentID` CHAR(26) NOT NULL,
-    `ValidUntil` DATETIME(3) NULL,
+    `ID` CHAR(26) NOT NULL,
+    `DocumentNumber` CHAR(26) NOT NULL,
     `AttentionTo` VARCHAR(255) NULL,
+    `LinkedInvoiceId` VARCHAR(26) NULL,
+    `LinkedInvoiceNumber` VARCHAR(50) NULL,
 
-    PRIMARY KEY (`DocumentID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `InvoiceDocument` (
-    `DocumentID` CHAR(26) NOT NULL,
+    `ID` CHAR(26) NOT NULL,
+    `DocumentNumber` CHAR(26) NOT NULL,
     `DueDate` DATETIME(3) NULL,
     `DoNo` VARCHAR(255) NULL,
-    `MonitorReference` VARCHAR(20) NULL,
-    `StatusOnline` INTEGER NULL,
-    `LegacyInvoiceNo` VARCHAR(50) NULL,
+    `LinkedQuotationId` VARCHAR(26) NULL,
+    `LinkedQuotationNumber` VARCHAR(50) NULL,
+    `LinkedReceiptId` VARCHAR(26) NULL,
+    `LinkedReceiptNumber` VARCHAR(50) NULL,
 
-    PRIMARY KEY (`DocumentID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `ReceiptDocument` (
-    `DocumentID` CHAR(26) NOT NULL,
+    `ID` CHAR(26) NOT NULL,
+    `DocumentNumber` CHAR(26) NOT NULL,
     `ReceivedDate` DATETIME(3) NULL,
     `PaymentReference` VARCHAR(100) NULL,
 
-    PRIMARY KEY (`DocumentID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `PurchaseOrderDocument` (
-    `DocumentID` CHAR(26) NOT NULL,
+    `ID` CHAR(26) NOT NULL,
+    `DocumentNumber` CHAR(26) NOT NULL,
     `SupplierName` VARCHAR(255) NULL,
     `DeliveryDate` DATETIME(3) NULL,
 
-    PRIMARY KEY (`DocumentID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `WorkOrderDocument` (
-    `DocumentID` CHAR(26) NOT NULL,
+    `ID` CHAR(26) NOT NULL,
+    `DocumentNumber` CHAR(26) NOT NULL,
     `ScheduledDate` DATETIME(3) NULL,
     `AssignedTo` VARCHAR(255) NULL,
 
-    PRIMARY KEY (`DocumentID`)
+    PRIMARY KEY (`ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -191,19 +200,22 @@ CREATE TABLE `SystemActivation` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE `DocumentItem` ADD CONSTRAINT `DocumentItem_DocumentID_fkey` FOREIGN KEY (`DocumentID`) REFERENCES `Document`(`DocumentID`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `DocumentItem` ADD CONSTRAINT `DocumentItem_ID_fkey` FOREIGN KEY (`ID`) REFERENCES `Document`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `QuotationDocument` ADD CONSTRAINT `QuotationDocument_DocumentID_fkey` FOREIGN KEY (`DocumentID`) REFERENCES `Document`(`DocumentID`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `DocumentItem` ADD CONSTRAINT `DocumentItem_ProductID_fkey` FOREIGN KEY (`ProductID`) REFERENCES `Product`(`ID`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `InvoiceDocument` ADD CONSTRAINT `InvoiceDocument_DocumentID_fkey` FOREIGN KEY (`DocumentID`) REFERENCES `Document`(`DocumentID`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `QuotationDocument` ADD CONSTRAINT `QuotationDocument_ID_fkey` FOREIGN KEY (`ID`) REFERENCES `Document`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `ReceiptDocument` ADD CONSTRAINT `ReceiptDocument_DocumentID_fkey` FOREIGN KEY (`DocumentID`) REFERENCES `Document`(`DocumentID`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `InvoiceDocument` ADD CONSTRAINT `InvoiceDocument_ID_fkey` FOREIGN KEY (`ID`) REFERENCES `Document`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `PurchaseOrderDocument` ADD CONSTRAINT `PurchaseOrderDocument_DocumentID_fkey` FOREIGN KEY (`DocumentID`) REFERENCES `Document`(`DocumentID`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `ReceiptDocument` ADD CONSTRAINT `ReceiptDocument_ID_fkey` FOREIGN KEY (`ID`) REFERENCES `Document`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `WorkOrderDocument` ADD CONSTRAINT `WorkOrderDocument_DocumentID_fkey` FOREIGN KEY (`DocumentID`) REFERENCES `Document`(`DocumentID`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `PurchaseOrderDocument` ADD CONSTRAINT `PurchaseOrderDocument_ID_fkey` FOREIGN KEY (`ID`) REFERENCES `Document`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `WorkOrderDocument` ADD CONSTRAINT `WorkOrderDocument_ID_fkey` FOREIGN KEY (`ID`) REFERENCES `Document`(`ID`) ON DELETE CASCADE ON UPDATE CASCADE;

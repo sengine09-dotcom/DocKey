@@ -1,3 +1,4 @@
+// This is a backup of the current schema before major changes
 generator client {
   provider   = "prisma-client-js"
   engineType = "binary"
@@ -25,7 +26,7 @@ model User {
   createdAt DateTime @default(now()) @map("CreatedAt")
   updatedAt DateTime @updatedAt @map("UpdatedAt")
 
-  @@index([email])
+  @@unique([id])
 }
 
 model Customer {
@@ -34,16 +35,15 @@ model Customer {
   customerName String   @map("CustomerName") @db.VarChar(255)
   contactName  String?  @map("ContactName") @db.VarChar(255)
   phone        String?  @map("Phone") @db.VarChar(50)
-  email        String?  @map("Email") @db.VarChar(100)
-  address      String?  @map("Address") @db.Text
+  email        String?  @map("Email") @db.VarChar(191)
+  address      String?  @map("Address") @db.VarChar(500)
   taxId        String?  @map("TaxID") @db.VarChar(50)
-  branch       String?  @map("Branch") @db.VarChar(50)
+  branch       String?  @map("Branch") @db.VarChar(255)
   used         String?  @map("Used") @db.VarChar(1)
   createdAt    DateTime @default(now()) @map("CreatedAt")
   updatedAt    DateTime @updatedAt @map("UpdatedAt")
 
   @@unique([id])
-  @@index([id])
 }
 
 model Product {
@@ -60,10 +60,8 @@ model Product {
   maxQty        Int            @default(0) @map("MaxQty")
   createdAt     DateTime       @default(now()) @map("CreatedAt")
   updatedAt     DateTime       @updatedAt @map("UpdatedAt")
-  documentItems DocumentItem[]
 
   @@unique([id])
-  @@index([id])
 }
 
 model Destination {
@@ -84,36 +82,30 @@ model PaymentTerm {
 }
 
 model Document {
-  id                    String                 @id @map("ID") @db.Char(26)
-  documentType          DocumentType           @map("DocumentType")
-  documentNumber        String                 @map("DocumentNumber") @db.VarChar(50)
-  title                 String?                @map("Title") @db.VarChar(255)
-  documentDate          DateTime?              @map("DocumentDate")
-  customerId            String?                @map("CustomerID") @db.VarChar(10)
-  billTo                String?                @map("BillTo") @db.VarChar(255)
-  shipTo                String?                @map("ShipTo") @db.VarChar(255)
-  destinationId         String?                @map("DestinationID") @db.VarChar(10)
-  paymentTermId         String?                @map("PaymentTermID") @db.VarChar(10)
-  paymentMethod         String?                @map("PaymentMethod") @db.VarChar(100)
-  referenceNo           String?                @map("ReferenceNo") @db.VarChar(100)
-  status                String?                @map("Status") @db.VarChar(30)
-  remark                String?                @map("Remark") @db.VarChar(500)
-  totalCost             Decimal?               @map("TotalCost") @db.Decimal(19, 4)
-  totalSellingPrice     Decimal?               @map("TotalSellingPrice") @db.Decimal(19, 4)
-  totalProfit           Decimal?               @map("TotalProfit") @db.Decimal(19, 4)
-  margin                Decimal?               @map("Margin") @db.Decimal(19, 4)
-  taxRate               Decimal?               @map("TaxRate") @db.Decimal(10, 4)
-  taxAmount             Decimal?               @map("TaxAmount") @db.Decimal(19, 4)
-  totalAmount           Decimal?               @map("TotalAmount") @db.Decimal(19, 4)
-  totalQuantity         Decimal?               @map("TotalQuantity") @db.Decimal(18, 2)
-  createdAt             DateTime               @default(now()) @map("CreatedAt")
-  updatedAt             DateTime               @updatedAt @map("UpdatedAt")
-  items                 DocumentItem[]
-  quotationDocument     QuotationDocument?
-  invoiceDocument       InvoiceDocument?
-  receiptDocument       ReceiptDocument?
-  purchaseOrderDocument PurchaseOrderDocument?
-  workOrderDocument     WorkOrderDocument?
+  id                String                @id @map("ID") @db.Char(26)
+  documentNumber    String                @map("DocumentNumber") @db.Char(26)
+  documentType     DocumentType           @map("DocumentType")
+  documentDate     DateTime              @default(now()) @map("DocumentDate")
+  customerId       String?               @map("CustomerID") @db.VarChar(26)
+  title            String?               @map("Title") @db.VarChar(255)
+  billTo           String?               @map("BillTo") @db.VarChar(500)
+  shipTo           String?               @map("ShipTo") @db.VarChar(500)
+  destination       String?               @map("Destination") @db.VarChar(255)
+  paymentTerm      String?               @map("PaymentTerm") @db.VarChar(26)
+  paymentMethod    String?               @map("PaymentMethod") @db.VarChar(100)
+  referenceNo      String?               @map("ReferenceNo") @db.VarChar(100)
+  status           String?               @map("Status") @db.VarChar(30)
+  remark            String?               @map("Remark") @db.VarChar(500)
+  totalCost        Decimal?             @map("TotalCost") @db.Decimal(19, 4)
+  totalSellingPrice Decimal?             @map("TotalSellingPrice") @db.Decimal(19, 4)
+  totalProfit      Decimal?             @map("TotalProfit") @db.Decimal(19, 4)
+  margin           Decimal?             @map("Margin") @db.Decimal(19, 4)
+  taxRate          Decimal?             @map("TaxRate") @db.Decimal(10, 4)
+  taxAmount        Decimal?             @map("TaxAmount") @db.Decimal(19, 4)
+  totalAmount       Decimal?             @map("TotalAmount") @db.Decimal(19, 4)
+  totalQuantity     Decimal?             @map("TotalQuantity") @db.Decimal(18, 2)
+  createdAt        DateTime              @default(now()) @map("CreatedAt")
+  updatedAt        DateTime              @updatedAt @map("UpdatedAt")
 
   @@unique([documentType, documentNumber])
   @@index([documentType, documentDate])
@@ -124,7 +116,7 @@ model DocumentItem {
   documentNumber    String       @map("DocumentNumber") @db.Char(26)
   documentType      DocumentType @map("DocumentType")
   lineNo            Int          @map("LineNo")
-  productCode       String?      @map("ProductCode") @db.VarChar(26)
+  productCode       String?      @map("ProductCode") @db.VarChar(50)
   cost              Decimal?     @map("Cost") @db.Decimal(19, 4)
   quantity          Decimal?     @map("Quantity") @db.Decimal(19, 4)
   margin            Decimal?     @map("Margin") @db.Decimal(19, 4)
@@ -134,8 +126,6 @@ model DocumentItem {
   unitId            String?      @map("UnitID") @db.VarChar(10)
   createdAt         DateTime     @default(now()) @map("CreatedAt")
   updatedAt         DateTime     @updatedAt @map("UpdatedAt")
-  document          Document     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  product           Product?     @relation(fields: [productCode], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@unique([id, documentType, documentNumber, lineNo])
   @@index([documentNumber, lineNo, documentType])
@@ -147,7 +137,6 @@ model QuotationDocument {
   attentionTo         String?  @map("AttentionTo") @db.VarChar(255)
   linkedInvoiceId     String?  @map("LinkedInvoiceId") @db.VarChar(26)
   linkedInvoiceNumber String?  @map("LinkedInvoiceNumber") @db.VarChar(50)
-  document            Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model InvoiceDocument {
@@ -157,7 +146,6 @@ model InvoiceDocument {
   doNo                String?   @map("DoNo") @db.VarChar(255)
   linkedReceiptId     String?   @map("LinkedReceiptId") @db.VarChar(26)
   linkedReceiptNumber String?   @map("LinkedReceiptNumber") @db.VarChar(50)
-  document            Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model ReceiptDocument {
@@ -165,7 +153,6 @@ model ReceiptDocument {
   documentNumber   String    @map("DocumentNumber") @db.Char(26)
   receivedDate     DateTime? @map("ReceivedDate")
   paymentReference String?   @map("PaymentReference") @db.VarChar(100)
-  document         Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model PurchaseOrderDocument {
@@ -173,15 +160,13 @@ model PurchaseOrderDocument {
   documentNumber String    @map("DocumentNumber") @db.Char(26)
   supplierName   String?   @map("SupplierName") @db.VarChar(255)
   deliveryDate   DateTime? @map("DeliveryDate")
-  document       Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model WorkOrderDocument {
   id             String    @id @map("ID") @db.Char(26)
   documentNumber String    @map("DocumentNumber") @db.Char(26)
   scheduledDate  DateTime? @map("ScheduledDate")
-  assignedTo     String?   @map("AssignedTo") @db.VarChar(255)
-  document       Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  assignedTo    String?   @map("AssignedTo") @db.VarChar(255)
 }
 
 model SystemActivation {
