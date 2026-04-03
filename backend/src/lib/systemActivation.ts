@@ -15,12 +15,12 @@ let systemActivationTableReady = false;
 const isMissingSystemActivationTableError = (error: any) => {
   const prismaCode = String(error?.code || error?.meta?.code || '').trim();
   const message = String(error?.message || '').toLowerCase();
-  return prismaCode === '1146' || message.includes("tblsystemactivation") && message.includes("doesn't exist");
+  return prismaCode === '1146' || message.includes("systemactivation") && message.includes("doesn't exist");
 };
 
 const createSystemActivationTable = async () => {
   await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS tblSystemActivation (
+    CREATE TABLE IF NOT EXISTS SystemActivation (
       id CHAR(26) NOT NULL,
       adminToken VARCHAR(191) NOT NULL,
       adminEmail VARCHAR(191) NULL,
@@ -61,7 +61,7 @@ export const ensureSystemActivationTableExists = async (force = false) => {
 export const getStoredSystemActivation = async () => {
   const rows = await withSystemActivationTable(() => prisma.$queryRawUnsafe<SystemActivationRow[]>(`
       SELECT id, adminToken, adminEmail, activatedAt, createdAt, updatedAt
-      FROM tblSystemActivation
+      FROM SystemActivation
       ORDER BY activatedAt DESC
       LIMIT 1
     `));
@@ -71,10 +71,10 @@ export const getStoredSystemActivation = async () => {
 
 export const saveSystemActivation = async (adminToken: string, adminEmail: string) => {
   await withSystemActivationTable(() => prisma.$transaction([
-      prisma.$executeRawUnsafe(`DELETE FROM tblSystemActivation`),
+      prisma.$executeRawUnsafe(`DELETE FROM SystemActivation`),
       prisma.$executeRawUnsafe(
         `
-          INSERT INTO tblSystemActivation (id, adminToken, adminEmail, activatedAt, createdAt, updatedAt)
+          INSERT INTO SystemActivation (id, adminToken, adminEmail, activatedAt, createdAt, updatedAt)
           VALUES (?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
         `,
         ulid(),
@@ -85,5 +85,5 @@ export const saveSystemActivation = async (adminToken: string, adminEmail: strin
 };
 
 export const clearSystemActivation = async () => {
-  await withSystemActivationTable(() => prisma.$executeRawUnsafe(`DELETE FROM tblSystemActivation`));
+  await withSystemActivationTable(() => prisma.$executeRawUnsafe(`DELETE FROM SystemActivation`));
 };
