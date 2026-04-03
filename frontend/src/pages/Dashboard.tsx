@@ -2,30 +2,73 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
 import invoiceService from '../services/invoiceService';
 import documentService from '../services/documentService';
+import dashboardService from '../services/dashboardService';
 import useThemePreference from '../hooks/useThemePreference';
 
 export default function Dashboard({ onNavigate = () => {} }: any) {
   const [documents, setDocuments] = useState<any[]>([]);
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [dashboardData, setDashboardData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useThemePreference();
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const [documentsResult, invoicesResult] = await Promise.allSettled([
-        documentService.getAll('work_order'),
-        invoiceService.getAll(),
-      ]);
-      setDocuments(documentsResult.status === 'fulfilled' ? (documentsResult.value?.data?.data || []) : []);
-      setInvoices(invoicesResult.status === 'fulfilled' ? (invoicesResult.value?.data?.data || []) : []);
-      setIsLoading(false);
+      try {
+        console.log('[DEBUG] Dashboard: Starting data fetch');
+        
+        const [documentsResult, dashboardResult] = await Promise.allSettled([
+          documentService.getAll('work_order'),
+          dashboardService.getMetrics(),
+        ]);
+        
+        console.log('[DEBUG] Dashboard: API results:', {
+          documentsResult: documentsResult.status,
+          dashboardResult: dashboardResult.status,
+          dashboardData: dashboardResult.status === 'fulfilled' ? dashboardResult.value?.data : null
+        });
+        
+        setDocuments(documentsResult.status === 'fulfilled' ? (documentsResult.value?.data?.data || []) : []);
+        
+        if (dashboardResult.status === 'fulfilled') {
+          console.log('[DEBUG] Dashboard: Setting dashboard data:', dashboardResult.value?.data?.data);
+          setDashboardData(dashboardResult.value?.data?.data || {});
+        } else if (dashboardResult.status === 'rejected') {
+          console.error('[DEBUG] Dashboard: Dashboard API failed:', dashboardResult.reason);
+        }
+      } catch (error) {
+        console.error('[DEBUG] Dashboard fetch error:', error);
+      } finally {
+        setIsLoading(false);
+      }
     };
     fetchData();
   }, []);
 
   const activeWorkOrders = documents.filter((document: any) => (document.status || '').toLowerCase() !== 'completed');
-  const totalDocs = documents.length + invoices.length;
+  
+  // Get data from backend
+  const businessMetrics = dashboardData?.businessMetrics || {
+    totalRevenue: 0,
+    totalCost: 0,
+    netProfit: 0,
+    completedSales: 0,
+    potentialRevenue: 0,
+    potentialProfit: 0
+  };
+  
+  const documentCounts = dashboardData?.documentCounts || {
+    total: 0,
+    quotations: 0,
+    invoices: 0,
+    receipts: 0
+  };
+  
+  const documentsData = dashboardData?.documents || {
+    quotations: [],
+    invoices: [],
+    receipts: []
+  };
 
   const StatCard = ({ title, value, icon, bgClass, textClass }: any) => (
     <div className={`rounded-xl border p-6 flex items-center gap-5 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}>
@@ -58,18 +101,49 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
             <>
               {/* Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                <StatCard title="Total Documents" value={totalDocs} icon="📁"
+                <StatCard title="Total Documents" value={documentCounts.total} icon="📁"
                   bgClass={darkMode ? 'bg-blue-900/40' : 'bg-blue-100'}
                   textClass={darkMode ? 'text-blue-300' : 'text-blue-700'} />
                 <StatCard title="Work Orders" value={documents.length} icon="🛠️"
                   bgClass={darkMode ? 'bg-indigo-900/40' : 'bg-indigo-100'}
                   textClass={darkMode ? 'text-indigo-300' : 'text-indigo-700'} />
-                <StatCard title="Invoice Documents" value={invoices.length} icon="🧾"
+                <StatCard title="Invoice Documents" value={documentCounts.invoices} icon="🧾"
                   bgClass={darkMode ? 'bg-purple-900/40' : 'bg-purple-100'}
                   textClass={darkMode ? 'text-purple-300' : 'text-purple-700'} />
                 <StatCard title="Active Work Orders" value={activeWorkOrders.length} icon="📌"
                   bgClass={darkMode ? 'bg-yellow-900/40' : 'bg-yellow-100'}
                   textClass={darkMode ? 'text-yellow-300' : 'text-yellow-700'} />
+              </div>
+
+              {/* Profit/Loss Summary Cards */}
+              <div>
+                <h2 className={`text-lg font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>💰 Business Metrics Summary</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  <StatCard 
+                    title="Total Revenue (QU→INV)" 
+                    value={`฿${businessMetrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    icon="💵"
+                    bgClass={darkMode ? 'bg-green-900/40' : 'bg-green-100'}
+                    textClass={darkMode ? 'text-green-300' : 'text-green-700'} />
+                  <StatCard 
+                    title="Total Cost (QU→INV)" 
+                    value={`฿${businessMetrics.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    icon="💸"
+                    bgClass={darkMode ? 'bg-red-900/40' : 'bg-red-100'}
+                    textClass={darkMode ? 'text-red-300' : 'text-red-700'} />
+                  <StatCard 
+                    title="Net Profit (INV→REC)" 
+                    value={`฿${businessMetrics.netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    icon={businessMetrics.netProfit >= 0 ? "📈" : "📉"}
+                    bgClass={businessMetrics.netProfit >= 0 ? (darkMode ? 'bg-emerald-900/40' : 'bg-emerald-100') : (darkMode ? 'bg-red-900/40' : 'bg-red-100')}
+                    textClass={businessMetrics.netProfit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')} />
+                  <StatCard 
+                    title="Completed Sales (INV→REC)" 
+                    value={`${businessMetrics.completedSales} deals`} 
+                    icon="🤝"
+                    bgClass={darkMode ? 'bg-blue-900/40' : 'bg-blue-100'}
+                    textClass={darkMode ? 'text-blue-300' : 'text-blue-700'} />
+                </div>
               </div>
 
               {/* Work Order Documents Table */}
@@ -127,13 +201,135 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                 )}
               </div>
 
-              {/* Invoice Documents Table */}
+              {/* Receipt Documents Table (Paid) */}
               <div className={`rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm overflow-hidden`}>
                 <div className={`px-6 py-4 border-b flex items-center justify-between ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                  <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>🧾 Invoice Documents</h2>
+                  <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>🧾 Receipt Documents (Paid)</h2>
+                  <button onClick={() => onNavigate('documents', { selectedType: 'receipt' })} className="text-sm text-blue-500 hover:text-blue-600 font-medium">View All →</button>
+                </div>
+                {documentsData.receipts.length === 0 ? (
+                  <div className={`px-6 py-10 text-center text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>No receipt documents yet (no payments received)</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className={`${darkMode ? 'bg-gray-700/50 text-gray-400' : 'bg-gray-50 text-gray-500'} text-xs uppercase`}>
+                          <th className="px-6 py-3 text-left">Receipt No</th>
+                          <th className="px-6 py-3 text-left">Customer</th>
+                          <th className="px-6 py-3 text-left">Received Date</th>
+                          <th className="px-6 py-3 text-right">Amount</th>
+                          <th className="px-6 py-3 text-right">Profit</th>
+                          <th className="px-6 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
+                        {documentsData.receipts.slice(0, 10).map((rec: any, idx: number) => {
+                          // Find linked invoice
+                          const linkedInvoice = documentsData.invoices.find(inv => 
+                            inv.documentNumber === rec.referenceNo || 
+                            inv.documentNumber === rec.receiptDocument?.linkedInvoiceNumber
+                          );
+                          
+                          if (!linkedInvoice) return null; // Skip receipts without linked invoices
+                          
+                          // Find the original quotation
+                          const linkedQuotation = documentsData.quotations.find(q => 
+                            q.documentNumber === linkedInvoice.invoiceDocument?.linkedQuotationNumber
+                          );
+                          
+                          if (!linkedQuotation) return null; // Skip without original quotation
+                          
+                          const profit = Number(rec.totalSellingPrice || rec.total || rec.totalAmount || 0) - Number(linkedQuotation.totalCost || 0);
+                          return (
+                            <tr key={rec.documentId || rec.id || rec.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
+                              <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{rec.documentNumber || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{rec.customer || rec.customerName || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {rec.receiptDocument?.receivedDate ? new Date(rec.receiptDocument.receivedDate).toLocaleDateString('en-GB') : '-'}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                ฿{Number(rec.totalSellingPrice || rec.total || rec.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${profit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')}`}>
+                                ฿{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-6 py-3 text-center">
+                                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-green-500/20 text-green-600`}>
+                                  Paid
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        }).filter(Boolean)}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Quotation Documents Table (For Reference) */}
+              <div className={`rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm overflow-hidden`}>
+                <div className={`px-6 py-4 border-b flex items-center justify-between ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>📋 Quotation Documents</h2>
+                  <button onClick={() => onNavigate('documents', { selectedType: 'quotation' })} className="text-sm text-blue-500 hover:text-blue-600 font-medium">View All →</button>
+                </div>
+                {documentsData.quotations.length === 0 ? (
+                  <div className={`px-6 py-10 text-center text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>No quotation documents yet</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className={`${darkMode ? 'bg-gray-700/50 text-gray-400' : 'bg-gray-50 text-gray-500'} text-xs uppercase`}>
+                          <th className="px-6 py-3 text-left">Quotation No</th>
+                          <th className="px-6 py-3 text-left">Customer</th>
+                          <th className="px-6 py-3 text-left">Valid Until</th>
+                          <th className="px-6 py-3 text-right">Total Amount</th>
+                          <th className="px-6 py-3 text-right">Profit</th>
+                          <th className="px-6 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
+                        {documentsData.quotations.slice(0, 10).map((quot: any, idx: number) => {
+                          const profit = Number(quot.totalSellingPrice || quot.total || quot.totalAmount || 0) - Number(quot.totalCost || 0);
+                          return (
+                            <tr key={quot.documentId || quot.id || quot.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
+                              <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{quot.documentNumber || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{quot.customer || quot.customerName || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {quot.quotationDocument?.validUntil ? new Date(quot.quotationDocument.validUntil).toLocaleDateString('en-GB') : '-'}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                ฿{Number(quot.totalSellingPrice || quot.total || quot.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${profit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')}`}>
+                                ฿{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-6 py-3 text-center">
+                                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                                  quot.status === 'Won' || quot.status === 'Converted' ? 'bg-green-500/20 text-green-600' :
+                                  quot.status === 'Lost' || quot.status === 'Rejected' ? 'bg-red-500/20 text-red-600' :
+                                  quot.status === 'Sent' || quot.status === 'Negotiating' ? 'bg-blue-500/20 text-blue-600' :
+                                  'bg-gray-500/20 text-gray-600'
+                                }`}>
+                                  {quot.status || 'Draft'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Invoice Documents Table (For Reference) */}
+              <div className={`rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm overflow-hidden`}>
+                <div className={`px-6 py-4 border-b flex items-center justify-between ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>🧾 Invoice Documents (For Reference)</h2>
                   <button onClick={() => onNavigate('invoice-home')} className="text-sm text-blue-500 hover:text-blue-600 font-medium">View All →</button>
                 </div>
-                {invoices.length === 0 ? (
+                {documentsData.invoices.length === 0 ? (
                   <div className={`px-6 py-10 text-center text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>No invoice documents yet</div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -144,31 +340,38 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Customer</th>
                           <th className="px-6 py-3 text-left">Issued Date</th>
                           <th className="px-6 py-3 text-right">Total Amount</th>
+                          <th className="px-6 py-3 text-right">Profit</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
-                        {invoices.slice(0, 10).map((inv: any, idx: number) => (
-                          <tr key={inv.documentId || inv.id || inv.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
-                            <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{inv.documentNumber || inv.invoiceNo || inv.invoiceId || inv.id || '-'}</td>
-                            <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{inv.customer || inv.customerId || '-'}</td>
-                            <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate ? new Date(inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate).toLocaleDateString('en-GB') : '-'}
-                            </td>
-                            <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                              ฿{Number(inv.total || inv.totalAmount || inv.totalSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className="px-6 py-3 text-center">
-                              <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                                inv.status === 'Completed' || inv.status === 'Paid'
-                                  ? 'bg-green-500/20 text-green-600'
-                                  : 'bg-blue-500/20 text-blue-600'
-                              }`}>
-                                {inv.status || 'Active'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                        {documentsData.invoices.slice(0, 10).map((inv: any, idx: number) => {
+                          const profit = Number(inv.totalSellingPrice || inv.total || inv.totalAmount || 0) - Number(inv.totalCost || 0);
+                          return (
+                            <tr key={inv.documentId || inv.id || inv.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
+                              <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{inv.documentNumber || inv.invoiceNo || inv.invoiceId || inv.id || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{inv.customer || inv.customerId || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate ? new Date(inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate).toLocaleDateString('en-GB') : '-'}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                ฿{Number(inv.total || inv.totalAmount || inv.totalSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${profit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')}`}>
+                                ฿{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-6 py-3 text-center">
+                                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                                  inv.status === 'Completed' || inv.status === 'Paid'
+                                    ? 'bg-green-500/20 text-green-600'
+                                    : 'bg-blue-500/20 text-blue-600'
+                                }`}>
+                                  {inv.status || 'Active'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
