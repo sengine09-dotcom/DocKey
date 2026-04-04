@@ -289,6 +289,7 @@ const normalizeRuntimeStatus = (tokenRecord: any) => {
 class AdminInitTokenController {
 
   static async firstTime(req: Request, res: Response) {
+    
     try {
       const token = String(req.body?.token || '').trim();
 
@@ -312,6 +313,32 @@ class AdminInitTokenController {
     }
     catch (error: any) {
       return res.status(500).json({ success: false, message: error.message || 'Failed to check token' });
+    }
+  }
+
+  static async claim(req: Request, res: Response) {
+    try {
+      const token = String(req.body?.token || '').trim();
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const password = String(req.body?.password || '').trim();
+      
+      if (!token || !email || !password) {
+        return res.status(400).json({ success: false, message: 'Token, email, and password are required' });
+      }
+      const tokenRecord = await prisma.adminInitToken.findUnique({ where: { token } });
+      if (!tokenRecord) {
+        return res.status(404).json({ success: false, message: 'Token not found' });
+      }
+      if (!tokenRecord.isActive || tokenRecord.usedAt || (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt).getTime() <= Date.now())) {
+        return res.status(409).json({ success: false, message: 'Token is not available' });
+      }
+      const updated = await prisma.adminInitToken.update({
+        where: { token },
+        data: { usedAt: new Date(), usedByEmail: email, updatedAt: new Date() },
+      });
+      return res.json({ success: true, data: toTokenResponse(updated) });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || 'Failed to claim token' });
     }
   }
 
