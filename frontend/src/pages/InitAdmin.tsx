@@ -94,6 +94,7 @@ export default function InitAdmin() {
     } finally {
       setIsSubmitting(false);
     }
+    
   };
 
   return (
