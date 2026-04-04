@@ -20,6 +20,15 @@ const formatPrintDate = (value: any) => {
   });
 };
 
+type InvoiceItem = {
+  id: string;
+  productCode: string;
+  productName: string;
+  quantity: string;
+  unitPrice: string;
+  total: string;
+};
+
 export default function KeyInvoice({ onNavigate = () => {}, initialData = null, embedded = false, darkMode: embeddedDarkMode, setDarkMode: embeddedSetDarkMode, currentPage = 'key-invoice' }: any) {
   const [preferredDarkMode, setPreferredDarkMode] = useThemePreference();
   const darkMode = embedded ? embeddedDarkMode : preferredDarkMode;
@@ -39,8 +48,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
     paymentMethod: 'Bank Transfer',
   });
 
-  const [items, setItems] = useState([
-    { id: '', description: '', quantity: '', unitPrice: '', total: '' },
+  const [items, setItems] = useState<InvoiceItem[]>([
+    { id: '', productCode: '', productName: '', quantity: '', unitPrice: '', total: '' },
   ]);
 
   const [customerCodes, setCustomerCodes] = useState<any[]>([]);
@@ -76,6 +85,19 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
   }, []);
 
   useEffect(() => {
+    if (productCodes.length === 0) return;
+    setItems((prev) => prev.map((item) => {
+      if (!item.productCode || item.productName) return item;
+      const matchedProduct = productCodes.find((product) => String(product.productCode || '').trim() === String(item.productCode || '').trim());
+      if (!matchedProduct) return item;
+      return {
+        ...item,
+        productName: matchedProduct.productName || item.productName || '',
+      };
+    }));
+  }, [productCodes]);
+
+  useEffect(() => {
     if (!initialData) {
       setMode('create');
       setHeader({
@@ -91,7 +113,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
         paymentMethod: 'Bank Transfer',
       });
       setItems([
-        { id: '', description: '', quantity: '', unitPrice: '', total: '' },
+        { id: '', productCode: '', productName: '', quantity: '', unitPrice: '', total: '' },
       ]);
       return;
     }
@@ -116,7 +138,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
       setItems(
         initialData.items.map((item) => ({
           id: item.id || '',
-          description: item.description || '',
+          productCode: item.productCode || '',
+          productName: item.productName || '',
           quantity: item.quantity || '',
           unitPrice: item.unitPrice || '',
           total: item.total || '',
@@ -132,16 +155,16 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
   const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
-  const printItems = items.filter((item) => item.id || item.description || item.quantity || item.unitPrice || item.total);
+  const printItems = items.filter((item) => item.productCode || item.productName || item.quantity || item.unitPrice || item.total);
 
   const customerDisplay = (() => {
-    const customerId = String(header.customer || '').trim();
-    if (!customerId) return '';
+    const customerCode = String(header.customer || '').trim();
+    if (!customerCode) return '';
 
-    const selectedCustomer = customerCodes.find((customer) => customer.customerId === customerId);
-    if (!selectedCustomer) return customerId;
+    const selectedCustomer = customerCodes.find((customer) => customer.customerCode === customerCode);
+    if (!selectedCustomer) return customerCode;
 
-    return selectedCustomer.customerName || selectedCustomer.shortName || selectedCustomer.customerId || customerId;
+    return selectedCustomer.customerName || selectedCustomer.shortName || selectedCustomer.customerCode || customerCode;
   })();
 
   const shipToDisplay = (() => {
@@ -185,8 +208,9 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
       const next = [...prev];
       next[selectedItemIndex] = {
         ...next[selectedItemIndex],
-        id: product.productId,
-        description: product.productName || '',
+        id: product.productCode || '',
+        productCode: product.productCode || '',
+        productName: product.productName || '',
       };
       return next;
     });
@@ -196,7 +220,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
     if (isViewMode) return;
     setItems((prev) => [
       ...prev,
-      { id: '', description: '', quantity: '', unitPrice: '', total: '' },
+      { id: '', productCode: '', productName: '', quantity: '', unitPrice: '', total: '' },
     ]);
   };
 
@@ -264,8 +288,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
               <thead>
                 <tr className="bg-gray-100">
                   <th className="w-10 border border-black px-2 py-1">Item</th>
-                  <th className="w-16 border border-black px-2 py-1">ID</th>
-                  <th className="border border-black px-2 py-1">Description</th>
+                  <th className="w-16 border border-black px-2 py-1">Code</th>
+                  <th className="border border-black px-2 py-1">Product Name</th>
                   <th className="w-28 border border-black px-2 py-1">Quantity</th>
                   <th className="w-24 border border-black px-2 py-1">Unit Price</th>
                   <th className="w-24 border border-black px-2 py-1">Total</th>
@@ -280,8 +304,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                   printItems.map((item, idx) => (
                     <tr key={`print-${idx}`}>
                       <td className="border border-black px-2 py-1 text-center">{idx + 1}</td>
-                      <td className="border border-black px-2 py-1 text-center">{item.id || '-'}</td>
-                      <td className="border border-black px-2 py-1">{item.description || '-'}</td>
+                      <td className="border border-black px-2 py-1 text-center">{item.productCode || '-'}</td>
+                      <td className="border border-black px-2 py-1">{item.productName || '-'}</td>
                       <td className="border border-black px-2 py-1 text-right">{Number(item.quantity || 0).toFixed(3)}</td>
                       <td className="border border-black px-2 py-1 text-right">{Number(item.unitPrice || 0).toFixed(2)}</td>
                       <td className="border border-black px-2 py-1 text-right">{Number(item.total || 0).toFixed(2)}</td>
@@ -371,8 +395,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                 >
                   <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
                   {customerCodes.map((customer) => (
-                    <option key={customer.customerId} value={customer.customerId}>
-                      {customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed'}
+                    <option key={customer.customerCode} value={customer.customerCode}>
+                      {customer.customerName || customer.shortName || customer.customerCode || 'Unnamed'}
                     </option>
                   ))}
                 </select>
@@ -442,8 +466,8 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                   }`}
                 >
                   <div>Item</div>
-                  <div>ID</div>
-                  <div>Product</div>
+                  <div>Code</div>
+                  <div>Product Name</div>
                   <div>Quantity</div>
                   <div>Unit Price</div>
                   <div>Total</div>
@@ -471,7 +495,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                             : 'bg-blue-50 border-blue-300 text-blue-900 hover:bg-blue-100'
                         }`}
                       >
-                        {item.id || 'Select...'}
+                        {item.productCode || 'Select...'}
                       </button>
                     </div>
                     <div>
@@ -479,7 +503,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                         readOnly
                         className={`w-full rounded-md border px-2 py-1.5 ${formControlClass}`}
                         placeholder="Product name"
-                        value={item.description}
+                        value={item.productName}
                       />
                     </div>
                     <div>
@@ -586,7 +610,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
                         return;
                       }
 
-                      const validItems = items.filter((it) => it.id || it.description);
+                      const validItems = items.filter((it) => it.productCode || it.productName);
                       if (validItems.length === 0) {
                         await showAppAlert({ title: 'Validation', message: 'Please add at least 1 item before saving.', tone: 'warning' });
                         return;

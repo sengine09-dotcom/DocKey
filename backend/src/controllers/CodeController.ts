@@ -23,7 +23,6 @@ const parseString = (value: any) => {
 };
 
 const mapCustomer = (row: any) => ({
-  customerId: row.customerCode,
   customerCode: row.customerCode || '',
   agentId: '',
   customerName: row.customerName || '',
@@ -59,7 +58,6 @@ const mapProduct = (row: any) => ({
   bagSize: row.model || '',
   pWeight: '',
   comValue: '',
-  description: '',
   idSupplier: '',
   showInStock: 'Y',
   used: 'Y',
@@ -169,7 +167,7 @@ const codeConfigs: Record<string, any> = {
     orderBy: { termCode: 'asc' },
     mapRecord: mapPaymentTerm,
     toData: (payload: any) => ({
-      termCode: parseString(payload.termId),
+      termCode: parseString(payload.termCode || payload.termId),
       termName: parseString(payload.termName),
       shortName: parseString(payload.shortName),
       days: parseString(payload.days),

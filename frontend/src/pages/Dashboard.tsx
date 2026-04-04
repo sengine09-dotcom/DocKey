@@ -243,7 +243,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           return (
                             <tr key={rec.documentId || rec.id || rec.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
                               <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{rec.documentNumber || '-'}</td>
-                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{rec.customer || rec.customerName || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{rec.customerName || '-'}</td>
                               <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {rec.receiptDocument?.receivedDate ? new Date(rec.receiptDocument.receivedDate).toLocaleDateString('en-GB') : '-'}
                               </td>
@@ -294,7 +294,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           return (
                             <tr key={quot.documentId || quot.id || quot.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
                               <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{quot.documentNumber || '-'}</td>
-                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{quot.customer || quot.customerName || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{quot.customerName || '-'}</td>
                               <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {quot.quotationDocument?.validUntil ? new Date(quot.quotationDocument.validUntil).toLocaleDateString('en-GB') : '-'}
                               </td>
@@ -350,7 +350,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           return (
                             <tr key={inv.documentId || inv.id || inv.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
                               <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{inv.documentNumber || inv.invoiceNo || inv.invoiceId || inv.id || '-'}</td>
-                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{inv.customer || inv.customerId || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{inv.customerName || '-'}</td>
                               <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate ? new Date(inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate).toLocaleDateString('en-GB') : '-'}
                               </td>

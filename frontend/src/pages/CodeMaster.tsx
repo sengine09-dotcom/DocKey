@@ -24,17 +24,17 @@ const pageConfigs: Record<string, any> = {
     searchPlaceholder: 'Search customer code or name',
     listTitle: 'Recent Customer Codes',
     createLabel: 'Add Customer Code',
-    idField: 'customerId',
+    idField: 'customerCode',
     nameField: 'customerName',
     columns: [
-      { key: 'customerId', label: 'Code' },
+      { key: 'customerCode', label: 'Code' },
       { key: 'customerName', label: 'Customer Name' },
       { key: 'shortName', label: 'Short Name' },
       { key: 'contactPerson', label: 'Contact Person' },
       { key: 'used', label: 'Status', type: 'status' },
     ],
     fields: [
-      { key: 'customerId', label: 'Customer ID', required: true },      
+      { key: 'customerCode', label: 'Customer Code', required: true },      
       { key: 'customerName', label: 'Customer Name', required: true },
       { key: 'shortName', label: 'Contact Person' },
       { key: 'registerDate', label: 'Register Date', type: 'date' },
@@ -50,7 +50,7 @@ const pageConfigs: Record<string, any> = {
       { key: 'used', label: 'Status', type: 'select', options: usedOptions },
     ],
     initialValues: {
-      customerId: '', agentId: '', customerName: '', shortName: '', registerDate: '', registrationNo: '', address: '', phone: '', fax: '', email: '', contactPerson: '', creditLimit: '', idTerm: '', internalTerm: '', remark: '', used: 'Y', totalShare: '', gstId: '', isGuarantee: '', guaranteePrice: '', guaranteeDateStart: '', guaranteeDateEnd: '',
+      customerCode: '', agentId: '', customerName: '', shortName: '', registerDate: '', registrationNo: '', address: '', phone: '', fax: '', email: '', contactPerson: '', creditLimit: '', idTerm: '', internalTerm: '', remark: '', used: 'Y', totalShare: '', gstId: '', isGuarantee: '', guaranteePrice: '', guaranteeDateStart: '', guaranteeDateEnd: '',
     },
   },
   'product-code': {
@@ -62,23 +62,23 @@ const pageConfigs: Record<string, any> = {
     searchPlaceholder: 'Search product code or product name',
     listTitle: 'Recent Product Codes',
     createLabel: 'Add Product Code',
-    idField: 'productId',
+    idField: 'productCode',
     nameField: 'productName',
     columns: [
-      { key: 'productId', label: 'Code' },
+      { key: 'productCode', label: 'Code' },
       { key: 'productName', label: 'Product Name' },
       { key: 'category', label: 'Category' },
       { key: 'brand', label: 'Brand' },
     ],
     fields: [
-      { key: 'productId', label: 'Product ID', required: true },
+      { key: 'productCode', label: 'Product Code', required: true },
       { key: 'productName', label: 'Product Name', required: true },
       { key: 'brand', label: 'Brand' },
       { key: 'category', label: 'Category' },
       { key: 'model', label: 'Model' },
     ],
     initialValues: {
-      productId: '', productName: '', brand: '', category: '', model: '',
+      productCode: '', productName: '', brand: '', category: '', model: '',
     },
   },
   'destination-code': {
