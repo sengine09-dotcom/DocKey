@@ -313,6 +313,7 @@ export default function AllDocumentForm({
   const taxRate = Number(header.taxRate || 0);
   const totalCost = items.reduce((sum, item) => sum + (parseFloat(item.totalCost) || 0), 0);
   const totalSellingPrice = items.reduce((sum, item) => sum + (parseFloat(item.totalSellingPrice) || 0), 0);
+  const totalProfit = totalSellingPrice - totalCost;
   const tax = totalSellingPrice * (taxRate / 100);
   const total = totalSellingPrice + tax;
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
@@ -482,6 +483,9 @@ export default function AllDocumentForm({
         id: header.id || '',
         documentNumber: header.documentNumber || '',
         title: header.title || typeLabel,
+        totalCost,
+        totalSellingPrice,
+        totalProfit,
         total,
         tax,
         totalQuantity,

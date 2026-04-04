@@ -3,6 +3,38 @@ import { prisma } from '../lib/prisma';
 
 const router = express.Router();
 
+const attachCustomerNames = async (documents: any[]) => {
+  const customerCodes = Array.from(new Set(
+    documents
+      .map((document) => String(document?.customerId || '').trim())
+      .filter(Boolean)
+  ));
+
+  if (customerCodes.length === 0) {
+    return documents;
+  }
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      customerCode: { in: customerCodes },
+    },
+    select: {
+      customerCode: true,
+      customerName: true,
+    },
+  });
+
+  const customerNameMap = customers.reduce((result, customer) => {
+    result[customer.customerCode] = customer.customerName || customer.customerCode;
+    return result;
+  }, {} as Record<string, string>);
+
+  return documents.map((document) => ({
+    ...document,
+    customerName: customerNameMap[String(document?.customerId || '').trim()] || '',
+  }));
+};
+
 // Get business metrics for dashboard
 router.get('/dashboard/metrics', async (_req, res) => {
   try {
@@ -33,45 +65,102 @@ router.get('/dashboard/metrics', async (_req, res) => {
       })
     ]);
 
+    const [quotationsWithCustomerNames, invoicesWithCustomerNames, receiptsWithCustomerNames] = await Promise.all([
+      attachCustomerNames(quotations),
+      attachCustomerNames(invoices),
+      attachCustomerNames(receipts),
+    ]);
+
     console.log('[DEBUG] Documents fetched:', {
-      quotations: quotations.length,
-      invoices: invoices.length,
-      receipts: receipts.length
+      quotations: quotationsWithCustomerNames.length,
+      invoices: invoicesWithCustomerNames.length,
+      receipts: receiptsWithCustomerNames.length
     });
 
-    // 1. Total Revenue = totalSellingPrice from Quotations that have Invoice (QU → INV)
-    const quotationsWithInvoice = quotations.filter(q => 
-      invoices.some(inv => inv.referenceNo === q.documentNumber)
-    );
-    const totalRevenue = quotationsWithInvoice.reduce((sum, q) => 
-      sum + Number(q.totalSellingPrice || 0), 0
+    // 1. Total Revenue = totalSellingPrice from all invoices
+    const totalRevenue = quotationsWithCustomerNames.reduce((sum, quotation) => 
+      sum + Number(quotation.totalSellingPrice || 0), 0
     );
 
-    // 2. Total Cost = totalCost from Quotations that have Invoice (QU → INV)  
-    const totalCost = quotationsWithInvoice.reduce((sum, q) => 
-      sum + Number(q.totalCost || 0), 0
+    // 2. Total Cost = totalCost from all invoices
+    const totalCost = quotationsWithCustomerNames.reduce((sum, quotation) => 
+      sum + Number(quotation.totalCost || 0), 0
     );
 
-    // 3. Net Profit = Revenue from Invoices that have Receipt (INV → REC)
-    const invoicesWithReceipt = invoices.filter(inv => 
-      receipts.some(rec => rec.referenceNo === inv.documentNumber)
+    const linkedInvoiceNumbersFromQuotations = new Set(
+      quotationsWithCustomerNames
+        .map(quotation => quotation.quotationDocument?.linkedInvoiceNumber)
+        .filter((documentNumber): documentNumber is string => Boolean(documentNumber))
     );
-    const netProfit = invoicesWithReceipt.reduce((sum, inv) => {
-      const linkedQuotation = quotations.find(q => q.documentNumber === inv.referenceNo);
-      const cost = linkedQuotation ? Number(linkedQuotation.totalCost || 0) : 0;
-      const revenue = Number(inv.totalSellingPrice || 0);
-      return sum + (revenue - cost);
+
+    const linkedInvoiceNumbersFromReceipts = new Set(
+      receiptsWithCustomerNames
+        .map(receipt => receipt.receiptDocument?.linkedInvoiceNumber || receipt.referenceNo)
+        .filter((documentNumber): documentNumber is string => Boolean(documentNumber))
+    );
+
+    const invoicesWithLinkedReceipt = new Set(
+      invoicesWithCustomerNames
+        .filter(invoice => Boolean(invoice.invoiceDocument?.linkedReceiptNumber))
+        .map(invoice => invoice.documentNumber)
+    );
+
+    const isInvoiceLinkedFromQuotation = (invoice: typeof invoicesWithCustomerNames[number]) =>
+      linkedInvoiceNumbersFromQuotations.has(invoice.documentNumber);
+
+    const hasReceiptForInvoice = (invoice: typeof invoicesWithCustomerNames[number]) =>
+      invoicesWithLinkedReceipt.has(invoice.documentNumber) ||
+      linkedInvoiceNumbersFromReceipts.has(invoice.documentNumber);
+
+    const paidQuotations = quotationsWithCustomerNames.filter(quotation => {
+      const linkedInvoiceNumber = quotation.quotationDocument?.linkedInvoiceNumber;
+      if (!linkedInvoiceNumber) return false;
+      return linkedInvoiceNumbersFromReceipts.has(linkedInvoiceNumber) ||
+        invoicesWithCustomerNames.some(invoice =>
+          invoice.documentNumber === linkedInvoiceNumber && hasReceiptForInvoice(invoice)
+        );
+    });
+
+    const unpaidQuotations = quotationsWithCustomerNames.filter(quotation => {
+      const linkedInvoiceNumber = quotation.quotationDocument?.linkedInvoiceNumber;
+      if (!linkedInvoiceNumber) return false;
+      return !(
+        linkedInvoiceNumbersFromReceipts.has(linkedInvoiceNumber) ||
+        invoicesWithCustomerNames.some(invoice =>
+          invoice.documentNumber === linkedInvoiceNumber && hasReceiptForInvoice(invoice)
+        )
+      );
+    });
+
+    // 3. Completed Sales = count of Invoices that have Receipt
+    const invoicesWithReceipt = invoicesWithCustomerNames.filter(inv => 
+      hasReceiptForInvoice(inv)
+    );
+    const completedSales = paidQuotations.length;
+
+    const unpaidInvoices = invoicesWithCustomerNames.filter(inv => {
+      const isLinkedFromQuotation = isInvoiceLinkedFromQuotation(inv);
+      const hasReceipt = hasReceiptForInvoice(inv);
+      return isLinkedFromQuotation && !hasReceipt;
+    });
+    const unpaidInvoiceCount = unpaidQuotations.length;
+    const unpaidRevenue = unpaidQuotations.reduce((sum, quotation) => 
+      sum + Number(quotation.totalSellingPrice || 0), 0
+    );
+
+    // 4. Net Profit/Loss = realized invoice sales from receipts minus invoice cost
+    const netProfit = paidQuotations.reduce((sum, quotation) => {
+      const realizedRevenue = Number(quotation.totalSellingPrice || 0);
+      const cost = Number(quotation.totalCost || 0);
+      return sum + (realizedRevenue - cost);
     }, 0);
-
-    // 4. Completed Sales = count of Invoices that have Receipt
-    const completedSales = invoicesWithReceipt.length;
 
     // 5. Document counts
     const documentCounts = {
-      total: quotations.length + invoices.length + receipts.length,
-      quotations: quotations.length,
-      invoices: invoices.length,
-      receipts: receipts.length
+      total: quotationsWithCustomerNames.length + invoicesWithCustomerNames.length + receiptsWithCustomerNames.length,
+      quotations: quotationsWithCustomerNames.length,
+      invoices: invoicesWithCustomerNames.length,
+      receipts: receiptsWithCustomerNames.length
     };
 
     res.json({
@@ -82,14 +171,16 @@ router.get('/dashboard/metrics', async (_req, res) => {
           totalCost,
           netProfit,
           completedSales,
-          potentialRevenue: quotationsWithInvoice.length,
+          unpaidInvoiceCount,
+          unpaidRevenue,
+          potentialRevenue: quotations.length,
           potentialProfit: totalRevenue - totalCost
         },
         documentCounts,
         documents: {
-          quotations,
-          invoices,
-          receipts
+          quotations: quotationsWithCustomerNames,
+          invoices: invoicesWithCustomerNames,
+          receipts: receiptsWithCustomerNames
         }
       }
     });

@@ -344,8 +344,6 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         documentNumber,
         dueDate: parseDate(header.dueDate),
         doNo: parseString(header.doNo),
-        linkedReceiptId: '',
-        linkedReceiptNumber: '',
       } as any,
     });
   }
@@ -363,8 +361,6 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
       update: {
         documentNumber,
         attentionTo: '',
-        linkedInvoiceId: '',
-        linkedInvoiceNumber: '',
       } as any,
     });
   }

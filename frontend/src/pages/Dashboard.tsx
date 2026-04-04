@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout/Layout';
-import invoiceService from '../services/invoiceService';
 import documentService from '../services/documentService';
 import dashboardService from '../services/dashboardService';
+import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
 
 export default function Dashboard({ onNavigate = () => {} }: any) {
   const [documents, setDocuments] = useState<any[]>([]);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [customerCodes, setCustomerCodes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useThemePreference();
 
@@ -17,18 +18,21 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
       try {
         console.log('[DEBUG] Dashboard: Starting data fetch');
         
-        const [documentsResult, dashboardResult] = await Promise.allSettled([
+        const [documentsResult, dashboardResult, customerCodesResult] = await Promise.allSettled([
           documentService.getAll('work_order'),
           dashboardService.getMetrics(),
+          codeService.getAll('customer'),
         ]);
         
         console.log('[DEBUG] Dashboard: API results:', {
           documentsResult: documentsResult.status,
           dashboardResult: dashboardResult.status,
+          customerCodesResult: customerCodesResult.status,
           dashboardData: dashboardResult.status === 'fulfilled' ? dashboardResult.value?.data : null
         });
         
         setDocuments(documentsResult.status === 'fulfilled' ? (documentsResult.value?.data?.data || []) : []);
+        setCustomerCodes(customerCodesResult.status === 'fulfilled' ? (customerCodesResult.value?.data?.data || []) : []);
         
         if (dashboardResult.status === 'fulfilled') {
           console.log('[DEBUG] Dashboard: Setting dashboard data:', dashboardResult.value?.data?.data);
@@ -48,13 +52,16 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
   const activeWorkOrders = documents.filter((document: any) => (document.status || '').toLowerCase() !== 'completed');
   
   // Get data from backend
-  const businessMetrics = dashboardData?.businessMetrics || {
+  const businessMetrics = {
     totalRevenue: 0,
     totalCost: 0,
     netProfit: 0,
     completedSales: 0,
+    unpaidInvoiceCount: 0,
+    unpaidRevenue: 0,
     potentialRevenue: 0,
-    potentialProfit: 0
+    potentialProfit: 0,
+    ...(dashboardData?.businessMetrics || {})
   };
   
   const documentCounts = dashboardData?.documentCounts || {
@@ -68,6 +75,85 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
     quotations: [],
     invoices: [],
     receipts: []
+  };
+
+  const linkedInvoiceNumbersFromQuotations = new Set(
+    documentsData.quotations
+      .map((quotation: any) => quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber)
+      .filter(Boolean)
+  );
+
+  const linkedInvoiceNumbersFromReceipts = new Set(
+    documentsData.receipts
+      .map((receipt: any) => receipt.receiptDocument?.linkedInvoiceNumber || receipt.linkedInvoiceNumber || receipt.referenceNo)
+      .filter(Boolean)
+  );
+
+  const quotationByLinkedInvoiceNumber = new Map(
+    documentsData.quotations
+      .filter((quotation: any) => quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber)
+      .map((quotation: any) => [quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber, quotation])
+  ) as Map<string, any>;
+
+  const paidQuotations = documentsData.quotations.filter((quotation: any) => {
+    const linkedInvoiceNumber = quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber;
+    if (!linkedInvoiceNumber) return false;
+    const linkedInvoice = documentsData.invoices.find((invoice: any) => invoice.documentNumber === linkedInvoiceNumber);
+    const hasReceipt = Boolean(
+      linkedInvoiceNumbersFromReceipts.has(linkedInvoiceNumber) ||
+      linkedInvoice?.invoiceDocument?.linkedReceiptNumber ||
+      linkedInvoice?.linkedReceiptNumber
+    );
+    return hasReceipt;
+  });
+
+  const unpaidQuotations = documentsData.quotations.filter((quotation: any) => {
+    const linkedInvoiceNumber = quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber;
+    if (!linkedInvoiceNumber) return false;
+    const linkedInvoice = documentsData.invoices.find((invoice: any) => invoice.documentNumber === linkedInvoiceNumber);
+    const hasReceipt = Boolean(
+      linkedInvoiceNumbersFromReceipts.has(linkedInvoiceNumber) ||
+      linkedInvoice?.invoiceDocument?.linkedReceiptNumber ||
+      linkedInvoice?.linkedReceiptNumber
+    );
+    return !hasReceipt;
+  });
+
+  const derivedBusinessMetrics = {
+    totalRevenue: documentsData.quotations.reduce((sum: number, quotation: any) => sum + Number(quotation.totalSellingPrice || 0), 0),
+    totalCost: documentsData.quotations.reduce((sum: number, quotation: any) => sum + Number(quotation.totalCost || 0), 0),
+    netProfit: paidQuotations.reduce(
+      (sum: number, quotation: any) => sum + (Number(quotation.totalSellingPrice || 0) - Number(quotation.totalCost || 0)),
+      0
+    ),
+    completedSales: paidQuotations.length,
+    unpaidInvoiceCount: unpaidQuotations.length,
+    unpaidRevenue: unpaidQuotations.reduce((sum: number, quotation: any) => sum + Number(quotation.totalSellingPrice || 0), 0),
+  };
+
+  const unpaidInvoices = documentsData.invoices.filter((inv: any) => {
+    const isLinkedFromQuotation = linkedInvoiceNumbersFromQuotations.has(inv.documentNumber);
+    const hasReceipt = Boolean(
+      inv.invoiceDocument?.linkedReceiptNumber ||
+      inv.linkedReceiptNumber ||
+      linkedInvoiceNumbersFromReceipts.has(inv.documentNumber)
+    );
+    return isLinkedFromQuotation && !hasReceipt;
+  });
+
+  const unpaidInvoiceCount = derivedBusinessMetrics.unpaidInvoiceCount;
+  const unpaidRevenue = derivedBusinessMetrics.unpaidRevenue;
+
+  const customerNameMap = customerCodes.reduce((result: Record<string, string>, customer: any) => {
+    const customerCode = String(customer?.customerCode || '').trim();
+    if (!customerCode) return result;
+    result[customerCode] = customer?.customerName || customer?.shortName || customerCode;
+    return result;
+  }, {});
+
+  const getCustomerDisplayName = (document: any) => {
+    const customerCode = String(document?.customer || document?.customerId || '').trim();
+    return document?.customerName || customerNameMap[customerCode] || '-';
   };
 
   const StatCard = ({ title, value, icon, bgClass, textClass }: any) => (
@@ -120,29 +206,43 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                 <h2 className={`text-lg font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>💰 Business Metrics Summary</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   <StatCard 
-                    title="Total Revenue (QU→INV)" 
-                    value={`฿${businessMetrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    title="ราคาขายรวม (Invoice)" 
+                    value={`฿${derivedBusinessMetrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     icon="💵"
                     bgClass={darkMode ? 'bg-green-900/40' : 'bg-green-100'}
                     textClass={darkMode ? 'text-green-300' : 'text-green-700'} />
                   <StatCard 
-                    title="Total Cost (QU→INV)" 
-                    value={`฿${businessMetrics.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    title="ทุนรวม (Invoice)" 
+                    value={`฿${derivedBusinessMetrics.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     icon="💸"
                     bgClass={darkMode ? 'bg-red-900/40' : 'bg-red-100'}
                     textClass={darkMode ? 'text-red-300' : 'text-red-700'} />
                   <StatCard 
-                    title="Net Profit (INV→REC)" 
-                    value={`฿${businessMetrics.netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                    icon={businessMetrics.netProfit >= 0 ? "📈" : "📉"}
-                    bgClass={businessMetrics.netProfit >= 0 ? (darkMode ? 'bg-emerald-900/40' : 'bg-emerald-100') : (darkMode ? 'bg-red-900/40' : 'bg-red-100')}
-                    textClass={businessMetrics.netProfit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')} />
+                    title="กำไร / ขาดทุน (Invoice ออก REC แล้ว)" 
+                    value={`฿${derivedBusinessMetrics.netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    icon={derivedBusinessMetrics.netProfit >= 0 ? "📈" : "📉"}
+                    bgClass={derivedBusinessMetrics.netProfit >= 0 ? (darkMode ? 'bg-emerald-900/40' : 'bg-emerald-100') : (darkMode ? 'bg-red-900/40' : 'bg-red-100')}
+                    textClass={derivedBusinessMetrics.netProfit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')} />
                   <StatCard 
-                    title="Completed Sales (INV→REC)" 
-                    value={`${businessMetrics.completedSales} deals`} 
+                    title="Completed Sales" 
+                    value={`${derivedBusinessMetrics.completedSales} deals`} 
                     icon="🤝"
                     bgClass={darkMode ? 'bg-blue-900/40' : 'bg-blue-100'}
                     textClass={darkMode ? 'text-blue-300' : 'text-blue-700'} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-5">
+                  <StatCard 
+                    title="Invoice ลูกค้าสั่งซื้อแล้วค้างจ่าย" 
+                    value={`${unpaidInvoiceCount} ใบ`} 
+                    icon="⏰"
+                    bgClass={darkMode ? 'bg-orange-900/40' : 'bg-orange-100'}
+                    textClass={darkMode ? 'text-orange-300' : 'text-orange-700'} />
+                  <StatCard 
+                    title="ยอดค้างรับ (ยังไม่ออก REC)" 
+                    value={`฿${unpaidRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    icon="💳"
+                    bgClass={darkMode ? 'bg-amber-900/40' : 'bg-amber-100'}
+                    textClass={darkMode ? 'text-amber-300' : 'text-amber-700'} />
                 </div>
               </div>
 
@@ -218,7 +318,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Customer</th>
                           <th className="px-6 py-3 text-left">Received Date</th>
                           <th className="px-6 py-3 text-right">Amount</th>
-                          <th className="px-6 py-3 text-right">Profit</th>
+                          <th className="px-6 py-3 text-right">Profit / Loss</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
@@ -227,28 +327,26 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           // Find linked invoice
                           const linkedInvoice = documentsData.invoices.find(inv => 
                             inv.documentNumber === rec.referenceNo || 
-                            inv.documentNumber === rec.receiptDocument?.linkedInvoiceNumber
+                            inv.documentNumber === rec.receiptDocument?.linkedInvoiceNumber ||
+                            inv.documentNumber === rec.linkedInvoiceNumber
                           );
                           
                           if (!linkedInvoice) return null; // Skip receipts without linked invoices
-                          
-                          // Find the original quotation
-                          const linkedQuotation = documentsData.quotations.find(q => 
-                            q.documentNumber === linkedInvoice.invoiceDocument?.linkedQuotationNumber
-                          );
-                          
-                          if (!linkedQuotation) return null; // Skip without original quotation
-                          
-                          const profit = Number(rec.totalSellingPrice || rec.total || rec.totalAmount || 0) - Number(linkedQuotation.totalCost || 0);
+
+                          const linkedQuotation = quotationByLinkedInvoiceNumber.get(linkedInvoice.documentNumber) as any;
+                          const realizedRevenue = Number(linkedQuotation?.totalSellingPrice || 0);
+                          const cost = Number(linkedQuotation?.totalCost || 0);
+
+                          const profit = realizedRevenue - cost;
                           return (
                             <tr key={rec.documentId || rec.id || rec.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
                               <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{rec.documentNumber || '-'}</td>
-                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{rec.customerName || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{getCustomerDisplayName(rec)}</td>
                               <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {rec.receiptDocument?.receivedDate ? new Date(rec.receiptDocument.receivedDate).toLocaleDateString('en-GB') : '-'}
                               </td>
                               <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                ฿{Number(rec.totalSellingPrice || rec.total || rec.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ฿{realizedRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className={`px-6 py-3 text-right font-medium ${profit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')}`}>
                                 ฿{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -294,7 +392,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           return (
                             <tr key={quot.documentId || quot.id || quot.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
                               <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{quot.documentNumber || '-'}</td>
-                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{quot.customerName || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{getCustomerDisplayName(quot)}</td>
                               <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {quot.quotationDocument?.validUntil ? new Date(quot.quotationDocument.validUntil).toLocaleDateString('en-GB') : '-'}
                               </td>
@@ -339,8 +437,8 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Invoice No</th>
                           <th className="px-6 py-3 text-left">Customer</th>
                           <th className="px-6 py-3 text-left">Issued Date</th>
-                          <th className="px-6 py-3 text-right">Total Amount</th>
-                          <th className="px-6 py-3 text-right">Profit</th>
+                          <th className="px-6 py-3 text-right">Selling Price</th>
+                          <th className="px-6 py-3 text-right">Profit / Loss</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
@@ -350,12 +448,12 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           return (
                             <tr key={inv.documentId || inv.id || inv.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
                               <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{inv.documentNumber || inv.invoiceNo || inv.invoiceId || inv.id || '-'}</td>
-                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{inv.customerName || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{getCustomerDisplayName(inv)}</td>
                               <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                                 {inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate ? new Date(inv.documentDate || inv.invoiceDate || inv.issuedDate || inv.issDate).toLocaleDateString('en-GB') : '-'}
                               </td>
                               <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                ฿{Number(inv.total || inv.totalAmount || inv.totalSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ฿{Number(inv.totalSellingPrice || inv.total || inv.totalAmount || inv.totalSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className={`px-6 py-3 text-right font-medium ${profit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')}`}>
                                 ฿{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -367,6 +465,63 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                                     : 'bg-blue-500/20 text-blue-600'
                                 }`}>
                                   {inv.status || 'Active'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className={`rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm overflow-hidden`}>
+                <div className={`px-6 py-4 border-b flex items-center justify-between ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>🕒 Invoice ที่ลูกค้าสั่งซื้อแล้ว แต่ยังไม่ออก REC</h2>
+                  <button onClick={() => onNavigate('invoice-home')} className="text-sm text-blue-500 hover:text-blue-600 font-medium">View All →</button>
+                </div>
+                {unpaidInvoices.length === 0 ? (
+                  <div className={`px-6 py-10 text-center text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>ไม่มี invoice ที่ link มาจาก quotation และยังไม่ออก REC</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className={`${darkMode ? 'bg-gray-700/50 text-gray-400' : 'bg-gray-50 text-gray-500'} text-xs uppercase`}>
+                          <th className="px-6 py-3 text-left">Invoice No</th>
+                          <th className="px-6 py-3 text-left">Customer</th>
+                          <th className="px-6 py-3 text-left">Issued Date</th>
+                          <th className="px-6 py-3 text-right">Selling Price</th>
+                          <th className="px-6 py-3 text-right">Cost</th>
+                          <th className="px-6 py-3 text-right">Expected Profit</th>
+                          <th className="px-6 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
+                        {unpaidInvoices.slice(0, 10).map((inv: any, idx: number) => {
+                          const linkedQuotation = quotationByLinkedInvoiceNumber.get(inv.documentNumber) as any;
+                          const sellingPrice = Number(linkedQuotation?.totalSellingPrice || 0);
+                          const cost = Number(linkedQuotation?.totalCost || 0);
+                          const expectedProfit = sellingPrice - cost;
+                          return (
+                            <tr key={inv.documentId || inv.id || inv.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
+                              <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{inv.documentNumber || '-'}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{getCustomerDisplayName(inv)}</td>
+                              <td className={`px-6 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {inv.documentDate ? new Date(inv.documentDate).toLocaleDateString('en-GB') : '-'}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                ฿{sellingPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                ฿{cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className={`px-6 py-3 text-right font-medium ${expectedProfit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')}`}>
+                                ฿{expectedProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-6 py-3 text-center">
+                                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${darkMode ? 'bg-orange-500/20 text-orange-300' : 'bg-orange-100 text-orange-700'}`}>
+                                  Pending Payment
                                 </span>
                               </td>
                             </tr>
