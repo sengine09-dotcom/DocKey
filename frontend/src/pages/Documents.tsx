@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 import AllDocumentForm from '../components/Documents/AllDocumentForm';
 import documentService, { MainDocumentType } from '../services/documentService';
+import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
@@ -104,8 +105,6 @@ const normalizeMainDocumentType = (value: unknown): MainDocumentType | null => {
 };
 
 const getRecordKey = (record: any) => record?.id || record?.documentId || record?.documentNumber;
-
-const getRecordParty = (record: any) => record?.customerName || record?.customer || record?.supplierName || record?.attentionTo || record?.assignedTo || '-';
 
 const formatDate = (value: any) => {
   if (!value) return '-';
@@ -240,8 +239,8 @@ const buildInvoiceDraftFromQuotation = (quotation: any) => {
     items: Array.isArray(quotation?.items)
       ? quotation.items.map((item: any) => ({
         id: item?.id || '',
-        itemCode: item?.itemCode || item?.id || '',
-        description: item?.description || '',
+        productCode: item?.productCode || '',
+        productName: item?.productName || '',
         packing: item?.packing || '',
         quantity: item?.quantity || '',
         cost: item?.cost || '',
@@ -283,8 +282,8 @@ const buildReceiptDraftFromInvoice = (invoice: any) => {
     items: Array.isArray(invoice?.items)
       ? invoice.items.map((item: any) => ({
         id: item?.id || '',
-        itemCode: item?.itemCode || item?.id || '',
-        description: item?.description || '',
+        productCode: item?.productCode || '',
+        productName: item?.productName || '',
         quantity: item?.quantity || '',
         margin: item?.margin || '',
         sellingPrice: item?.sellingPrice || '',
@@ -300,6 +299,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   const [darkMode, setDarkMode] = useThemePreference();
   const [selectedType, setSelectedType] = useState<MainDocumentType>('quotation');
   const [documentsByType, setDocumentsByType] = useState<Record<MainDocumentType, any[]>>(createEmptyCollections);
+  const [customerCodes, setCustomerCodes] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [editorState, setEditorState] = useState<{ type: MainDocumentType; initialData: any } | null>(null);
   const [search, setSearch] = useState('');
@@ -313,6 +313,19 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
       setSelectedType(nextType);
     }
   }, [initialData]);
+
+  useEffect(() => {
+    const loadCustomerCodes = async () => {
+      try {
+        const response = await codeService.getAll('customer');
+        setCustomerCodes(response?.data?.data || []);
+      } catch {
+        setCustomerCodes([]);
+      }
+    };
+
+    void loadCustomerCodes();
+  }, []);
 
   const loadDocuments = async () => {
     setIsLoading(true);
@@ -364,6 +377,18 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   const config = documentTypeConfigs[selectedType];
   const records = documentsByType[selectedType] || [];
 
+  const getRecordParty = (record: any) => {
+    const customerValue = String(record?.customer || '').trim();
+    const matchedCustomer = customerCodes.find((customer) => customer.customerCode === customerValue);
+    return matchedCustomer?.customerName
+      || matchedCustomer?.shortName
+      || record?.customerName
+      || record?.supplierName
+      || record?.attentionTo
+      || record?.assignedTo
+      || '-';
+  };
+
   const filteredRecords = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return records.filter((record) => {
@@ -414,9 +439,19 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     setEditorState({ type: selectedType, initialData: null });
   };
 
-  const handleViewRecord = (record: any) => {
+  const handleViewRecord = async (record: any) => {
     setEditorState(null);
-    setSelectedRecord(record);
+    try {
+      const identifier = record?.documentId || record?.id || record?.documentNumber;
+      if (!identifier) {
+        setSelectedRecord(record);
+        return;
+      }
+      const response = await documentService.getById(record.documentType || selectedType, identifier);
+      setSelectedRecord(response?.data?.data || record);
+    } catch {
+      setSelectedRecord(record);
+    }
   };
 
   const handleEditRecord = async (record: any) => {
@@ -737,8 +772,8 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                         ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
                         style={{ gridTemplateColumns: '56px 56px minmax(200px,1.8fr) 56px 120px 120px 120px 120px 100px 100px 100px' }}>
                         <div>Line</div>
-                        <div>ID</div>
-                        <div>Description</div>
+                        <div>Code</div>
+                        <div>Product Name</div>
                         <div>Qty</div>
                         <div>Margin</div>
                         <div>Cost</div>
@@ -755,8 +790,8 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                               'border-t border-gray-200 text-gray-800'}`}
                           style={{ gridTemplateColumns: '56px 56px minmax(200px,1.8fr) 56px 120px 120px 120px 120px 100px 100px 100px' }}>
                           <div>{item.lineNo || index + 1}</div>
-                          <div>{item.itemCode || '-'}</div>
-                          <div>{item.description || '-'}</div>
+                          <div>{item.productCode || '-'}</div>
+                          <div>{item.productName || '-'}</div>
                           <div>{item.quantity || '-'}</div>
                           <div>{item.margin || '-'}</div>
                           <div>{item.cost ?

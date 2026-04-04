@@ -235,6 +235,22 @@ export default function AllDocumentForm({
   }, []);
 
   useEffect(() => {
+    if (productCodes.length === 0) return;
+    setItems((prev) => prev.map((item) => {
+      if (!item.productCode || item.productName) return item;
+      const matchedProduct = productCodes.find((product) => {
+        const productCode = String(product.productCode || product.productId || product.id || '').trim();
+        return productCode === String(item.productCode || '').trim();
+      });
+      if (!matchedProduct) return item;
+      return {
+        ...item,
+        productName: matchedProduct.productName || item.productName || '',
+      };
+    }));
+  }, [productCodes]);
+
+  useEffect(() => {
     if (!initialData) {
       setMode('create');
       setHeader({
@@ -300,14 +316,14 @@ export default function AllDocumentForm({
   const tax = totalSellingPrice * (taxRate / 100);
   const total = totalSellingPrice + tax;
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
-  const printItems = items.filter((item) => item.id || item.productName || item.quantity || item.cost || item.totalCost);
+  const printItems = items.filter((item) => item.productCode || item.productName || item.quantity || item.cost || item.totalCost);
 
   const customerDisplay = (() => {
-    const customerId = String(header.customer || '').trim();
-    if (!customerId) return '';
-    const selectedCustomer = customerCodes.find((customer) => customer.customerId === customerId);
-    if (!selectedCustomer) return customerId;
-    return selectedCustomer.customerName || selectedCustomer.shortName || selectedCustomer.customerId || customerId;
+    const customerCode = String(header.customer || '').trim();
+    if (!customerCode) return '';
+    const selectedCustomer = customerCodes.find((customer) => customer.customerCode === customerCode);
+    if (!selectedCustomer) return customerCode;
+    return selectedCustomer.customerName || selectedCustomer.shortName || selectedCustomer.customerCode || customerCode;
   })();
 
   const shipToDisplay = (() => {
@@ -315,7 +331,7 @@ export default function AllDocumentForm({
     if (!destinationId) return '';
     const selectedDestination = destinationCodes.find((destination) => destination.destId === destinationId);
     if (!selectedDestination) return destinationId;
-    return selectedDestination.destination || selectedDestination.location || selectedDestination.destId || destinationId;
+    return selectedDestination.destinationCode || selectedDestination.destination || selectedDestination.location || destinationId;
   })();
 
   const paymentTermDisplay = (() => {
@@ -323,8 +339,18 @@ export default function AllDocumentForm({
     if (!paymentTermId) return '';
     const selectedPaymentTerm = paymentTermCodes.find((paymentTerm) => paymentTerm.termId === paymentTermId);
     if (!selectedPaymentTerm) return paymentTermId;
-    return selectedPaymentTerm.termName || selectedPaymentTerm.shortName || selectedPaymentTerm.termId || paymentTermId;
+    return selectedPaymentTerm.termCode || selectedPaymentTerm.termName || selectedPaymentTerm.shortName || paymentTermId;
   })();
+
+  const getProductDisplayName = (productCodeValue: string, fallbackName = '') => {
+    const normalizedProductCode = String(productCodeValue || '').trim();
+    if (!normalizedProductCode) return fallbackName || '';
+    const selectedProduct = productCodes.find((product) => {
+      const candidateCode = String(product.productCode || product.productId || product.id || '').trim();
+      return candidateCode === normalizedProductCode;
+    });
+    return selectedProduct?.productName || fallbackName || normalizedProductCode;
+  };
 
   const handleHeaderChange = (field: string, value: string) => {
     if (isViewMode) return;
@@ -412,92 +438,39 @@ export default function AllDocumentForm({
           <tr>
             <th class="col-item">Item</th>
             <th class="col-id">Code</th>
-            <th>Description</th>
+            <th>Product Name</th>
             <th class="col-qty">Quantity</th>
             <th class="col-margin">Margin</th>
             <th class="col-price">Cost</th>
             <th class="col-total">Total cost</th>
-            <th class="col-price">Selling price</th>
-            <th class="col-total">Total selling price</th>
-            <th class="col-unit">Unit</th>
           </tr>
         </thead>
         <tbody>
           ${printItems.length === 0 ? '<tr><td colspan="6" class="col-center">-</td></tr>' : printItems.map((item, index) => `
             <tr>
               <td class="col-center">${index + 1}</td>
-              <td class="col-center">${escapeHtml(item.id || '-')}</td>
+              <td class="col-center">${escapeHtml(item.productCode || '-')}</td>
               <td>${escapeHtml(item.productName || '-')}</td>
               <td class="col-right">${Number(item.quantity || 0).toFixed(3)}</td>
               <td class="col-right">${Number(item.margin || 0).toFixed(2)}</td>
               <td class="col-right">${Number(item.cost || 0).toFixed(2)}</td>
-              <td class="col-right">${Number(item.sellingPrice || 0).toFixed(2)}</td>
-              <td class="col-right">${Number(item.totalCost || 0).toFixed(2)}</td>
-              <td class="col-right">${Number(item.totalSellingPrice || 0).toFixed(2)}</td>
-              <td class="col-center">${item.unitID || '-'}</td>
+              <td class="col-right">${Number(item.totalSellingPrice || item.totalCost || 0).toFixed(2)}</td>
             </tr>
           `).join('')}
         </tbody>
       </table>
-      <div class="summary-grid">
-        <div><div class="summary-label">Remark :</div><div class="remark-box">${escapeHtml(header.remark || '-')}</div></div>
-        <div class="totals-block">
-          <div class="summary-row"><span>Total Quantity :</span><span>${totalQuantity.toFixed(2)}</span></div>
-          <div class="summary-row"><span>Subtotal :</span><span>${totalCost.toFixed(2)}</span></div>
-          <div class="summary-row"><span>Tax (${taxRate.toFixed(2)}%) :</span><span>${tax.toFixed(2)}</span></div>
-          <div class="summary-row"><span>Total Amount :</span><span>${total.toFixed(2)}</span></div>
-        </div>
-      </div>
     </div>
   `;
 
   const handlePrint = async () => {
-    await printDocumentContent('', buildPrintDocumentHtml(), {
-      fileName: `${typeLabel}-${header.documentNumber || 'document'}`,
-      bodyPadding: '0',
-      extraCss: `
-        @page { size: A4 portrait; margin: 4mm; }
-        body { padding: 0 !important; }
-        .document-print-page { width: 100%; min-height: 289mm; margin: 0; padding: 7mm 8mm; box-sizing: border-box; border: 1px solid #000; color: #000; font-family: Arial, sans-serif; font-size: 12px; }
-        .document-print-header { display: table; width: 100%; border-bottom: 2px solid #1f2937; padding-bottom: 10px; }
-        .logo-box, .company-block { display: table-cell; vertical-align: top; }
-        .logo-box { width: 64px; height: 64px; border: 1px solid #000; text-align: center; font-size: 20px; font-weight: 700; line-height: 62px; background: #f3f4f6; }
-        .company-block { padding-left: 16px; }
-        .company-title { font-size: 28px; font-weight: 700; letter-spacing: 0.02em; }
-        .company-text { margin-top: 4px; font-size: 11px; }
-        .document-title { margin-top: 12px; padding: 6px 0; background: #6b7280; color: #fff; text-align: center; font-size: 22px; font-weight: 700; }
-        .meta-table, .line-table { width: 100%; border-collapse: collapse; }
-        .meta-table { margin-top: 14px; }
-        .meta-table td { padding: 4px 6px; vertical-align: top; }
-        .label-cell { width: 110px; font-weight: 700; white-space: nowrap; }
-        .value-cell { border-bottom: 1px solid #000; }
-        .value-cell.emphasis { text-align: center; font-weight: 700; }
-        .line-table { margin-top: 14px; }
-        .line-table th, .line-table td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
-        .line-table thead th { background: #f3f4f6; text-align: center; font-weight: 700; }
-        .col-item { width: 42px; } .col-id { width: 72px; } .col-qty { width: 90px; } .col-price, .col-total { width: 92px; }
-        .col-center { text-align: center; } .col-right { text-align: right; }
-        .summary-grid { display: table; width: 100%; margin-top: 18px; }
-        .summary-grid > div { display: table-cell; width: 50%; vertical-align: top; }
-        .summary-label { margin-bottom: 8px; font-weight: 700; }
-        .remark-box { min-height: 70px; border: 1px solid #000; padding: 8px; }
-        .totals-block { padding-left: 20px; font-size: 13px; }
-        .summary-row { display: table; width: 100%; margin-bottom: 4px; font-weight: 700; }
-        .summary-row span { display: table-cell; } .summary-row span:last-child { text-align: right; }
-      `,
-    });
+    await printDocumentContent(buildPrintDocumentHtml(), `${typeLabel}-${header.documentNumber || 'document'}`);
   };
 
   const handleSave = async () => {
-    if (!header.title?.trim()) {
-      await showAppAlert({ title: 'Validation', message: 'Please fill document title before saving.', tone: 'warning' });
-      return;
-    }
+    if (isViewMode) return;
 
-    const validItems = items.filter((item) => item.id || item.productCode || item.productName);
+    const validItems = items.filter((item) => item.productCode || item.productName);
 
-    console.log('validItems', validItems);
-    
     if (validItems.length === 0) {
       await showAppAlert({ title: 'Validation', message: 'Please add at least 1 item before saving.', tone: 'warning' });
       return;
@@ -601,14 +574,22 @@ export default function AllDocumentForm({
                     className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     Customer
                   </span>
-                  <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
-                    value={header.customer} onChange={(e) => handleHeaderChange('customer', e.target.value)}>
-                    <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
-                    {customerCodes.map((customer) =>
-                      <option key={customer.customerId}
-                        value={customer.customerId}>{customer.customerId} - {customer.customerName || customer.shortName || 'Unnamed'}
-                      </option>)}
-                  </select>
+                  {isViewMode ? (
+                    <input
+                      readOnly
+                      className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+                      value={customerDisplay || header.customer || ''}
+                    />
+                  ) : (
+                    <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={header.customer} onChange={(e) => handleHeaderChange('customer', e.target.value)}>
+                      <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
+                      {customerCodes.map((customer) =>
+                        <option key={customer.customerCode}
+                          value={customer.customerCode}>{customer.customerName || customer.shortName || customer.customerCode || 'Unnamed'}
+                        </option>)}
+                    </select>
+                  )}
                 </label>
                 <label className="space-y-2">
                   <span
@@ -649,7 +630,7 @@ export default function AllDocumentForm({
                     onChange={(e) => handleHeaderChange('paymentTerm', e.target.value)}>
                     <option value="">{isLoadingCodes ? 'Loading payment terms...' : 'Select payment term'}</option>
                     {paymentTermCodes.map((paymentTerm) => <option key={paymentTerm.termId}
-                      value={paymentTerm.termId}>{paymentTerm.termId} - {paymentTerm.termName || paymentTerm.shortName || 'Unnamed'}
+                      value={paymentTerm.termId}>{paymentTerm.termCode} - {paymentTerm.termName || paymentTerm.shortName || 'Unnamed'}
                     </option>)}
                   </select>
                 </label>
@@ -766,16 +747,25 @@ export default function AllDocumentForm({
                   <div className={`pt-2 text-sm font-semibold
                     ${darkMode ? 'text-white' : 'text-gray-900'}`}>{index + 1}
                   </div>
-                  <button type="button"
-                    onClick={() => { setSelectedItemIndex(index); setProductModalOpen(true); }}
-                    className={`rounded-lg border px-3 py-2 text-left text-xs font-medium 
+                  {isViewMode ? (
+                    <input
+                      readOnly
+                      className="rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+                      value={item.productCode || ''}
+                    />
+                  ) : (
+                    <button type="button"
+                      onClick={() => { setSelectedItemIndex(index); setProductModalOpen(true); }}
+                      className={`rounded-lg border px-3 py-2 text-left text-xs font-medium 
                   ${darkMode ? 'border-blue-500/40 bg-blue-500/10 text-blue-200' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                    {item.productCode || 'Select...'}
-                  </button>
-                  <input className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
-                    value={item.productName}
+                      {item.productCode || 'Select...'}
+                    </button>
+                  )}
+                  <input className={`rounded-lg border border-gray-300 px-3 py-2 text-sm ${isViewMode ? 'bg-gray-100 text-gray-600' : 'bg-white text-black'}`}
+                    readOnly={isViewMode}
+                    value={isViewMode ? getProductDisplayName(item.productCode, item.productName) : item.productName}
                     placeholder="Description"
-                    onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                    onChange={(e) => handleItemChange(index, 'productName', e.target.value)}
                   />
                   <input type="number"
                     className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-right text-sm text-black"

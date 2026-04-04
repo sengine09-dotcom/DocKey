@@ -56,8 +56,18 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
     }
   };
 
-  const handleViewInvoice = (invoice) => {
-    onNavigate('key-invoice', { ...invoice, __mode: 'view' });
+  const handleViewInvoice = async (invoice) => {
+    try {
+      const invoiceIdentifier = invoice.documentId || invoice.id || invoice.invoiceNo || invoice.invoiceId;
+      if (!invoiceIdentifier) {
+        onNavigate('key-invoice', { ...invoice, __mode: 'view' });
+        return;
+      }
+      const response = await invoiceService.getById(invoiceIdentifier);
+      onNavigate('key-invoice', { ...(response?.data?.data || invoice), __mode: 'view' });
+    } catch {
+      onNavigate('key-invoice', { ...invoice, __mode: 'view' });
+    }
   };
 
   const getStatusColor = (status) => {

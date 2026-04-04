@@ -147,9 +147,10 @@ const buildInvoiceStatusOnline = (status: string | null | undefined) => {
   return 1;
 };
 
-const mapDocumentItem = (item: any) => ({
+const mapDocumentItem = (item: any, productNameMap: Record<string, string> = {}) => ({
   lineNo: item.lineNo,
   productCode: item.productCode || '',
+  productName: item.product?.productName || productNameMap[String(item.productCode || '').trim()] || '',
   quantity: toNumber(item.quantity).toFixed(2),
   margin: toNumber(item.margin).toFixed(2),
   cost: toNumber(item.cost).toFixed(2),
@@ -160,38 +161,66 @@ const mapDocumentItem = (item: any) => ({
 });
 
 const buildCustomerNameMap = async (documents: any[]) => {
-  const customerIds = Array.from(new Set(
+  const customerCodes = Array.from(new Set(
     documents
       .map((document) => String(document?.customerId || '').trim())
       .filter(Boolean)
   ));
 
-  if (customerIds.length === 0) {
+  if (customerCodes.length === 0) {
     return {} as Record<string, string>;
   }
 
   const customers = await prisma.customer.findMany({
     where: {
-      id: { in: customerIds },
+      customerCode: { in: customerCodes },
     },
     select: {
-      id: true,
+      customerCode: true,
       customerName: true,
     },
   });
 
   return customers.reduce((result, customer) => {
-    const customerName = customer.customerName || customer.id;
-    result[customer.id] = customerName;
+    const customerName = customer.customerName || customer.customerCode;
+    result[customer.customerCode] = customerName;
     return result;
   }, {} as Record<string, string>);
 };
 
-const mapDocumentRecord = (document: any, customerNameMap: Record<string, string> = {}) => {
+const buildProductNameMap = async (documents: any[]) => {
+  const productCodes = Array.from(new Set(
+    documents
+      .flatMap((document) => Array.isArray(document?.items) ? document.items : [])
+      .map((item) => String(item?.productCode || '').trim())
+      .filter(Boolean)
+  ));
+
+  if (productCodes.length === 0) {
+    return {} as Record<string, string>;
+  }
+
+  const products = await prisma.product.findMany({
+    where: {
+      productCode: { in: productCodes },
+    },
+    select: {
+      productCode: true,
+      productName: true,
+    },
+  });
+
+  return products.reduce((result, product) => {
+    result[product.productCode] = product.productName || product.productCode;
+    return result;
+  }, {} as Record<string, string>);
+};
+
+const mapDocumentRecord = (document: any, customerNameMap: Record<string, string> = {}, productNameMap: Record<string, string> = {}) => {
   const documentType = PRISMA_TO_APP_DOCUMENT_TYPE[document.documentType as keyof typeof PRISMA_TO_APP_DOCUMENT_TYPE] as MainDocumentType;
-  const items = (document.items || []).map(mapDocumentItem);
+  const items = (document.items || []).map((item: any) => mapDocumentItem(item, productNameMap));
   const status = document.status || DOCUMENT_DEFAULT_STATUS[documentType];
-  const customerId = document.customerId || '';
+  const customerCode = document.customerId || '';
 
   const baseRecord = {
     id: document.id,
@@ -200,8 +229,8 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
     documentNumber: document.documentNumber,
     title: document.title || '',
     documentDate: document.documentDate,
-    customer: customerId,
-    customerName: customerNameMap[customerId] || '',
+    customer: customerCode,
+    customerName: customerNameMap[customerCode] || '',
     billTo: document.billTo || '',
     shipTo: document.shipTo || document.destinationId || '',
     destination: document.destinationId || '',
@@ -294,22 +323,25 @@ const fetchDocumentRecord = async (type: MainDocumentType, identifier: string) =
     return null;
   }
   const customerNameMap = await buildCustomerNameMap([document]);
-  return mapDocumentRecord(document, customerNameMap);
+  const productNameMap = await buildProductNameMap([document]);
+  return mapDocumentRecord(document, customerNameMap, productNameMap);
 };
 
-const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: string) => {
+const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: string, documentNumber: string) => {
   
   if (type === 'invoice') {
     return prisma.invoiceDocument.upsert({
       where: { id : documentId },
       create: {
         id: documentId,
+        documentNumber,
         dueDate: parseDate(header.dueDate),
         doNo: parseString(header.doNo),       
         linkedReceiptId: '',
         linkedReceiptNumber: '',
       } as any,
       update: {
+        documentNumber,
         dueDate: parseDate(header.dueDate),
         doNo: parseString(header.doNo),
         linkedReceiptId: '',
@@ -323,12 +355,13 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
       where: { id: documentId },
       create: {
         id: documentId,
-        documentNumber: header.documentNumber,
+        documentNumber,
         attentionTo: '',
         linkedInvoiceId: '',
         linkedInvoiceNumber: '',
       },
       update: {
+        documentNumber,
         attentionTo: '',
         linkedInvoiceId: '',
         linkedInvoiceNumber: '',
@@ -341,11 +374,12 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
       where: { id: documentId },
       create: {
         id: documentId,
-        documentNumber: header.documentNumber,
+        documentNumber,
         receivedDate: parseDate(header.receivedDate),
         paymentReference: parseString(header.paymentReference),
       },
       update: {
+        documentNumber,
         receivedDate: parseDate(header.receivedDate),
         paymentReference: parseString(header.paymentReference),
       },
@@ -357,11 +391,12 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
       where: { id: documentId },
       create: {
         id: documentId,
-        documentNumber: header.documentNumber,
+        documentNumber,
         supplierName: parseString(header.supplierName),
         deliveryDate: parseDate(header.deliveryDate),
       },
       update: {
+        documentNumber,
         supplierName: parseString(header.supplierName),
         deliveryDate: parseDate(header.deliveryDate),
       },
@@ -372,11 +407,12 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
     where: { id: documentId },
     create: {
       id: documentId,
-      documentNumber: header.documentNumber,
+      documentNumber,
       scheduledDate: parseDate(header.scheduledDate),
       assignedTo: parseString(header.assignedTo),
     },
     update: {
+      documentNumber,
       scheduledDate: parseDate(header.scheduledDate),
       assignedTo: parseString(header.assignedTo),
     },
@@ -395,7 +431,8 @@ export const listDocumentsByType = async (typeInput: string) => {
     orderBy: [{ documentDate: 'desc' }, { updatedAt: 'desc' }],
   });
   const customerNameMap = await buildCustomerNameMap(documents);
-  return documents.map((document) => mapDocumentRecord(document, customerNameMap));
+  const productNameMap = await buildProductNameMap(documents);
+  return documents.map((document) => mapDocumentRecord(document, customerNameMap, productNameMap));
 };
 
 export const getDocumentById = async (typeInput: string, identifier: string) => {
@@ -606,7 +643,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     console.log('[DEBUG] No valid items to save');
   }
 
-  await buildSubtypeUpsert(type, { ...header, documentNumber, status }, documentId);
+  await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber);
 
   if (type === 'invoice') {
     const linkedQuotationNumber = parseString(header.linkedQuotationNumber);
