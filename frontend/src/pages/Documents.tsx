@@ -6,7 +6,7 @@ import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
-const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'purchase_order', 'work_order'];
+const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'deposit_receipt', 'purchase_order', 'work_order'];
 const QUOTATION_STATUS_FILTER_OPTIONS = ['All', 'Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
 
 const documentTypeConfigs: Record<MainDocumentType, any> = {
@@ -34,6 +34,14 @@ const documentTypeConfigs: Record<MainDocumentType, any> = {
     accent: 'amber',
     createLabel: 'Create Receipt',
   },
+  deposit_receipt: {
+    icon: '🏦',
+    label: 'Deposit Receipt',
+    title: 'Deposit Receipt Documents',
+    description: 'Deposit or full-prepayment receipts created from confirmed quotations.',
+    accent: 'cyan',
+    createLabel: 'Create Deposit Receipt',
+  },
   purchase_order: {
     icon: '📦',
     label: 'PO',
@@ -55,8 +63,8 @@ const documentTypeConfigs: Record<MainDocumentType, any> = {
 const documentTypeGroups = [
   {
     title: 'Commercial Documents',
-    subtitle: 'Quotation / Invoice / Receipt',
-    types: ['quotation', 'invoice', 'receipt'] as MainDocumentType[],
+    subtitle: 'Quotation / Invoice / Receipt / Deposit Receipt',
+    types: ['quotation', 'invoice', 'receipt', 'deposit_receipt'] as MainDocumentType[],
   },
   {
     title: 'Operations Documents',
@@ -69,6 +77,7 @@ const cardToneClasses: Record<string, string> = {
   blue: 'border-blue-500 bg-blue-600 text-white',
   emerald: 'border-emerald-500 bg-emerald-600 text-white',
   amber: 'border-amber-500 bg-amber-500 text-white',
+  cyan: 'border-cyan-500 bg-cyan-600 text-white',
   violet: 'border-violet-500 bg-violet-600 text-white',
   rose: 'border-rose-500 bg-rose-600 text-white',
 };
@@ -77,6 +86,7 @@ const badgeToneClasses: Record<string, string> = {
   blue: 'bg-blue-100 text-blue-700',
   emerald: 'bg-emerald-100 text-emerald-700',
   amber: 'bg-amber-100 text-amber-700',
+  cyan: 'bg-cyan-100 text-cyan-700',
   violet: 'bg-violet-100 text-violet-700',
   rose: 'bg-rose-100 text-rose-700',
 };
@@ -85,6 +95,7 @@ const darkBadgeToneClasses: Record<string, string> = {
   blue: 'bg-blue-500/15 text-blue-300',
   emerald: 'bg-emerald-500/15 text-emerald-300',
   amber: 'bg-amber-500/15 text-amber-300',
+  cyan: 'bg-cyan-500/15 text-cyan-300',
   violet: 'bg-violet-500/15 text-violet-300',
   rose: 'bg-rose-500/15 text-rose-300',
 };
@@ -93,6 +104,7 @@ const createEmptyCollections = () => ({
   quotation: [],
   invoice: [],
   receipt: [],
+  deposit_receipt: [],
   purchase_order: [],
   work_order: [],
 }) as Record<MainDocumentType, any[]>;
@@ -149,6 +161,15 @@ const getSubtypeDetails = (record: any) => {
     ];
   }
 
+  if (record?.documentType === 'deposit_receipt') {
+    return [
+      { label: 'Received Date', value: formatDate(record.receivedDate) },
+      { label: 'Payment Ref', value: record.paymentReference || '-' },
+      { label: 'Payment Amount', value: `฿${formatCurrency(record.paymentAmount)}` },
+      { label: 'Payment Type', value: record.paymentType || 'deposit' },
+    ];
+  }
+
   if (record?.documentType === 'purchase_order') {
     return [
       { label: 'Supplier', value: record.supplierName || '-' },
@@ -191,6 +212,7 @@ const buildPreviewDocumentNumber = (type: MainDocumentType, records: any[]) => {
     quotation: 'QT',
     invoice: 'INV',
     receipt: 'RC',
+    deposit_receipt: 'DR',
     purchase_order: 'PO',
     work_order: 'WO',
   };
@@ -242,6 +264,51 @@ const buildInvoiceDraftFromQuotation = (quotation: any) => {
         productCode: item?.productCode || '',
         productName: item?.productName || '',
         packing: item?.packing || '',
+        quantity: item?.quantity || '',
+        cost: item?.cost || '',
+        margin: item?.margin || '',
+        sellingPrice: item?.sellingPrice || '',
+        totalCost: item?.totalCost || '',
+        totalSellingPrice: item?.totalSellingPrice || '',
+        unitId: item?.unitId || '',
+      }))
+      : [],
+  };
+};
+
+const buildDepositReceiptDraftFromQuotation = (quotation: any) => {
+  const quotationNumber = String(quotation?.documentNumber || '').trim();
+  const quotationTitle = String(quotation?.title || '').trim();
+  const quotationRemark = String(quotation?.remark || '').trim();
+  const linkRemark = quotationNumber ? `Deposit receipt from quotation ${quotationNumber}` : 'Deposit receipt from quotation';
+  const today = toDateInputValue(new Date());
+  const paymentAmount = Number(quotation?.total || quotation?.totalSellingPrice || 0);
+
+  return {
+    __mode: 'create',
+    title: quotationTitle ? `Deposit Receipt for ${quotationTitle}` : 'Deposit Receipt',
+    documentDate: today,
+    customer: quotation?.customer || '',
+    billTo: quotation?.billTo || quotation?.customerName || '',
+    shipTo: quotation?.shipTo || '',
+    destination: quotation?.destination || quotation?.shipTo || '',
+    paymentTerm: quotation?.paymentTerm || '',
+    paymentMethod: quotation?.paymentMethod || 'Bank Transfer',
+    referenceNo: quotationNumber,
+    status: 'Received',
+    remark: quotationRemark ? `${quotationRemark}\n\n${linkRemark}` : linkRemark,
+    taxRate: String(quotation?.taxRate ?? 0),
+    receivedDate: today,
+    paymentReference: '',
+    paymentAmount: String(paymentAmount.toFixed(2)),
+    paymentType: 'full',
+    linkedQuotationId: quotation?.documentId || quotation?.id || '',
+    linkedQuotationNumber: quotationNumber,
+    items: Array.isArray(quotation?.items)
+      ? quotation.items.map((item: any) => ({
+        id: item?.id || '',
+        productCode: item?.productCode || '',
+        productName: item?.productName || '',
         quantity: item?.quantity || '',
         cost: item?.cost || '',
         margin: item?.margin || '',
@@ -465,6 +532,15 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     setEditorState({
       type: 'invoice',
       initialData: buildInvoiceDraftFromQuotation(quotation),
+    });
+  };
+
+  const handleLinkQuotationToDepositReceipt = (quotation: any) => {
+    setSelectedType('deposit_receipt');
+    setSelectedRecord(null);
+    setEditorState({
+      type: 'deposit_receipt',
+      initialData: buildDepositReceiptDraftFromQuotation(quotation),
     });
   };
 
@@ -712,14 +788,23 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                     <div className="flex flex-wrap items-center gap-3">
                       {renderStatus(selectedRecord)}
                       {selectedRecord.documentType === 'quotation' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleLinkQuotationToInvoice(selectedRecord)}
-                          disabled={isLinkedQuotation(selectedRecord)}
-                          className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${isLinkedQuotation(selectedRecord) ? 'cursor-not-allowed bg-gray-500' : 'bg-violet-600 hover:bg-violet-700'}`}
-                        >
-                          {isLinkedQuotation(selectedRecord) ? 'Linked' : 'Link to Invoice'}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleLinkQuotationToInvoice(selectedRecord)}
+                            disabled={isLinkedQuotation(selectedRecord)}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${isLinkedQuotation(selectedRecord) ? 'cursor-not-allowed bg-gray-500' : 'bg-violet-600 hover:bg-violet-700'}`}
+                          >
+                            {isLinkedQuotation(selectedRecord) ? 'Linked' : 'Link to Invoice'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLinkQuotationToDepositReceipt(selectedRecord)}
+                            className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700"
+                          >
+                            Create Deposit Receipt
+                          </button>
+                        </>
                       ) : null}
                       {selectedRecord.documentType === 'invoice' ? (
                         <button
@@ -880,15 +965,24 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                           View
                         </button>
                         {record.documentType === 'quotation' ? (
-                          <button
-                            type="button"
-                            onClick={() => handleLinkQuotationToInvoice(record)}
-                            disabled={isLinkedQuotation(record)}
-                            className={`rounded-md px-3 py-2 text-xs font-medium text-white 
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleLinkQuotationToInvoice(record)}
+                              disabled={isLinkedQuotation(record)}
+                              className={`rounded-md px-3 py-2 text-xs font-medium text-white 
                             ${isLinkedQuotation(record) ? 'cursor-not-allowed bg-gray-500' :
                                 'bg-violet-600 hover:bg-violet-700'}`}>
-                            {isLinkedQuotation(record) ? 'Linked' : 'Link Invoice'}
-                          </button>
+                              {isLinkedQuotation(record) ? 'Linked' : 'Link Invoice'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleLinkQuotationToDepositReceipt(record)}
+                              className="rounded-md bg-cyan-600 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-700"
+                            >
+                              Deposit Receipt
+                            </button>
+                          </>
                         ) : null}
                         {record.documentType === 'invoice' ? (
                           <button

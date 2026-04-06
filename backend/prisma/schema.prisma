@@ -12,6 +12,7 @@ enum DocumentType {
   QUOTATION
   INVOICE
   RECEIPT
+  DEPOSIT_RECEIPT
   PURCHASE_ORDER
   WORK_ORDER
 }
@@ -112,6 +113,7 @@ model Document {
   quotationDocument     QuotationDocument?
   invoiceDocument       InvoiceDocument?
   receiptDocument       ReceiptDocument?
+  depositReceiptDocument DepositReceiptDocument?
   purchaseOrderDocument PurchaseOrderDocument?
   workOrderDocument     WorkOrderDocument?
 
@@ -166,6 +168,18 @@ model ReceiptDocument {
   receivedDate     DateTime? @map("ReceivedDate")
   paymentReference String?   @map("PaymentReference") @db.VarChar(100)
   document         Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model DepositReceiptDocument {
+  id                    String    @id @map("ID") @db.Char(26)
+  documentNumber        String    @map("DocumentNumber") @db.Char(26)
+  receivedDate          DateTime? @map("ReceivedDate")
+  paymentReference      String?   @map("PaymentReference") @db.VarChar(100)
+  paymentAmount         Decimal?  @map("PaymentAmount") @db.Decimal(19, 4)
+  paymentType           String?   @map("PaymentType") @db.VarChar(30)
+  linkedQuotationId     String?   @map("LinkedQuotationId") @db.VarChar(26)
+  linkedQuotationNumber String?   @map("LinkedQuotationNumber") @db.VarChar(50)
+  document              Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model PurchaseOrderDocument {

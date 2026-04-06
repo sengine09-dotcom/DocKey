@@ -11,6 +11,7 @@ const DOCUMENT_TYPE_LABELS: Record<MainDocumentType, string> = {
   quotation: 'Quotation',
   invoice: 'Invoice',
   receipt: 'Receipt',
+  deposit_receipt: 'Deposit Receipt',
   purchase_order: 'Purchase Order',
   work_order: 'Work Order',
 };
@@ -19,6 +20,7 @@ const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
   quotation: 'Draft',
   invoice: 'Pending',
   receipt: 'Received',
+  deposit_receipt: 'Received',
   purchase_order: 'Open',
   work_order: 'Open',
 };
@@ -27,6 +29,7 @@ const DOCUMENT_NUMBER_PREFIX: Record<MainDocumentType, string> = {
   quotation: 'QT',
   invoice: 'INV',
   receipt: 'RC',
+  deposit_receipt: 'DR',
   purchase_order: 'PO',
   work_order: 'WO',
 };
@@ -44,6 +47,10 @@ const QUOTATION_STATUS_OPTIONS = [
   'Lost',
   'Expired',
   'Converted'
+];
+const DEPOSIT_RECEIPT_PAYMENT_TYPE_OPTIONS = [
+  { value: 'partial', label: 'จ่ายบางส่วน' },
+  { value: 'full', label: 'จ่ายเต็ม' },
 ];
 
 const escapeHtml = (value: any) => String(value ?? '')
@@ -143,6 +150,9 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   linkedInvoiceId: '',
   linkedInvoiceNumber: '',
   receivedDate: '',
+  paymentReference: '',
+  paymentAmount: '0',
+  paymentType: 'full',
   supplierId: '',
   deliveryDate: '',
 });
@@ -165,6 +175,15 @@ const getSubtypeFields = (documentType: MainDocumentType) => {
     return [
       { key: 'receivedDate', label: 'Received Date', type: 'date' },
       { key: 'paymentReference', label: 'Payment Reference', type: 'text' },
+    ];
+  }
+
+  if (documentType === 'deposit_receipt') {
+    return [
+      { key: 'receivedDate', label: 'Received Date', type: 'date' },
+      { key: 'paymentReference', label: 'Payment Reference', type: 'text' },
+      { key: 'paymentAmount', label: 'Payment Amount', type: 'number' },
+      { key: 'paymentType', label: 'Payment Type', type: 'text' },
     ];
   }
 
@@ -264,7 +283,8 @@ export default function AllDocumentForm({
     setMode(initialData.__mode || 'edit');
     setHeader({
       ...getEmptyHeader(documentType),
-      id: initialData.id || '',
+      id: initialData.id || initialData.documentId || '',
+      documentId: initialData.documentId || initialData.id || '',
       documentNumber: initialData.documentNumber || '',
       title: initialData.title || DOCUMENT_TYPE_LABELS[documentType],
       documentDate: initialData.documentDate ? String(initialData.documentDate).slice(0, 10) : getTodayDateInputValue(),
@@ -285,6 +305,9 @@ export default function AllDocumentForm({
       linkedInvoiceId: initialData.linkedInvoiceId || '',
       linkedInvoiceNumber: initialData.linkedInvoiceNumber || '',
       receivedDate: initialData.receivedDate ? String(initialData.receivedDate).slice(0, 10) : '',
+      paymentReference: initialData.paymentReference || '',
+      paymentAmount: String(initialData.paymentAmount ?? getEmptyHeader(documentType).paymentAmount),
+      paymentType: initialData.paymentType || getEmptyHeader(documentType).paymentType,
       supplierId: initialData.supplierName || '',
       deliveryDate: initialData.deliveryDate ? String(initialData.deliveryDate).slice(0, 10) : '',
     });
@@ -355,8 +378,39 @@ export default function AllDocumentForm({
 
   const handleHeaderChange = (field: string, value: string) => {
     if (isViewMode) return;
-    setHeader((prev) => ({ ...prev, [field]: value }));
+    setHeader((prev) => {
+      if (documentType === 'deposit_receipt' && field === 'paymentType') {
+        if (value === 'full') {
+          return {
+            ...prev,
+            paymentType: value,
+            paymentAmount: total.toFixed(2),
+          };
+        }
+
+        return {
+          ...prev,
+          paymentType: value,
+        };
+      }
+
+      return { ...prev, [field]: value };
+    });
   };
+
+  useEffect(() => {
+    if (documentType !== 'deposit_receipt') return;
+    if (isViewMode) return;
+    if (String(header.paymentType || '').trim().toLowerCase() !== 'full') return;
+
+    const nextPaymentAmount = total.toFixed(2);
+    if (String(header.paymentAmount || '') === nextPaymentAmount) return;
+
+    setHeader((prev) => ({
+      ...prev,
+      paymentAmount: nextPaymentAmount,
+    }));
+  }, [documentType, header.paymentAmount, header.paymentType, isViewMode, total]);
 
   const handleItemChange = (index: number, field: string, value: string) => {
     if (isViewMode) return;
@@ -481,6 +535,7 @@ export default function AllDocumentForm({
       header: {
         ...header,
         id: header.id || '',
+        documentId: header.documentId || header.id || '',
         documentNumber: header.documentNumber || '',
         title: header.title || typeLabel,
         totalCost,
@@ -501,6 +556,7 @@ export default function AllDocumentForm({
       await showAppAlert({ title: 'Saved', message: `${typeLabel} saved successfully.`, tone: 'success' });
       setHeader((prev) => ({
         ...prev,
+        id: savedRecord.documentId || savedRecord.id || prev.id,
         documentId: savedRecord.documentId || savedRecord.id,
         documentNumber: savedRecord.documentNumber || prev.documentNumber,
         title: savedRecord.title || prev.title,
@@ -666,6 +722,16 @@ export default function AllDocumentForm({
                         }
                       </datalist>
                     </>
+                  ) : field.key === 'paymentType' && documentType === 'deposit_receipt' ? (
+                    <select
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={(header as any)[field.key]}
+                      onChange={(e) => handleHeaderChange(field.key, e.target.value)}
+                    >
+                      {DEPOSIT_RECEIPT_PAYMENT_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   ) : (
                     <input
                       type={field.type}

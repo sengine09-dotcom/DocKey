@@ -78,13 +78,13 @@ router.get('/dashboard/metrics', async (_req, res) => {
     });
 
     // 1. Total Revenue = totalSellingPrice from all invoices
-    const totalRevenue = quotationsWithCustomerNames.reduce((sum, quotation) => 
-      sum + Number(quotation.totalSellingPrice || 0), 0
+    const totalRevenue = invoicesWithCustomerNames.reduce((sum, invoice) => 
+      sum + Number(invoice.totalSellingPrice || 0), 0
     );
 
     // 2. Total Cost = totalCost from all invoices
-    const totalCost = quotationsWithCustomerNames.reduce((sum, quotation) => 
-      sum + Number(quotation.totalCost || 0), 0
+    const totalCost = invoicesWithCustomerNames.reduce((sum, invoice) => 
+      sum + Number(invoice.totalCost || 0), 0
     );
 
     const linkedInvoiceNumbersFromQuotations = new Set(
