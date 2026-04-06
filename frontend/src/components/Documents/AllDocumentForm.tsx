@@ -41,6 +41,7 @@ const QUOTATION_STATUS_OPTIONS = [
   'Waiting Customer',
   'Follow Up',
   'Negotiating',
+  'Confirmed',
   'Approved',
   'Won',
   'Rejected',
@@ -153,7 +154,7 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   paymentReference: '',
   paymentAmount: '0',
   paymentType: 'full',
-  supplierId: '',
+  supplierName: '',
   deliveryDate: '',
 });
 
@@ -308,7 +309,7 @@ export default function AllDocumentForm({
       paymentReference: initialData.paymentReference || '',
       paymentAmount: String(initialData.paymentAmount ?? getEmptyHeader(documentType).paymentAmount),
       paymentType: initialData.paymentType || getEmptyHeader(documentType).paymentType,
-      supplierId: initialData.supplierName || '',
+      supplierName: initialData.supplierName || '',
       deliveryDate: initialData.deliveryDate ? String(initialData.deliveryDate).slice(0, 10) : '',
     });
 

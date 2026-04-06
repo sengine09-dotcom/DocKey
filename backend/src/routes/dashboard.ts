@@ -41,7 +41,7 @@ router.get('/dashboard/metrics', async (_req, res) => {
     console.log('[DEBUG] Dashboard metrics API called');
     
     // Fetch all documents
-    const [quotations, invoices, receipts] = await Promise.all([
+    const [quotations, invoices, receipts, purchaseOrders] = await Promise.all([
       prisma.document.findMany({
         where: { documentType: 'QUOTATION' },
         include: {
@@ -62,19 +62,28 @@ router.get('/dashboard/metrics', async (_req, res) => {
           receiptDocument: true,
           items: true
         }
+      }),
+      prisma.document.findMany({
+        where: { documentType: 'PURCHASE_ORDER' },
+        include: {
+          purchaseOrderDocument: true,
+          items: true
+        }
       })
     ]);
 
-    const [quotationsWithCustomerNames, invoicesWithCustomerNames, receiptsWithCustomerNames] = await Promise.all([
+    const [quotationsWithCustomerNames, invoicesWithCustomerNames, receiptsWithCustomerNames, purchaseOrdersWithCustomerNames] = await Promise.all([
       attachCustomerNames(quotations),
       attachCustomerNames(invoices),
       attachCustomerNames(receipts),
+      attachCustomerNames(purchaseOrders),
     ]);
 
     console.log('[DEBUG] Documents fetched:', {
       quotations: quotationsWithCustomerNames.length,
       invoices: invoicesWithCustomerNames.length,
-      receipts: receiptsWithCustomerNames.length
+      receipts: receiptsWithCustomerNames.length,
+      purchaseOrders: purchaseOrdersWithCustomerNames.length
     });
 
     // 1. Total Revenue = totalSellingPrice from all invoices
@@ -82,9 +91,22 @@ router.get('/dashboard/metrics', async (_req, res) => {
       sum + Number(invoice.totalSellingPrice || 0), 0
     );
 
-    // 2. Total Cost = totalCost from all invoices
-    const totalCost = invoicesWithCustomerNames.reduce((sum, invoice) => 
-      sum + Number(invoice.totalCost || 0), 0
+    const purchaseOrderByQuotationNumber = new Map(
+      purchaseOrdersWithCustomerNames
+        .filter((purchaseOrder) => Boolean(String(purchaseOrder.referenceNo || '').trim()))
+        .map((purchaseOrder) => [String(purchaseOrder.referenceNo || '').trim(), purchaseOrder])
+    ) as Map<string, any>;
+
+    const getPurchaseOrderCostForQuotation = (quotation: any) => {
+      const quotationNumber = String(quotation?.documentNumber || '').trim();
+      if (!quotationNumber) return 0;
+      const linkedPurchaseOrder = purchaseOrderByQuotationNumber.get(quotationNumber);
+      return Number(linkedPurchaseOrder?.totalCost || 0);
+    };
+
+    // 2. Total Cost = totalCost from all purchase orders
+    const totalCost = purchaseOrdersWithCustomerNames.reduce((sum, purchaseOrder) => 
+      sum + Number(purchaseOrder.totalCost || 0), 0
     );
 
     const linkedInvoiceNumbersFromQuotations = new Set(
@@ -148,19 +170,20 @@ router.get('/dashboard/metrics', async (_req, res) => {
       sum + Number(quotation.totalSellingPrice || 0), 0
     );
 
-    // 4. Net Profit/Loss = realized invoice sales from receipts minus invoice cost
+    // 4. Net Profit/Loss = realized invoice sales from receipts minus linked PO cost
     const netProfit = paidQuotations.reduce((sum, quotation) => {
       const realizedRevenue = Number(quotation.totalSellingPrice || 0);
-      const cost = Number(quotation.totalCost || 0);
+      const cost = getPurchaseOrderCostForQuotation(quotation);
       return sum + (realizedRevenue - cost);
     }, 0);
 
     // 5. Document counts
     const documentCounts = {
-      total: quotationsWithCustomerNames.length + invoicesWithCustomerNames.length + receiptsWithCustomerNames.length,
+      total: quotationsWithCustomerNames.length + invoicesWithCustomerNames.length + receiptsWithCustomerNames.length + purchaseOrdersWithCustomerNames.length,
       quotations: quotationsWithCustomerNames.length,
       invoices: invoicesWithCustomerNames.length,
-      receipts: receiptsWithCustomerNames.length
+      receipts: receiptsWithCustomerNames.length,
+      purchaseOrders: purchaseOrdersWithCustomerNames.length
     };
 
     res.json({
@@ -180,7 +203,8 @@ router.get('/dashboard/metrics', async (_req, res) => {
         documents: {
           quotations: quotationsWithCustomerNames,
           invoices: invoicesWithCustomerNames,
-          receipts: receiptsWithCustomerNames
+          receipts: receiptsWithCustomerNames,
+          purchaseOrders: purchaseOrdersWithCustomerNames
         }
       }
     });
