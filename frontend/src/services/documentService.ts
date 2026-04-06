@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const API_BASE_URL = '/api';
 
-export type MainDocumentType = 'quotation' | 'invoice' | 'receipt' | 'purchase_order' | 'work_order';
+export type MainDocumentType = 'quotation' | 'invoice' | 'receipt' | 'deposit_receipt' | 'purchase_order' | 'work_order';
 
 const normalizeDocumentType = (type: string) => String(type || '').trim().toLowerCase().replace(/-/g, '_');
 

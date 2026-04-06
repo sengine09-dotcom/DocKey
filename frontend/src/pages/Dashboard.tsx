@@ -120,8 +120,8 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
   });
 
   const derivedBusinessMetrics = {
-    totalRevenue: documentsData.quotations.reduce((sum: number, quotation: any) => sum + Number(quotation.totalSellingPrice || 0), 0),
-    totalCost: documentsData.quotations.reduce((sum: number, quotation: any) => sum + Number(quotation.totalCost || 0), 0),
+    totalRevenue: documentsData.invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.totalSellingPrice || 0), 0),
+    totalCost: documentsData.invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.totalCost || 0), 0),
     netProfit: paidQuotations.reduce(
       (sum: number, quotation: any) => sum + (Number(quotation.totalSellingPrice || 0) - Number(quotation.totalCost || 0)),
       0

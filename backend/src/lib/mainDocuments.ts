@@ -5,6 +5,7 @@ const DOCUMENT_TYPE_MAP = {
   quotation: 'QUOTATION',
   invoice: 'INVOICE',
   receipt: 'RECEIPT',
+  deposit_receipt: 'DEPOSIT_RECEIPT',
   purchase_order: 'PURCHASE_ORDER',
   work_order: 'WORK_ORDER',
 } as const;
@@ -13,6 +14,7 @@ const PRISMA_TO_APP_DOCUMENT_TYPE = {
   QUOTATION: 'quotation',
   INVOICE: 'invoice',
   RECEIPT: 'receipt',
+  DEPOSIT_RECEIPT: 'deposit_receipt',
   PURCHASE_ORDER: 'purchase_order',
   WORK_ORDER: 'work_order',
 } as const;
@@ -21,6 +23,7 @@ const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
   quotation: 'Draft',
   invoice: 'Pending',
   receipt: 'Received',
+  deposit_receipt: 'Received',
   purchase_order: 'Open',
   work_order: 'Open',
 };
@@ -29,6 +32,7 @@ const DOCUMENT_PREFIX: Record<MainDocumentType, string> = {
   quotation: 'QT',
   invoice: 'INV',
   receipt: 'RC',
+  deposit_receipt: 'DR',
   purchase_order: 'PO',
   work_order: 'WO',
 };
@@ -43,6 +47,7 @@ const documentInclude = {
   quotationDocument: true,
   invoiceDocument: true,
   receiptDocument: true,
+  depositReceiptDocument: true,
   purchaseOrderDocument: true,
   workOrderDocument: true,
 };
@@ -85,7 +90,7 @@ const parseLegacyInvoiceNo = (value: any) => {
 };
 
 const parseDocumentType = (value: string): MainDocumentType | null => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   return normalized in DOCUMENT_TYPE_MAP ? (normalized as MainDocumentType) : null;
 };
 
@@ -287,6 +292,18 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
     };
   }
 
+  if (documentType === 'deposit_receipt') {
+    return {
+      ...baseRecord,
+      receivedDate: document.depositReceiptDocument?.receivedDate || null,
+      paymentReference: document.depositReceiptDocument?.paymentReference || '',
+      paymentAmount: toNumber(document.depositReceiptDocument?.paymentAmount),
+      paymentType: document.depositReceiptDocument?.paymentType || 'full',
+      linkedQuotationId: document.depositReceiptDocument?.linkedQuotationId || '',
+      linkedQuotationNumber: document.depositReceiptDocument?.linkedQuotationNumber || '',
+    };
+  }
+
   if (documentType === 'purchase_order') {
     return {
       ...baseRecord,
@@ -382,6 +399,31 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
     });
   }
 
+  if (type === 'deposit_receipt') {
+    return prisma.depositReceiptDocument.upsert({
+      where: { id: documentId },
+      create: {
+        id: documentId,
+        documentNumber,
+        receivedDate: parseDate(header.receivedDate),
+        paymentReference: parseString(header.paymentReference),
+        paymentAmount: parseNullableNumber(header.paymentAmount),
+        paymentType: parseString(header.paymentType),
+        linkedQuotationId: parseString(header.linkedQuotationId),
+        linkedQuotationNumber: parseString(header.linkedQuotationNumber),
+      },
+      update: {
+        documentNumber,
+        receivedDate: parseDate(header.receivedDate),
+        paymentReference: parseString(header.paymentReference),
+        paymentAmount: parseNullableNumber(header.paymentAmount),
+        paymentType: parseString(header.paymentType),
+        linkedQuotationId: parseString(header.linkedQuotationId),
+        linkedQuotationNumber: parseString(header.linkedQuotationNumber),
+      },
+    });
+  }
+
   if (type === 'purchase_order') {
     return prisma.purchaseOrderDocument.upsert({
       where: { id: documentId },
@@ -450,7 +492,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
 
   const header = payload?.header || {};
   const items = Array.isArray(payload?.items) ? payload.items : [];
-  const requestedDocumentId = parseString(header.documentId);
+  const requestedDocumentId = parseString(header.documentId || header.id);
   const requestedDocumentNumber = parseString(header.documentNumber);
 
   console.log('[DEBUG] Header:', JSON.stringify(header, null, 2));
@@ -508,6 +550,27 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     }
   }
 
+  if (type === 'deposit_receipt') {
+    const quotationReference = parseString(header.linkedQuotationNumber);
+
+    if (quotationReference) {
+      const duplicateDepositReceipt = await prisma.document.findFirst({
+        where: {
+          documentType: prismaType,
+          id: { not: documentId },
+          referenceNo: quotationReference,
+        },
+        select: {
+          documentNumber: true,
+        },
+      });
+
+      if (duplicateDepositReceipt) {
+        throw new Error(`Quotation ${quotationReference} is already linked to deposit receipt ${duplicateDepositReceipt.documentNumber}`);
+      }
+    }
+  }
+
   if (type === 'receipt') {
     const invoiceReference = parseString(header.linkedInvoiceNumber);
 
@@ -544,7 +607,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
       destinationId: parseString(header.destination),
       paymentTermId: parseString(header.paymentTerm),
       paymentMethod: parseString(header.paymentMethod),
-      referenceNo: parseString(header.referenceNo || header.poNo),
+      referenceNo: parseString(header.referenceNo || header.poNo || header.linkedQuotationNumber),
       status,
       remark: parseString(header.remark),
       taxRate: toNumber(header.taxRate),
@@ -566,7 +629,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
       destinationId: parseString(header.destination || header.shipTo),
       paymentTermId: parseString(header.paymentTerm),
       paymentMethod: parseString(header.paymentMethod),
-      referenceNo: parseString(header.referenceNo || header.poNo),
+      referenceNo: parseString(header.referenceNo || header.poNo || header.linkedQuotationNumber),
       status,
       remark: parseString(header.remark),
       taxRate: toNumber(header.taxRate),
@@ -615,6 +678,27 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
 
   const validItems = items.filter((item: any) => item?.productCode);
   console.log('[DEBUG] Valid items after filtering:', validItems.length);
+  const requestedProductCodes = Array.from(new Set(
+    validItems
+      .map((item: any) => parseString(item.productCode))
+      .filter(Boolean)
+  )) as string[];
+  const existingProductCodeSet = new Set<string>();
+
+  if (requestedProductCodes.length > 0) {
+    const existingProducts = await prisma.product.findMany({
+      where: {
+        productCode: { in: requestedProductCodes },
+      },
+      select: {
+        productCode: true,
+      },
+    });
+
+    existingProducts.forEach((product) => {
+      existingProductCodeSet.add(product.productCode);
+    });
+  }
   
   if (validItems.length > 0) {
     console.log('[DEBUG] Creating DocumentItems...');
@@ -624,7 +708,9 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
         documentNumber,
         documentType: getPrismaDocumentType(type),
         lineNo: index + 1,
-        productCode: parseString(item.productCode),
+        productCode: existingProductCodeSet.has(String(parseString(item.productCode) || ''))
+          ? parseString(item.productCode)
+          : null,
         cost: parseNullableNumber(item.cost),
         quantity: toNumber(item.quantity),
         margin: parseNullableNumber(item.margin),
