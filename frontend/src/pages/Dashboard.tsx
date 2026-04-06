@@ -68,13 +68,15 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
     total: 0,
     quotations: 0,
     invoices: 0,
-    receipts: 0
+    receipts: 0,
+    purchaseOrders: 0
   };
   
   const documentsData = dashboardData?.documents || {
     quotations: [],
     invoices: [],
-    receipts: []
+    receipts: [],
+    purchaseOrders: []
   };
 
   const linkedInvoiceNumbersFromQuotations = new Set(
@@ -94,6 +96,19 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
       .filter((quotation: any) => quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber)
       .map((quotation: any) => [quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber, quotation])
   ) as Map<string, any>;
+
+  const purchaseOrderByQuotationNumber = new Map(
+    documentsData.purchaseOrders
+      .filter((purchaseOrder: any) => String(purchaseOrder.referenceNo || '').trim())
+      .map((purchaseOrder: any) => [String(purchaseOrder.referenceNo || '').trim(), purchaseOrder])
+  ) as Map<string, any>;
+
+  const getPurchaseOrderCostForQuotation = (quotation: any) => {
+    const quotationNumber = String(quotation?.documentNumber || '').trim();
+    if (!quotationNumber) return 0;
+    const purchaseOrder = purchaseOrderByQuotationNumber.get(quotationNumber);
+    return Number(purchaseOrder?.totalCost || 0);
+  };
 
   const paidQuotations = documentsData.quotations.filter((quotation: any) => {
     const linkedInvoiceNumber = quotation.quotationDocument?.linkedInvoiceNumber || quotation.linkedInvoiceNumber;
@@ -121,9 +136,9 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
 
   const derivedBusinessMetrics = {
     totalRevenue: documentsData.invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.totalSellingPrice || 0), 0),
-    totalCost: documentsData.invoices.reduce((sum: number, invoice: any) => sum + Number(invoice.totalCost || 0), 0),
+    totalCost: documentsData.purchaseOrders.reduce((sum: number, purchaseOrder: any) => sum + Number(purchaseOrder.totalCost || 0), 0),
     netProfit: paidQuotations.reduce(
-      (sum: number, quotation: any) => sum + (Number(quotation.totalSellingPrice || 0) - Number(quotation.totalCost || 0)),
+      (sum: number, quotation: any) => sum + (Number(quotation.totalSellingPrice || 0) - getPurchaseOrderCostForQuotation(quotation)),
       0
     ),
     completedSales: paidQuotations.length,
@@ -212,13 +227,13 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                     bgClass={darkMode ? 'bg-green-900/40' : 'bg-green-100'}
                     textClass={darkMode ? 'text-green-300' : 'text-green-700'} />
                   <StatCard 
-                    title="ทุนรวม (Invoice)" 
+                    title="ทุนรวม (PO)" 
                     value={`฿${derivedBusinessMetrics.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     icon="💸"
                     bgClass={darkMode ? 'bg-red-900/40' : 'bg-red-100'}
                     textClass={darkMode ? 'text-red-300' : 'text-red-700'} />
                   <StatCard 
-                    title="กำไร / ขาดทุน (Invoice ออก REC แล้ว)" 
+                    title="กำไร / ขาดทุน (ออก REC แล้ว - หักทุน PO)" 
                     value={`฿${derivedBusinessMetrics.netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     icon={derivedBusinessMetrics.netProfit >= 0 ? "📈" : "📉"}
                     bgClass={derivedBusinessMetrics.netProfit >= 0 ? (darkMode ? 'bg-emerald-900/40' : 'bg-emerald-100') : (darkMode ? 'bg-red-900/40' : 'bg-red-100')}
@@ -318,7 +333,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Customer</th>
                           <th className="px-6 py-3 text-left">Received Date</th>
                           <th className="px-6 py-3 text-right">Amount</th>
-                          <th className="px-6 py-3 text-right">Profit / Loss</th>
+                          <th className="px-6 py-3 text-right">กำไร / ขาดทุน</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
@@ -335,7 +350,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
 
                           const linkedQuotation = quotationByLinkedInvoiceNumber.get(linkedInvoice.documentNumber) as any;
                           const realizedRevenue = Number(linkedQuotation?.totalSellingPrice || 0);
-                          const cost = Number(linkedQuotation?.totalCost || 0);
+                          const cost = getPurchaseOrderCostForQuotation(linkedQuotation);
 
                           const profit = realizedRevenue - cost;
                           return (
@@ -382,7 +397,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Customer</th>
                           <th className="px-6 py-3 text-left">Valid Until</th>
                           <th className="px-6 py-3 text-right">Total Amount</th>
-                          <th className="px-6 py-3 text-right">Profit</th>
+                          <th className="px-6 py-3 text-right">กำไร</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
@@ -438,7 +453,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Customer</th>
                           <th className="px-6 py-3 text-left">Issued Date</th>
                           <th className="px-6 py-3 text-right">Selling Price</th>
-                          <th className="px-6 py-3 text-right">Profit / Loss</th>
+                          <th className="px-6 py-3 text-right">กำไร / ขาดทุน</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
@@ -492,8 +507,8 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Customer</th>
                           <th className="px-6 py-3 text-left">Issued Date</th>
                           <th className="px-6 py-3 text-right">Selling Price</th>
-                          <th className="px-6 py-3 text-right">Cost</th>
-                          <th className="px-6 py-3 text-right">Expected Profit</th>
+                          <th className="px-6 py-3 text-right">ทุน (PO)</th>
+                          <th className="px-6 py-3 text-right">กำไรคาดการณ์</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
@@ -501,7 +516,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                         {unpaidInvoices.slice(0, 10).map((inv: any, idx: number) => {
                           const linkedQuotation = quotationByLinkedInvoiceNumber.get(inv.documentNumber) as any;
                           const sellingPrice = Number(linkedQuotation?.totalSellingPrice || 0);
-                          const cost = Number(linkedQuotation?.totalCost || 0);
+                          const cost = getPurchaseOrderCostForQuotation(linkedQuotation);
                           const expectedProfit = sellingPrice - cost;
                           return (
                             <tr key={inv.documentId || inv.id || inv.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>

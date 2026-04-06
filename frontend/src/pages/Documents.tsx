@@ -7,7 +7,7 @@ import useThemePreference from '../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
 const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'deposit_receipt', 'purchase_order', 'work_order'];
-const QUOTATION_STATUS_FILTER_OPTIONS = ['All', 'Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
+const QUOTATION_STATUS_FILTER_OPTIONS = ['All', 'Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Confirmed', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
 
 const documentTypeConfigs: Record<MainDocumentType, any> = {
   quotation: {
@@ -207,6 +207,12 @@ const isLinkedInvoice = (record: any) => {
   return status === 'link receipt';
 };
 
+const isConfirmedQuotation = (record: any) => {
+  if (record?.documentType !== 'quotation') return false;
+  const status = String(record?.status || '').trim().toLowerCase();
+  return status === 'confirmed';
+};
+
 const buildPreviewDocumentNumber = (type: MainDocumentType, records: any[]) => {
   const prefixes: Record<MainDocumentType, string> = {
     quotation: 'QT',
@@ -315,6 +321,45 @@ const buildDepositReceiptDraftFromQuotation = (quotation: any) => {
         sellingPrice: item?.sellingPrice || '',
         totalCost: item?.totalCost || '',
         totalSellingPrice: item?.totalSellingPrice || '',
+        unitId: item?.unitId || '',
+      }))
+      : [],
+  };
+};
+
+const buildPurchaseOrderDraftFromQuotation = (quotation: any) => {
+  const quotationNumber = String(quotation?.documentNumber || '').trim();
+  const quotationTitle = String(quotation?.title || '').trim();
+  const quotationRemark = String(quotation?.remark || '').trim();
+  const linkRemark = quotationNumber ? `Purchase order from quotation ${quotationNumber}` : 'Purchase order from quotation';
+
+  return {
+    __mode: 'create',
+    title: quotationTitle ? `PO for ${quotationTitle}` : 'Purchase Order',
+    documentDate: toDateInputValue(new Date()),
+    customer: quotation?.customer || '',
+    billTo: quotation?.billTo || quotation?.customerName || '',
+    shipTo: quotation?.shipTo || '',
+    destination: quotation?.destination || quotation?.shipTo || '',
+    paymentTerm: quotation?.paymentTerm || '',
+    paymentMethod: quotation?.paymentMethod || '',
+    referenceNo: quotationNumber,
+    status: 'Open',
+    remark: quotationRemark ? `${quotationRemark}\n\n${linkRemark}` : linkRemark,
+    taxRate: String(quotation?.taxRate ?? 0),
+    supplierName: '',
+    deliveryDate: '',
+    items: Array.isArray(quotation?.items)
+      ? quotation.items.map((item: any) => ({
+        id: item?.id || '',
+        productCode: item?.productCode || '',
+        productName: item?.productName || '',
+        quantity: item?.quantity || '',
+        cost: item?.cost || '',
+        margin: item?.margin || '',
+        sellingPrice: item?.cost || '',
+        totalCost: item?.totalCost || '',
+        totalSellingPrice: item?.totalCost || '',
         unitId: item?.unitId || '',
       }))
       : [],
@@ -541,6 +586,15 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     setEditorState({
       type: 'deposit_receipt',
       initialData: buildDepositReceiptDraftFromQuotation(quotation),
+    });
+  };
+
+  const handleLinkQuotationToPurchaseOrder = (quotation: any) => {
+    setSelectedType('purchase_order');
+    setSelectedRecord(null);
+    setEditorState({
+      type: 'purchase_order',
+      initialData: buildPurchaseOrderDraftFromQuotation(quotation),
     });
   };
 
@@ -804,6 +858,14 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                           >
                             Create Deposit Receipt
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLinkQuotationToPurchaseOrder(selectedRecord)}
+                            disabled={!isConfirmedQuotation(selectedRecord)}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${!isConfirmedQuotation(selectedRecord) ? 'cursor-not-allowed bg-gray-500' : 'bg-fuchsia-600 hover:bg-fuchsia-700'}`}
+                          >
+                            {!isConfirmedQuotation(selectedRecord) ? 'PO available when Confirmed' : 'Create PO'}
+                          </button>
                         </>
                       ) : null}
                       {selectedRecord.documentType === 'invoice' ? (
@@ -981,6 +1043,14 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                               className="rounded-md bg-cyan-600 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-700"
                             >
                               Deposit Receipt
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleLinkQuotationToPurchaseOrder(record)}
+                              disabled={!isConfirmedQuotation(record)}
+                              className={`rounded-md px-3 py-2 text-xs font-medium text-white ${!isConfirmedQuotation(record) ? 'cursor-not-allowed bg-gray-500' : 'bg-fuchsia-600 hover:bg-fuchsia-700'}`}
+                            >
+                              {!isConfirmedQuotation(record) ? 'PO when Confirmed' : 'Create PO'}
                             </button>
                           </>
                         ) : null}

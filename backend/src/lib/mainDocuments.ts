@@ -133,7 +133,7 @@ const buildFallbackDocumentNumber = async (type: MainDocumentType) => {
 
 const buildStatusColor = (status: string) => {
   const normalized = String(status || '').toLowerCase();
-  if (['paid', 'printed', 'received', 'completed', 'approved', 'won', 'converted'].includes(normalized)) return 'green';
+  if (['paid', 'printed', 'received', 'completed', 'confirmed', 'approved', 'won', 'converted'].includes(normalized)) return 'green';
   if (['overdue', 'cancelled', 'rejected', 'expired', 'lost'].includes(normalized)) return 'red';
   if (['sent', 'open', 'scheduled', 'negotiating', 'follow up', 'waiting customer'].includes(normalized)) return 'blue';
   return 'yellow';
