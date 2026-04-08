@@ -49,6 +49,15 @@ const QUOTATION_STATUS_OPTIONS = [
   'Expired',
   'Converted'
 ];
+const PURCHASE_ORDER_STATUS_OPTIONS = [
+  'Open',
+  'Pending',
+  'Approved',
+  'Ordered',
+  'Partially Received',
+  'Completed',
+  'Cancelled',
+];
 const DEPOSIT_RECEIPT_PAYMENT_TYPE_OPTIONS = [
   { value: 'partial', label: 'จ่ายบางส่วน' },
   { value: 'full', label: 'จ่ายเต็ม' },
@@ -230,6 +239,7 @@ export default function AllDocumentForm({
   const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
   const [vendorCodes, setVendorCodes] = useState<any[]>([]);
   const [productCodes, setProductCodes] = useState<any[]>([]);
+  const [companyInfo, setCompanyInfo] = useState<any | null>(null);
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -239,18 +249,20 @@ export default function AllDocumentForm({
     const loadCodeOptions = async () => {
       setIsLoadingCodes(true);
       try {
-        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse] = await Promise.all([
+        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse, companyResponse] = await Promise.all([
           codeService.getAll('customer'),
           codeService.getAll('destination'),
           codeService.getAll('payment-term'),
           codeService.getAll('vendor'),
           codeService.getAll('product'),
+          codeService.getAll('company'),
         ]);
         setCustomerCodes(customerResponse.data.data || []);
         setDestinationCodes(destinationResponse.data.data || []);
         setPaymentTermCodes(paymentTermResponse.data.data || []);
         setVendorCodes(vendorResponse.data.data || []);
         setProductCodes(productResponse.data.data || []);
+        setCompanyInfo((companyResponse.data.data || []).find((company: any) => company?.isActive !== false) || companyResponse.data.data?.[0] || null);
         setCodeError(null);
 
         console.log('Product codes xxx:', productResponse.data.data);
@@ -504,56 +516,492 @@ export default function AllDocumentForm({
     onNavigate('documents', { selectedType: documentType });
   };
 
-  const buildPrintDocumentHtml = () => `
-    <div class="document-print-page">
-      <div class="document-print-header">
-        <div class="logo-box">DK</div>
-        <div class="company-block">
-          <div class="company-title">Doc Key</div>
-          <div class="company-text">${escapeHtml(typeLabel)} Document</div>
-          <div class="company-text">Generated from the unified Document model</div>
+  const buildPrintDocumentHtml = () => {
+    const subtotal = printItems.reduce(
+      (sum, item) => sum + Number(item.totalSellingPrice || item.totalCost || 0),
+      0,
+    );
+    const companyName = String(companyInfo?.name || companyInfo?.nameEn || 'Doc Key').trim();
+    const companyAddress = String(companyInfo?.address || '').trim();
+    const companyPhone = String(companyInfo?.phone || '').trim();
+    const companyBranch = String(companyInfo?.branch || '').trim();
+    const companyTaxId = String(companyInfo?.taxId || '').trim();
+
+    if (documentType === 'quotation') {
+      return `
+        <style>
+          .quotation-print-root {
+            color: #0f172a;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+          }
+
+          .quotation-print-sheet {
+            min-height: calc(297mm - 28mm);
+            background: #ffffff;
+            padding: 12mm 14mm 16mm;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+          }
+
+          .quotation-print-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid #1d4ed8;
+          }
+
+          .quotation-brand {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+          }
+
+          .quotation-brand-mark {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #1d4ed8, #0f172a);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+          }
+
+          .quotation-brand-title {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            margin: 0;
+            color: #0f172a;
+          }
+
+          .quotation-brand-subtitle,
+          .quotation-brand-text {
+            margin: 3px 0 0;
+            color: #475569;
+            font-size: 11px;
+          }
+
+          .quotation-company-meta {
+            margin-top: 8px;
+            color: #334155;
+            font-size: 11px;
+            line-height: 1.6;
+            max-width: 430px;
+            white-space: pre-wrap;
+          }
+
+          .quotation-docbox {
+            min-width: 250px;
+            border: 1px solid #bfdbfe;
+            border-radius: 16px;
+            overflow: hidden;
+          }
+
+          .quotation-docbox-head {
+            background: #eff6ff;
+            color: #1d4ed8;
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+          }
+
+          .quotation-docbox-body {
+            padding: 10px 12px;
+          }
+
+          .quotation-docbox-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+
+          .quotation-docbox-meta {
+            margin-top: 8px;
+            display: grid;
+            grid-template-columns: 96px 1fr;
+            row-gap: 6px;
+            column-gap: 8px;
+            font-size: 11px;
+          }
+
+          .quotation-docbox-label {
+            color: #64748b;
+            font-weight: 700;
+          }
+
+          .quotation-docbox-value {
+            color: #0f172a;
+          }
+
+          .quotation-intro {
+            margin-top: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: #f8fafc;
+          }
+
+          .quotation-section-grid {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 16px;
+          }
+
+          .quotation-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #ffffff;
+          }
+
+          .quotation-card-head {
+            padding: 9px 12px;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+          }
+
+          .quotation-card-body {
+            padding: 12px;
+          }
+
+          .quotation-info-grid {
+            display: grid;
+            grid-template-columns: 110px 1fr;
+            row-gap: 8px;
+            column-gap: 10px;
+            font-size: 11px;
+          }
+
+          .quotation-info-label {
+            color: #64748b;
+            font-weight: 700;
+          }
+
+          .quotation-info-value {
+            color: #0f172a;
+            white-space: pre-wrap;
+          }
+
+          .quotation-items {
+            width: 100%;
+            margin-top: 16px;
+            border-collapse: collapse;
+          }
+
+          .quotation-items th,
+          .quotation-items td {
+            border: 1px solid #cbd5e1;
+            padding: 8px 9px;
+            vertical-align: top;
+          }
+
+          .quotation-items th {
+            background: #1e3a8a;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+          }
+
+          .quotation-items tbody tr:nth-child(even) {
+            background: #f8fafc;
+          }
+
+          .text-center {
+            text-align: center;
+          }
+
+          .text-right {
+            text-align: right;
+          }
+
+          .quotation-bottom {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 16px;
+          }
+
+          .quotation-remark {
+            border: 1px solid #cbd5e1;
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: #f8fafc;
+          }
+
+          .quotation-remark-title {
+            margin: 0 0 8px;
+            color: #475569;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+          }
+
+          .quotation-remark-body {
+            margin: 0;
+            color: #0f172a;
+            white-space: pre-wrap;
+          }
+
+          .quotation-summary {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          .quotation-summary td {
+            border: 1px solid #cbd5e1;
+            padding: 9px 10px;
+          }
+
+          .quotation-summary-label {
+            background: #f8fafc;
+            font-weight: 700;
+            color: #334155;
+          }
+
+          .quotation-summary-total td {
+            background: #dbeafe;
+            color: #1e3a8a;
+            font-weight: 700;
+            font-size: 14px;
+          }
+
+          .quotation-approval {
+            margin-top: auto;
+            padding-top: 28px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+          }
+
+          .quotation-sign-box {
+            border-top: 1px solid #94a3b8;
+            padding-top: 10px;
+            min-height: 52px;
+          }
+
+          .quotation-sign-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+          }
+
+          .quotation-sign-note {
+            margin-top: 6px;
+            font-size: 10px;
+            color: #64748b;
+          }
+        </style>
+        <div class="quotation-print-root">
+          <div class="quotation-print-sheet">
+            <div class="quotation-print-header">
+              <div class="quotation-brand">
+                <div class="quotation-brand-mark">DK</div>
+                <div>
+                  <h1 class="quotation-brand-title">${escapeHtml(companyName)}</h1>
+                  <p class="quotation-brand-subtitle">Professional sales quotation document</p>
+                  <p class="quotation-brand-text">Prepared for customer review and approval</p>
+                  <div class="quotation-company-meta">${escapeHtml([
+                    companyAddress,
+                    companyPhone ? `Tel: ${companyPhone}` : '',
+                    companyBranch ? `Branch: ${companyBranch}` : '',
+                    companyTaxId ? `Tax ID: ${companyTaxId}` : '',
+                  ].filter(Boolean).join(' | ') || 'Company profile is not configured.')}</div>
+                </div>
+              </div>
+              <div class="quotation-docbox">
+                <div class="quotation-docbox-head">Quotation Document</div>
+                <div class="quotation-docbox-body">
+                  <p class="quotation-docbox-title">QUOTATION</p>
+                  <div class="quotation-docbox-meta">
+                    <div class="quotation-docbox-label">Document No</div>
+                    <div class="quotation-docbox-value">${escapeHtml(header.documentNumber || '-')}</div>
+                    <div class="quotation-docbox-label">Date</div>
+                    <div class="quotation-docbox-value">${escapeHtml(formatPrintDate(header.documentDate))}</div>
+                    <div class="quotation-docbox-label">Status</div>
+                    <div class="quotation-docbox-value">${escapeHtml(header.status || '-')}</div>
+                    <div class="quotation-docbox-label">Reference</div>
+                    <div class="quotation-docbox-value">${escapeHtml(header.referenceNo || '-')}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="quotation-intro">
+              We are pleased to submit our quotation for your consideration. Please review the pricing, quantities, and commercial terms below.
+            </div>
+
+            <div class="quotation-section-grid">
+              <div class="quotation-card">
+                <div class="quotation-card-head">Customer Information</div>
+                <div class="quotation-card-body">
+                  <div class="quotation-info-grid">
+                    <div class="quotation-info-label">Customer</div>
+                    <div class="quotation-info-value">${escapeHtml(partyDisplay || '-')}</div>
+                    <div class="quotation-info-label">Bill To</div>
+                    <div class="quotation-info-value">${escapeHtml(header.billTo || partyDisplay || '-')}</div>
+                    <div class="quotation-info-label">Ship To</div>
+                    <div class="quotation-info-value">${escapeHtml(shipToDisplay || '-')}</div>
+                    <div class="quotation-info-label">Title</div>
+                    <div class="quotation-info-value">${escapeHtml(header.title || 'Quotation')}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="quotation-card">
+                <div class="quotation-card-head">Commercial Terms</div>
+                <div class="quotation-card-body">
+                  <div class="quotation-info-grid">
+                    <div class="quotation-info-label">Payment</div>
+                    <div class="quotation-info-value">${escapeHtml(paymentTermDisplay || header.paymentMethod || '-')}</div>
+                    <div class="quotation-info-label">Tax Rate</div>
+                    <div class="quotation-info-value">${escapeHtml(`${Number(taxRate || 0).toFixed(2)}%`)}</div>
+                    <div class="quotation-info-label">Total Qty</div>
+                    <div class="quotation-info-value">${escapeHtml(Number(totalQuantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 }))}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <table class="quotation-items">
+              <thead>
+                <tr>
+                  <th style="width:52px;">No</th>
+                  <th style="width:96px;">Code</th>
+                  <th>Description</th>
+                  <th style="width:76px;">Qty</th>
+                  <th style="width:94px;">Unit Price</th>
+                  <th style="width:108px;">Line Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${printItems.length === 0 ? '<tr><td colspan="6" class="text-center">-</td></tr>' : printItems.map((item, index) => `
+                  <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td class="text-center">${escapeHtml(item.productCode || '-')}</td>
+                    <td>${escapeHtml(item.productName || '-')}</td>
+                    <td class="text-right">${Number(item.quantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
+                    <td class="text-right">${Number(item.sellingPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td class="text-right">${Number(item.totalSellingPrice || item.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div class="quotation-bottom">
+              <div class="quotation-remark">
+                <p class="quotation-remark-title">Remark / Terms</p>
+                <p class="quotation-remark-body">${escapeHtml(header.remark || 'Please contact us if you require any clarification or revision to this quotation.')}</p>
+              </div>
+              <table class="quotation-summary">
+                <tbody>
+                  <tr>
+                    <td class="quotation-summary-label">Subtotal</td>
+                    <td class="text-right">${Number(subtotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                  <tr>
+                    <td class="quotation-summary-label">VAT</td>
+                    <td class="text-right">${Number(tax || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                  <tr>
+                    <td class="quotation-summary-label">Total Quantity</td>
+                    <td class="text-right">${Number(totalQuantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
+                  </tr>
+                  <tr class="quotation-summary-total">
+                    <td>Grand Total</td>
+                    <td class="text-right">${Number(total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="quotation-approval">
+              <div class="quotation-sign-box">
+                <div class="quotation-sign-title">Prepared By</div>
+                <div class="quotation-sign-note">Sales Representative / Authorized Signatory</div>
+              </div>
+              <div class="quotation-sign-box">
+                <div class="quotation-sign-title">Customer Approval</div>
+                <div class="quotation-sign-note">Signature / Name / Date</div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="document-title">${escapeHtml(typeLabel)}</div>
-      <table class="meta-table">
-        <tbody>
-          <tr><td class="label-cell">Document No :</td><td class="value-cell emphasis">${escapeHtml(header.documentNumber || '-')}</td><td class="label-cell">Document Date :</td><td class="value-cell">${escapeHtml(formatPrintDate(header.documentDate))}</td></tr>
-          <tr><td class="label-cell">${escapeHtml(partyLabel)} :</td><td class="value-cell">${escapeHtml(partyDisplay || '-')}</td><td class="label-cell">Status :</td><td class="value-cell">${escapeHtml(header.status || '-')}</td></tr>
-          <tr><td class="label-cell">Bill To :</td><td class="value-cell">${escapeHtml(header.billTo || partyDisplay || '-')}</td><td class="label-cell">Ship To :</td><td class="value-cell">${escapeHtml(shipToDisplay || '-')}</td></tr>
-          <tr><td class="label-cell">Reference No :</td><td class="value-cell">${escapeHtml(header.referenceNo || '-')}</td><td class="label-cell">Payment :</td><td class="value-cell">${escapeHtml(paymentTermDisplay || header.paymentMethod || '-')}</td></tr>
-        </tbody>
-      </table>
-      <table class="line-table">
-        <thead>
-          <tr>
-            <th class="col-item">Item</th>
-            <th class="col-id">Code</th>
-            <th>Product Name</th>
-            <th class="col-qty">Quantity</th>
-            <th class="col-margin">Margin</th>
-            <th class="col-price">Cost</th>
-            <th class="col-total">Total cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${printItems.length === 0 ? '<tr><td colspan="6" class="col-center">-</td></tr>' : printItems.map((item, index) => `
+      `;
+    }
+
+    return `
+      <div class="document-print-page">
+        <div class="document-print-header">
+          <div class="logo-box">DK</div>
+          <div class="company-block">
+            <div class="company-title">Doc Key</div>
+            <div class="company-text">${escapeHtml(typeLabel)} Document</div>
+            <div class="company-text">Generated from the unified Document model</div>
+          </div>
+        </div>
+        <div class="document-title">${escapeHtml(typeLabel)}</div>
+        <table class="meta-table">
+          <tbody>
+            <tr><td class="label-cell">Document No :</td><td class="value-cell emphasis">${escapeHtml(header.documentNumber || '-')}</td><td class="label-cell">Document Date :</td><td class="value-cell">${escapeHtml(formatPrintDate(header.documentDate))}</td></tr>
+            <tr><td class="label-cell">${escapeHtml(partyLabel)} :</td><td class="value-cell">${escapeHtml(partyDisplay || '-')}</td><td class="label-cell">Status :</td><td class="value-cell">${escapeHtml(header.status || '-')}</td></tr>
+            <tr><td class="label-cell">Bill To :</td><td class="value-cell">${escapeHtml(header.billTo || partyDisplay || '-')}</td><td class="label-cell">Ship To :</td><td class="value-cell">${escapeHtml(shipToDisplay || '-')}</td></tr>
+            <tr><td class="label-cell">Reference No :</td><td class="value-cell">${escapeHtml(header.referenceNo || '-')}</td><td class="label-cell">Payment :</td><td class="value-cell">${escapeHtml(paymentTermDisplay || header.paymentMethod || '-')}</td></tr>
+          </tbody>
+        </table>
+        <table class="line-table">
+          <thead>
             <tr>
-              <td class="col-center">${index + 1}</td>
-              <td class="col-center">${escapeHtml(item.productCode || '-')}</td>
-              <td>${escapeHtml(item.productName || '-')}</td>
-              <td class="col-right">${Number(item.quantity || 0).toFixed(3)}</td>
-              <td class="col-right">${Number(item.margin || 0).toFixed(2)}</td>
-              <td class="col-right">${Number(item.cost || 0).toFixed(2)}</td>
-              <td class="col-right">${Number(item.totalSellingPrice || item.totalCost || 0).toFixed(2)}</td>
+              <th class="col-item">Item</th>
+              <th class="col-id">Code</th>
+              <th>Product Name</th>
+              <th class="col-qty">Quantity</th>
+              <th class="col-margin">Margin</th>
+              <th class="col-price">Cost</th>
+              <th class="col-total">Total cost</th>
             </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+          </thead>
+          <tbody>
+            ${printItems.length === 0 ? '<tr><td colspan="6" class="col-center">-</td></tr>' : printItems.map((item, index) => `
+              <tr>
+                <td class="col-center">${index + 1}</td>
+                <td class="col-center">${escapeHtml(item.productCode || '-')}</td>
+                <td>${escapeHtml(item.productName || '-')}</td>
+                <td class="col-right">${Number(item.quantity || 0).toFixed(3)}</td>
+                <td class="col-right">${Number(item.margin || 0).toFixed(2)}</td>
+                <td class="col-right">${Number(item.cost || 0).toFixed(2)}</td>
+                <td class="col-right">${Number(item.totalSellingPrice || item.totalCost || 0).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
 
   const handlePrint = async () => {
-    await printDocumentContent(buildPrintDocumentHtml(), `${typeLabel}-${header.documentNumber || 'document'}`);
+    await printDocumentContent(
+      `${typeLabel}-${header.documentNumber || 'document'}`,
+      buildPrintDocumentHtml(),
+    );
   };
 
   const handleSave = async () => {
@@ -608,9 +1056,17 @@ export default function AllDocumentForm({
         <div className={`rounded-t-2xl border-b px-6 py-4 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>All Document Form</p>
-              <h3 className={`mt-1 text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{typeLabel} Details</h3>
-              <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>จัดการข้อมูลเอกสารรวมโดยแยกประเภทด้วย DocumentType</p>
+              <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${documentType === 'quotation' ? (darkMode ? 'text-blue-300' : 'text-blue-700') : (darkMode ? 'text-gray-400' : 'text-gray-500')}`}>
+                {documentType === 'quotation' ? 'Sales Quotation' : 'All Document Form'}
+              </p>
+              <h3 className={`mt-1 text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                {documentType === 'quotation' ? 'Quotation Details' : `${typeLabel} Details`}
+              </h3>
+              <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                {documentType === 'quotation'
+                  ? 'เอกสารเสนอราคาแบบมืออาชีพสำหรับตรวจสอบรายละเอียดลูกค้า ราคา และเงื่อนไขการขาย'
+                  : 'จัดการข้อมูลเอกสารรวมโดยแยกประเภทด้วย DocumentType'}
+              </p>
             </div>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isViewMode ? (darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700') : (darkMode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700')}`}>
               {isViewMode ? 'View Mode' : mode === 'edit' ? 'Edit Mode' : 'Create Mode'}
@@ -623,21 +1079,52 @@ export default function AllDocumentForm({
 
           <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
             {documentType === 'quotation' ? (
-              <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-blue-500/30 bg-blue-500/10' : 'border-blue-200 bg-blue-50'}`}>
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>Quotation Workflow</p>
-                    <p className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>เลือกสถานะเพื่อระบุว่าใบเสนอราคาอยู่ในขั้นตอนไหนของงานขาย</p>
+              <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/70 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50'}`}>
+                <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>Quotation Overview</p>
+                    <div>
+                      <h4 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>QUOTATION</h4>
+                      <p className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>เลือกสถานะและตรวจสอบรายละเอียดก่อนส่งเสนอราคาให้ลูกค้า</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-white/10 text-white' : 'bg-white text-blue-700 border border-blue-200'}`}>
+                        Document No: {header.documentNumber || suggestedDocumentNumber || buildDefaultDocumentNumber(documentType)}
+                      </span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>
+                        Current Status: {header.status || 'Draft'}
+                      </span>
+                    </div>
                   </div>
-                  <div className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-white/10 text-white' : 'bg-white text-blue-700 border border-blue-200'}`}>
-                    Current Status: {header.status || 'Draft'}
+                  <div className="grid grid-cols-2 gap-3 lg:min-w-[320px]">
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-blue-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Customer</p>
+                      <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{customerDisplay || '-'}</p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-blue-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Payment Term</p>
+                      <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{paymentTermDisplay || '-'}</p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-blue-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Total Items</p>
+                      <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{printItems.length || items.length}</p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-blue-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Grand Total</p>
+                      <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatDisplayAmount(total)}</p>
+                    </div>
                   </div>
                 </div>
               </div>
             ) : null}
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                <div className="mb-4">
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Document Information</p>
+                  <h4 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Quotation Header</h4>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span
                     className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -714,6 +1201,16 @@ export default function AllDocumentForm({
                       {QUOTATION_STATUS_OPTIONS.map((statusOption) =>
                         <option key={statusOption} value={statusOption}>{statusOption}</option>)}
                     </select>
+                  ) : documentType === 'purchase_order' ? (
+                    <select
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={header.status}
+                      onChange={(e) => handleHeaderChange('status', e.target.value)}
+                    >
+                      {PURCHASE_ORDER_STATUS_OPTIONS.map((statusOption) => (
+                        <option key={statusOption} value={statusOption}>{statusOption}</option>
+                      ))}
+                    </select>
                   ) : (
                     <input
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
@@ -730,8 +1227,14 @@ export default function AllDocumentForm({
                     value={header.taxRate} onChange={(e) => handleHeaderChange('taxRate', e.target.value)} />
                 </label>
               </div>
+              </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                <div className="mb-4">
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Commercial Terms</p>
+                  <h4 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Pricing & Delivery Context</h4>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span
                     className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -746,10 +1249,31 @@ export default function AllDocumentForm({
                     </option>)}
                   </select>
                 </label>
+                {documentType === 'quotation' ? (
+                  <div className={`rounded-xl border px-4 py-3 md:col-span-2 ${darkMode ? 'border-blue-500/20 bg-blue-500/5' : 'border-blue-100 bg-blue-50/70'}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>Quotation Guidance</p>
+                    <p className={`mt-2 text-sm leading-6 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      ตรวจสอบสถานะ, เงื่อนไขการชำระ, อัตราภาษี และส่วนลดเชิงพาณิชย์ให้ครบก่อนบันทึกหรือพิมพ์เอกสารเสนอราคา
+                    </p>
+                  </div>
+                ) : null}
+              </div>
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className={`mt-6 rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+              <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Additional Fields</p>
+                  <h4 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Supplementary Details</h4>
+                </div>
+                {documentType === 'quotation' ? (
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                    Quotation margin and commercial details
+                  </span>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {subtypeFields.map((field) => (
                 <label key={field.key} className="space-y-2">
                   <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -805,9 +1329,14 @@ export default function AllDocumentForm({
                   )}
                 </label>
               ))}
+              </div>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4">
+            <div className={`mt-6 rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+              <div className="mb-4">
+                <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Notes</p>
+                <h4 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Remark / Internal Notes</h4>
+              </div>
               <label className="space-y-2 block">
                 <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Remark
@@ -817,37 +1346,47 @@ export default function AllDocumentForm({
               </label>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} shadow-sm`}>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{documentType === 'purchase_order' ? 'Vendor Name' : 'Customer Name'}</p>
                 <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{documentType === 'purchase_order' ? (vendorDisplay || header.supplierName || '-') : (customerDisplay || '-')}</p>
               </div>
              
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+              <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} shadow-sm`}>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   {documentType === 'quotation' ? 'Margin (%)' : documentType === 'purchase_order' ? 'Total Cost Price' : 'Subtotal'}</p>
                 <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  {documentType === 'quotation' ? `${parseNumberInput(header.totalAmount).toFixed(2)}%` : formatDisplayAmount(totalSellingPrice)}
+                  {documentType === 'quotation' ? `${parseNumberInput(header.margin).toFixed(2)}%` : formatDisplayAmount(totalSellingPrice)}
                 </p>
               </div>
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+              <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} shadow-sm`}>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Vat</p>
                 <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  {formatDisplayAmount(tax)}
+                  ฿{formatDisplayAmount(tax)}
                 </p>
               </div>
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
-                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Amount</p>
-                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  {formatDisplayAmount(total)}
+              <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-blue-500/30 bg-blue-950/40' : 'border-blue-200 bg-blue-50'} shadow-sm`}>
+                <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>Grand Total</p>
+                <p className={`mt-2 text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  ฿{formatDisplayAmount(total)}
                 </p>
+                <p className={`mt-1 text-xs ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>รวมภาษีมูลค่าเพิ่มแล้ว</p>
               </div>
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <div className={`mt-6 overflow-hidden rounded-2xl border ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'} shadow-sm`}>
+              <div className={`flex items-center justify-between border-b px-4 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                <div>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Line Items</p>
+                  <h4 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Product & Pricing Details</h4>
+                </div>
+                <div className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-white/5 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                  {printItems.length || items.length} item(s)
+                </div>
+              </div>
               <div
                 className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide 
-                  ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-600'}`
+                  ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`
                 }
                 style={{
                   gridTemplateColumns: documentType === 'quotation' ?
@@ -861,19 +1400,19 @@ export default function AllDocumentForm({
                 <div>Qty</div>
                 {documentType === 'quotation' ?
                   <>
-                    <div>Margin(%)</div>
-                    <div>Cost</div>
+                    <div>Margin (%)</div>
+                    <div>Unit Cost</div>
                   </>
                   : null
                 }
-                <div>{documentType === 'purchase_order' ? 'Cost Price' : 'Selling Price'}</div>
-                <div>{documentType === 'purchase_order' ? 'Total Cost Price' : 'Total'}</div>
+                <div>{documentType === 'purchase_order' ? 'Cost Price' : 'Unit Price'}</div>
+                <div>{documentType === 'purchase_order' ? 'Total Cost Price' : 'Line Total'}</div>
                 <div></div>
               </div>
               {items.map((item, index) => (
                 <div key={`document-item-${index}`}
                   className={`grid items-start gap-1 px-4 py-3 
-                  ${darkMode ? 'border-t border-gray-700 bg-gray-800' : 'border-t border-gray-200 bg-white'}`}
+                  ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
                   style={{
                     gridTemplateColumns: documentType === 'quotation' ?
                       '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :

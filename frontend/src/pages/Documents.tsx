@@ -5,6 +5,7 @@ import documentService, { MainDocumentType } from '../services/documentService';
 import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../services/dialogService';
+import { printDocumentContent } from '../utils/printDocument';
 
 const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'deposit_receipt', 'purchase_order', 'work_order'];
 const QUOTATION_STATUS_FILTER_OPTIONS = ['All', 'Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Confirmed', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
@@ -148,13 +149,22 @@ const formatPrintDate = (value: any) => {
   });
 };
 
-const buildQuotationPrintHtml = (record: any) => {
+const buildQuotationPrintHtml = (record: any, displayValues?: { customerName?: string; billTo?: string; shipTo?: string; paymentLabel?: string; company?: any }) => {
   const items = Array.isArray(record?.items) ? record.items : [];
-  const customerName = String(record?.customer || '').trim();
-  const billTo = String(record?.billTo || customerName || '-').trim() || '-';
-  const shipTo = String(record?.shipTo || billTo || '-').trim() || '-';
-  const paymentLabel = String(record?.paymentTerm || record?.paymentMethod || '-').trim() || '-';
-  const subtotal = Number(record?.total || 0) - Number(record?.tax || 0);
+  const customerName = String(displayValues?.customerName || record?.customerName || record?.customer || '').trim();
+  const billTo = String(displayValues?.billTo || record?.billTo || customerName || '-').trim() || '-';
+  const shipTo = String(displayValues?.shipTo || record?.shipTo || billTo || '-').trim() || '-';
+  const paymentLabel = String(displayValues?.paymentLabel || record?.paymentMethod || record?.paymentTerm || '-').trim() || '-';
+  const companyName = String(displayValues?.company?.name || displayValues?.company?.nameEn || 'Doc Key').trim();
+  const companyAddress = String(displayValues?.company?.address || '').trim();
+  const companyPhone = String(displayValues?.company?.phone || '').trim();
+  const companyBranch = String(displayValues?.company?.branch || '').trim();
+  const companyTaxId = String(displayValues?.company?.taxId || '').trim();
+  const subtotal = items.reduce((sum: number, item: any) => sum + Number(item?.totalSellingPrice || item?.totalCost || 0), 0);
+  const tax = Number(record?.tax || 0);
+  const total = Number(record?.total || 0);
+  const totalQuantity = Number(record?.totalQuantity || 0);
+  const taxRate = Number(record?.taxRate || 0);
 
   return `
     <style>
@@ -162,62 +172,173 @@ const buildQuotationPrintHtml = (record: any) => {
         color: #0f172a;
         font-family: Arial, Helvetica, sans-serif;
         font-size: 12px;
-        line-height: 1.45;
+        line-height: 1.5;
       }
 
       .quotation-sheet {
-        min-height: 297mm;
+        min-height: calc(297mm - 28mm);
         background: #ffffff;
-        padding: 14mm 16mm 18mm;
+        padding: 12mm 14mm 16mm;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
       }
 
       .quotation-header {
         display: flex;
         justify-content: space-between;
-        gap: 16px;
         align-items: flex-start;
-        margin-bottom: 14px;
+        gap: 16px;
+        padding-bottom: 14px;
+        border-bottom: 2px solid #1d4ed8;
       }
 
-      .quotation-title {
-        font-size: 28px;
+      .quotation-brand {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .quotation-brand-mark {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #1d4ed8, #0f172a);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
         font-weight: 700;
         letter-spacing: 0.08em;
-        color: #1d4ed8;
-        margin: 0;
       }
 
-      .quotation-subtitle {
-        margin: 4px 0 0;
+      .quotation-brand-title {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        margin: 0;
+        color: #0f172a;
+      }
+
+      .quotation-brand-subtitle,
+      .quotation-brand-text {
+        margin: 3px 0 0;
         color: #475569;
-        font-size: 12px;
+        font-size: 11px;
+      }
+
+      .quotation-company-meta {
+        margin-top: 8px;
+        color: #334155;
+        font-size: 11px;
+        line-height: 1.6;
+        max-width: 430px;
+        white-space: pre-wrap;
+      }
+
+      .quotation-docbox {
+        min-width: 250px;
+        border: 1px solid #bfdbfe;
+        border-radius: 16px;
+        overflow: hidden;
+      }
+
+      .quotation-docbox-head {
+        background: #eff6ff;
+        color: #1d4ed8;
+        padding: 8px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .quotation-docbox-body {
+        padding: 10px 12px;
+      }
+
+      .quotation-docbox-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .quotation-docbox-meta {
+        margin-top: 8px;
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        row-gap: 6px;
+        column-gap: 8px;
+        font-size: 11px;
+      }
+
+      .quotation-docbox-label {
+        color: #64748b;
+        font-weight: 700;
+      }
+
+      .quotation-docbox-value {
+        color: #0f172a;
+      }
+
+      .quotation-intro {
+        margin-top: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 12px 14px;
+        background: #f8fafc;
+      }
+
+      .quotation-section-grid {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 16px;
+      }
+
+      .quotation-card {
+        border: 1px solid #cbd5e1;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      .quotation-card-head {
+        padding: 9px 12px;
+        background: #eff6ff;
+        color: #1e3a8a;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .quotation-card-body {
+        padding: 12px;
+      }
+
+      .quotation-info-grid {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        row-gap: 8px;
+        column-gap: 10px;
+        font-size: 11px;
+      }
+
+      .quotation-info-label {
+        color: #64748b;
+        font-weight: 700;
+      }
+
+      .quotation-info-value {
+        color: #0f172a;
+        white-space: pre-wrap;
       }
 
       .quotation-meta {
         width: 100%;
-        border-collapse: collapse;
-        margin-top: 10px;
-      }
-
-      .quotation-meta td {
-        border: 1px solid #cbd5e1;
-        padding: 7px 8px;
-        vertical-align: top;
-      }
-
-      .label-cell {
-        width: 120px;
-        font-weight: 700;
-        background: #eff6ff;
-        color: #1e3a8a;
-      }
-
-      .value-cell {
-        color: #0f172a;
-      }
-
-      .emphasis {
-        font-weight: 700;
       }
 
       .quotation-lines {
@@ -233,11 +354,15 @@ const buildQuotationPrintHtml = (record: any) => {
       }
 
       .quotation-lines th {
-        background: #1d4ed8;
+        background: #1e3a8a;
         color: #ffffff;
         font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.06em;
+      }
+
+      .quotation-lines tbody tr:nth-child(even) {
+        background: #f8fafc;
       }
 
       .text-center {
@@ -248,10 +373,15 @@ const buildQuotationPrintHtml = (record: any) => {
         text-align: right;
       }
 
-      .quotation-summary {
+      .quotation-bottom {
         margin-top: 18px;
-        margin-left: auto;
-        width: 320px;
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+      }
+
+      .quotation-summary {
+        width: 100%;
         border-collapse: collapse;
       }
 
@@ -265,16 +395,16 @@ const buildQuotationPrintHtml = (record: any) => {
         font-weight: 700;
       }
 
-      .quotation-summary .summary-total {
+      .quotation-summary .summary-total td {
         background: #dbeafe;
         color: #1e3a8a;
         font-weight: 700;
+        font-size: 14px;
       }
 
       .quotation-remark {
-        margin-top: 18px;
         border: 1px solid #cbd5e1;
-        border-radius: 10px;
+        border-radius: 16px;
         padding: 12px 14px;
         background: #f8fafc;
       }
@@ -292,96 +422,164 @@ const buildQuotationPrintHtml = (record: any) => {
         margin: 0;
         white-space: pre-wrap;
       }
+
+      .quotation-approval {
+        margin-top: auto;
+        padding-top: 28px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+
+      .quotation-sign-box {
+        border-top: 1px solid #94a3b8;
+        padding-top: 10px;
+        min-height: 52px;
+      }
+
+      .quotation-sign-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: #334155;
+      }
+
+      .quotation-sign-note {
+        margin-top: 6px;
+        font-size: 10px;
+        color: #64748b;
+      }
     </style>
     <div class="quotation-pdf-root">
       <div class="quotation-sheet">
         <div class="quotation-header">
-          <div>
-            <h1 class="quotation-title">QUOTATION</h1>
-            <p class="quotation-subtitle">${escapeHtml(record?.title || 'Quotation Document')}</p>
+          <div class="quotation-brand">
+            <div class="quotation-brand-mark">DK</div>
+            <div>
+              <h1 class="quotation-brand-title">${escapeHtml(companyName)}</h1>
+              <p class="quotation-brand-subtitle">Professional sales quotation document</p>
+              <p class="quotation-brand-text">Prepared for customer review and approval</p>
+              <div class="quotation-company-meta">${escapeHtml([
+                companyAddress,
+                companyPhone ? `Tel: ${companyPhone}` : '',
+                companyBranch ? `Branch: ${companyBranch}` : '',
+                companyTaxId ? `Tax ID: ${companyTaxId}` : '',
+              ].filter(Boolean).join(' | ') || 'Company profile is not configured.')}</div>
+            </div>
+          </div>
+          <div class="quotation-docbox">
+            <div class="quotation-docbox-head">Quotation Document</div>
+            <div class="quotation-docbox-body">
+              <p class="quotation-docbox-title">QUOTATION</p>
+              <div class="quotation-docbox-meta">
+                <div class="quotation-docbox-label">Document No</div>
+                <div class="quotation-docbox-value">${escapeHtml(record?.documentNumber || '-')}</div>
+                <div class="quotation-docbox-label">Date</div>
+                <div class="quotation-docbox-value">${escapeHtml(formatPrintDate(record?.documentDate))}</div>
+                <div class="quotation-docbox-label">Status</div>
+                <div class="quotation-docbox-value">${escapeHtml(record?.status || '-')}</div>
+                <div class="quotation-docbox-label">Reference</div>
+                <div class="quotation-docbox-value">${escapeHtml(record?.referenceNo || '-')}</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <table class="quotation-meta">
-          <tbody>
-            <tr>
-              <td class="label-cell">Document No</td>
-              <td class="value-cell emphasis">${escapeHtml(record?.documentNumber || '-')}</td>
-              <td class="label-cell">Document Date</td>
-              <td class="value-cell">${escapeHtml(formatPrintDate(record?.documentDate))}</td>
-            </tr>
-            <tr>
-              <td class="label-cell">Customer</td>
-              <td class="value-cell">${escapeHtml(customerName || '-')}</td>
-              <td class="label-cell">Status</td>
-              <td class="value-cell">${escapeHtml(record?.status || '-')}</td>
-            </tr>
-            <tr>
-              <td class="label-cell">Bill To</td>
-              <td class="value-cell">${escapeHtml(billTo)}</td>
-              <td class="label-cell">Ship To</td>
-              <td class="value-cell">${escapeHtml(shipTo)}</td>
-            </tr>
-            <tr>
-              <td class="label-cell">Reference No</td>
-              <td class="value-cell">${escapeHtml(record?.referenceNo || '-')}</td>
-              <td class="label-cell">Payment</td>
-              <td class="value-cell">${escapeHtml(paymentLabel)}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="quotation-intro">
+          We are pleased to submit our quotation for your consideration. Please review the pricing, quantities, and commercial terms below.
+        </div>
+
+        <div class="quotation-section-grid">
+          <div class="quotation-card">
+            <div class="quotation-card-head">Customer Information</div>
+            <div class="quotation-card-body">
+              <div class="quotation-info-grid">
+                <div class="quotation-info-label">Customer</div>
+                <div class="quotation-info-value">${escapeHtml(customerName || '-')}</div>
+                <div class="quotation-info-label">Bill To</div>
+                <div class="quotation-info-value">${escapeHtml(billTo)}</div>
+                <div class="quotation-info-label">Ship To</div>
+                <div class="quotation-info-value">${escapeHtml(shipTo)}</div>
+                <div class="quotation-info-label">Title</div>
+                <div class="quotation-info-value">${escapeHtml(record?.title || 'Quotation')}</div>
+              </div>
+            </div>
+          </div>
+          <div class="quotation-card">
+            <div class="quotation-card-head">Commercial Terms</div>
+            <div class="quotation-card-body">
+              <div class="quotation-info-grid">
+                <div class="quotation-info-label">Payment</div>
+                <div class="quotation-info-value">${escapeHtml(paymentLabel)}</div>
+                <div class="quotation-info-label">Tax Rate</div>
+                <div class="quotation-info-value">${escapeHtml(`${taxRate.toFixed(2)}%`)}</div>
+                <div class="quotation-info-label">Total Qty</div>
+                <div class="quotation-info-value">${escapeHtml(totalQuantity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 }))}</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <table class="quotation-lines">
           <thead>
             <tr>
-              <th style="width: 52px;">Line</th>
-              <th style="width: 92px;">Code</th>
-              <th>Product Name</th>
+              <th style="width: 52px;">No</th>
+              <th style="width: 96px;">Code</th>
+              <th>Description</th>
               <th style="width: 76px;">Qty</th>
-              <th style="width: 86px;">Unit Price</th>
-              <th style="width: 86px;">Margin</th>
-              <th style="width: 108px;">Total</th>
+              <th style="width: 94px;">Unit Price</th>
+              <th style="width: 108px;">Line Total</th>
             </tr>
           </thead>
           <tbody>
-            ${items.length === 0 ? '<tr><td colspan="7" class="text-center">-</td></tr>' : items.map((item: any, index: number) => `
+            ${items.length === 0 ? '<tr><td colspan="6" class="text-center">-</td></tr>' : items.map((item: any, index: number) => `
               <tr>
                 <td class="text-center">${escapeHtml(item?.lineNo || index + 1)}</td>
                 <td class="text-center">${escapeHtml(item?.productCode || '-')}</td>
                 <td>${escapeHtml(item?.productName || '-')}</td>
                 <td class="text-right">${Number(item?.quantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
                 <td class="text-right">${Number(item?.sellingPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td class="text-right">${Number(item?.margin || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td class="text-right">${Number(item?.totalSellingPrice || item?.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
-        <table class="quotation-summary">
-          <tbody>
-            <tr>
-              <td class="summary-label">Subtotal</td>
-              <td class="text-right">${Number(subtotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            </tr>
-            <tr>
-              <td class="summary-label">Tax</td>
-              <td class="text-right">${Number(record?.tax || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            </tr>
-            <tr>
-              <td class="summary-label">Total Quantity</td>
-              <td class="text-right">${Number(record?.totalQuantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
-            </tr>
-            <tr>
-              <td class="summary-total">Grand Total</td>
-              <td class="summary-total text-right">${Number(record?.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="quotation-bottom">
+          <div class="quotation-remark">
+            <p class="quotation-remark-title">Remark / Terms</p>
+            <p class="quotation-remark-body">${escapeHtml(record?.remark || 'Please contact us if you require any clarification or revision to this quotation.')}</p>
+          </div>
+          <table class="quotation-summary">
+            <tbody>
+              <tr>
+                <td class="summary-label">Subtotal</td>
+                <td class="text-right">${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+              <tr>
+                <td class="summary-label">VAT</td>
+                <td class="text-right">${tax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+              <tr>
+                <td class="summary-label">Total Quantity</td>
+                <td class="text-right">${totalQuantity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
+              </tr>
+              <tr class="summary-total">
+                <td>Grand Total</td>
+                <td class="text-right">${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div class="quotation-remark">
-          <p class="quotation-remark-title">Remark</p>
-          <p class="quotation-remark-body">${escapeHtml(record?.remark || '-')}</p>
+        <div class="quotation-approval">
+          <div class="quotation-sign-box">
+            <div class="quotation-sign-title">Prepared By</div>
+            <div class="quotation-sign-note">Sales Representative / Authorized Signatory</div>
+          </div>
+          <div class="quotation-sign-box">
+            <div class="quotation-sign-title">Customer Approval</div>
+            <div class="quotation-sign-note">Signature / Name / Date</div>
+          </div>
         </div>
       </div>
     </div>
@@ -392,18 +590,24 @@ const generatePdfPreviewUrl = async (title: string, html: string) => {
   const renderHost = document.createElement('div');
   renderHost.setAttribute('aria-hidden', 'true');
   renderHost.style.position = 'fixed';
-  renderHost.style.left = '-200vw';
+  renderHost.style.left = '0';
   renderHost.style.top = '0';
   renderHost.style.width = '210mm';
   renderHost.style.background = '#ffffff';
   renderHost.style.pointerEvents = 'none';
-  renderHost.style.opacity = '0';
-  renderHost.innerHTML = html;
+  renderHost.style.zIndex = '-1';
+  renderHost.innerHTML = `<div class="pdf-preview-root">${html}</div>`;
   document.body.appendChild(renderHost);
 
   try {
     const html2pdfModule = await import('html2pdf.js');
     const html2pdf = html2pdfModule.default;
+    const pdfRoot = renderHost.querySelector('.pdf-preview-root');
+
+    if (!(pdfRoot instanceof HTMLElement)) {
+      throw new Error('PDF preview root element is not available');
+    }
+
     const worker = html2pdf()
       .set({
         margin: 0,
@@ -420,7 +624,7 @@ const generatePdfPreviewUrl = async (title: string, html: string) => {
           orientation: 'portrait',
         },
       })
-      .from(renderHost);
+      .from(pdfRoot);
 
     const pdfBlob = await worker.outputPdf('blob');
     return URL.createObjectURL(pdfBlob);
@@ -870,6 +1074,8 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   const [selectedType, setSelectedType] = useState<MainDocumentType>('quotation');
   const [documentsByType, setDocumentsByType] = useState<Record<MainDocumentType, any[]>>(createEmptyCollections);
   const [customerCodes, setCustomerCodes] = useState<any[]>([]);
+  const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
+  const [companyInfo, setCompanyInfo] = useState<any | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [editorState, setEditorState] = useState<{ type: MainDocumentType; initialData: any } | null>(null);
   const [search, setSearch] = useState('');
@@ -877,6 +1083,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewHtml, setPdfPreviewHtml] = useState('');
   const [pdfPreviewTitle, setPdfPreviewTitle] = useState('Quotation Preview');
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
   const [isGeneratingPdfPreview, setIsGeneratingPdfPreview] = useState(false);
@@ -890,16 +1097,24 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   }, [initialData]);
 
   useEffect(() => {
-    const loadCustomerCodes = async () => {
+    const loadReferenceCodes = async () => {
       try {
-        const response = await codeService.getAll('customer');
-        setCustomerCodes(response?.data?.data || []);
+        const [customerResponse, paymentTermResponse, companyResponse] = await Promise.all([
+          codeService.getAll('customer'),
+          codeService.getAll('payment-term'),
+          codeService.getAll('company'),
+        ]);
+        setCustomerCodes(customerResponse?.data?.data || []);
+        setPaymentTermCodes(paymentTermResponse?.data?.data || []);
+        setCompanyInfo((companyResponse?.data?.data || []).find((company: any) => company?.isActive !== false) || companyResponse?.data?.data?.[0] || null);
       } catch {
         setCustomerCodes([]);
+        setPaymentTermCodes([]);
+        setCompanyInfo(null);
       }
     };
 
-    void loadCustomerCodes();
+    void loadReferenceCodes();
   }, []);
 
   const loadDocuments = async () => {
@@ -993,6 +1208,21 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
       || record?.attentionTo
       || record?.assignedTo
       || '-';
+  };
+
+  const getRecordPaymentLabel = (record: any) => {
+    const paymentTermValue = String(record?.paymentTerm || '').trim();
+    if (paymentTermValue) {
+      const matchedPaymentTerm = paymentTermCodes.find((paymentTerm) => String(paymentTerm.termId || '').trim() === paymentTermValue);
+      if (matchedPaymentTerm) {
+        return matchedPaymentTerm.termName
+          || matchedPaymentTerm.shortName
+          || matchedPaymentTerm.termCode
+          || paymentTermValue;
+      }
+    }
+
+    return String(record?.paymentMethod || paymentTermValue || '-').trim() || '-';
   };
 
   const filteredRecords = useMemo(() => {
@@ -1166,18 +1396,29 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
       URL.revokeObjectURL(pdfPreviewUrl);
     }
     setPdfPreviewUrl(null);
+    setPdfPreviewHtml('');
   };
 
   const handlePreviewQuotationPdf = async (record: any) => {
     try {
       setIsGeneratingPdfPreview(true);
-      const html = buildQuotationPrintHtml(record);
-      const nextUrl = await generatePdfPreviewUrl(record?.documentNumber || 'quotation', html);
+      const resolvedCustomerName = getRecordParty(record);
+      const resolvedBillTo = String(record?.billTo || record?.customerName || resolvedCustomerName || '-').trim() || '-';
+      const resolvedShipTo = String(record?.shipTo || record?.destination || resolvedBillTo || '-').trim() || '-';
+      const resolvedPaymentLabel = getRecordPaymentLabel(record);
+      const html = buildQuotationPrintHtml(record, {
+        customerName: resolvedCustomerName,
+        billTo: resolvedBillTo,
+        shipTo: resolvedShipTo,
+        paymentLabel: resolvedPaymentLabel,
+        company: companyInfo,
+      });
+      setPdfPreviewHtml(html);
       if (pdfPreviewUrl) {
         URL.revokeObjectURL(pdfPreviewUrl);
       }
       setPdfPreviewTitle(record?.documentNumber ? `Quotation ${record.documentNumber}` : 'Quotation Preview');
-      setPdfPreviewUrl(nextUrl);
+      setPdfPreviewUrl(null);
       setIsPdfPreviewOpen(true);
     } catch (_error) {
       await showAppAlert({ title: 'Print Error', message: 'Unable to generate quotation PDF preview.', tone: 'danger' });
@@ -1615,7 +1856,15 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                         <h3 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{pdfPreviewTitle}</h3>
                       </div>
                       <div className="flex items-center gap-3">
-                        {pdfPreviewUrl ? (
+                        {pdfPreviewHtml ? (
+                          <button
+                            type="button"
+                            onClick={() => void printDocumentContent(pdfPreviewTitle, pdfPreviewHtml, { bodyPadding: '0' })}
+                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                          >
+                            Print / Save PDF
+                          </button>
+                        ) : pdfPreviewUrl ? (
                           <a
                             href={pdfPreviewUrl}
                             target="_blank"
@@ -1636,7 +1885,13 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                     </div>
 
                     <div className={`${darkMode ? 'bg-gray-950' : 'bg-gray-100'} flex-1 p-4`}>
-                      {pdfPreviewUrl ? (
+                      {pdfPreviewHtml ? (
+                        <iframe
+                          title={pdfPreviewTitle}
+                          srcDoc={pdfPreviewHtml}
+                          className="h-full w-full rounded-2xl border border-gray-300 bg-white"
+                        />
+                      ) : pdfPreviewUrl ? (
                         <iframe
                           title={pdfPreviewTitle}
                           src={pdfPreviewUrl}
