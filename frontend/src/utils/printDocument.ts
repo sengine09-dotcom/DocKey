@@ -18,12 +18,12 @@ export const printDocumentContent = async (title: string = '', html: string, opt
 
   renderHost.setAttribute('aria-hidden', 'true');
   renderHost.style.position = 'fixed';
-  renderHost.style.left = '-200vw';
+  renderHost.style.left = '0';
   renderHost.style.top = '0';
   renderHost.style.width = '210mm';
   renderHost.style.background = '#ffffff';
   renderHost.style.pointerEvents = 'none';
-  renderHost.style.opacity = '0';
+  renderHost.style.zIndex = '-1';
   renderHost.innerHTML = `
     <style>
       .pdf-print-root {
