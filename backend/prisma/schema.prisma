@@ -175,6 +175,7 @@ model Document {
 
 model DocumentItem {
   id                String       @id @map("ID") @db.Char(26)
+  documentId        String       @map("DocumentID") @db.Char(26)
   documentNumber    String       @map("DocumentNumber") @db.Char(26)
   documentType      DocumentType @map("DocumentType")
   lineNo            Int          @map("LineNo")
@@ -188,10 +189,11 @@ model DocumentItem {
   unitId            String?      @map("UnitID") @db.VarChar(10)
   createdAt         DateTime     @default(now()) @map("CreatedAt")
   updatedAt         DateTime     @updatedAt @map("UpdatedAt")
-  document          Document     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  document          Document     @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   product           Product?     @relation(fields: [productCode], references: [productCode], onDelete: SetNull, onUpdate: Cascade)
 
-  @@unique([id, documentType, documentNumber, lineNo])
+  @@unique([documentType, documentNumber, lineNo])
+  @@index([documentId])
   @@index([documentNumber, lineNo, documentType])
 }
 

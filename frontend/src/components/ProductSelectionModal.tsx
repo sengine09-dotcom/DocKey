@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 interface Product {
   productCode: string;
@@ -20,6 +20,16 @@ const buildProductName = (product: Product) => {
   return fallback;
 };
 
+const buildSearchableText = (product: Product) => {
+  return [
+    product.productCode,
+    product.productName,
+    product.sourceLabel,
+    product.sourceDocumentNumber,
+    product.sourceCustomer,
+  ].map((value) => String(value || '').toLowerCase()).join(' ');
+};
+
 export default function ProductSelectionModal({
   isOpen,
   products,
@@ -29,15 +39,51 @@ export default function ProductSelectionModal({
   isLoading,
 }: ProductSelectionModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedQuotationDocumentNumber, setSelectedQuotationDocumentNumber] = useState('');
+
+  const quotationOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return products
+      .filter((product) => String(product.sourceType || '').trim().toLowerCase() === 'quotation')
+      .map((product) => ({
+        value: String(product.sourceDocumentNumber || '').trim(),
+        label: String(product.sourceLabel || product.sourceDocumentNumber || 'Confirmed Quotation').trim(),
+      }))
+      .filter((option) => {
+        if (!option.value || seen.has(option.value)) return false;
+        seen.add(option.value);
+        return true;
+      });
+  }, [products]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSearchTerm('');
+    if (quotationOptions.length === 0) {
+      setSelectedQuotationDocumentNumber('');
+      return;
+    }
+    setSelectedQuotationDocumentNumber((prev) => {
+      if (prev && quotationOptions.some((option) => option.value === prev)) {
+        return prev;
+      }
+      return quotationOptions[0].value;
+    });
+  }, [isOpen, quotationOptions]);
 
   const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return products;    
+    const quotationFilteredProducts = quotationOptions.length > 0
+      ? products.filter((product) => String(product.sourceType || '').trim().toLowerCase() === 'quotation'
+        && String(product.sourceDocumentNumber || '').trim() === selectedQuotationDocumentNumber)
+      : products;
+
+    if (!searchTerm.trim()) return quotationFilteredProducts;
     const term = searchTerm.toLowerCase();
-    return products.filter((product) => {
-      const formattedName = buildProductName(product).toLowerCase();
-      return formattedName.includes(term);
+    return quotationFilteredProducts.filter((product) => {
+      const searchableText = buildSearchableText(product);
+      return searchableText.includes(term);
     });
-  }, [products, searchTerm]);
+  }, [products, quotationOptions, searchTerm, selectedQuotationDocumentNumber]);
 
   if (!isOpen) return null;
 
@@ -67,6 +113,26 @@ export default function ProductSelectionModal({
 
         {/* Search */}
         <div className="px-6 py-4 border-b">
+          {quotationOptions.length > 0 ? (
+            <div className="mb-3">
+              <label className={`mb-1 block text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Confirmed Quotation
+              </label>
+              <select
+                value={selectedQuotationDocumentNumber}
+                onChange={(e) => setSelectedQuotationDocumentNumber(e.target.value)}
+                className={`w-full border px-3 py-2 rounded text-sm ${
+                  darkMode
+                    ? 'bg-gray-900 border-gray-600 text-gray-100'
+                    : 'bg-white border-gray-300 text-gray-900'
+                }`}
+              >
+                {quotationOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <input
             type="text"
             placeholder="Search by product code or name..."
@@ -110,7 +176,21 @@ export default function ProductSelectionModal({
                     <div className="font-semibold text-sm">{product.productCode}</div>
                     <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                       {buildProductName(product)}
-                    </div>                    
+                    </div>
+                    {product.sourceLabel ? (
+                      <div className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${product.sourceType === 'quotation'
+                        ? (darkMode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                        : (darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700')}`}>
+                        {product.sourceLabel}
+                      </div>
+                    ) : null}
+                    {product.sourceType === 'quotation' && (product.sourceCustomer || product.quantity) ? (
+                      <div className={`mt-1 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                        {product.sourceCustomer ? `Customer: ${product.sourceCustomer}` : ''}
+                        {product.sourceCustomer && product.quantity ? ' · ' : ''}
+                        {product.quantity ? `Qty: ${Number(product.quantity || 0).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}` : ''}
+                      </div>
+                    ) : null}
                     <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
                       Cost : {Number(product.cost || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
