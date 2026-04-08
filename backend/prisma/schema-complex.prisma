@@ -36,6 +36,7 @@ model Product {
 
 model DocumentItem {
   id                String       @id @map("ID") @db.Char(26)
+  documentId        String       @map("DocumentID") @db.Char(26)
   documentNumber    String       @map("DocumentNumber") @db.Char(26)
   documentType      DocumentType @map("DocumentType")
   lineNo            Int          @map("LineNo")
@@ -51,6 +52,7 @@ model DocumentItem {
   updatedAt         DateTime     @updatedAt @map("UpdatedAt")
   product           Product?     @relation(fields: [productCode], references: [productCode])
 
-  @@unique([id, documentNumber, lineNo])
+  @@unique([documentType, documentNumber, lineNo])
+  @@index([documentId])
   @@index([documentNumber, lineNo])
 }

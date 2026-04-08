@@ -1080,6 +1080,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   const [editorState, setEditorState] = useState<{ type: MainDocumentType; initialData: any } | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [selectedRecordKeys, setSelectedRecordKeys] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
@@ -1222,7 +1223,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
       }
     }
 
-    return String(record?.paymentMethod || paymentTermValue || '-').trim() || '-';
+    return record?.paymentMethod || '-';
   };
 
   const filteredRecords = useMemo(() => {
@@ -1250,6 +1251,15 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     });
   }, [records, search, selectedType, statusFilter]);
 
+  const selectedRecords = useMemo(() => {
+    const keySet = new Set(selectedRecordKeys);
+    return filteredRecords.filter((record) => keySet.has(getRecordKey(record)));
+  }, [filteredRecords, selectedRecordKeys]);
+
+  const hasSelectableRecords = filteredRecords.length > 0;
+  const allVisibleSelected = hasSelectableRecords && filteredRecords.every((record) => selectedRecordKeys.includes(getRecordKey(record)));
+  const singleSelectedRecord = selectedRecords.length === 1 ? selectedRecords[0] : null;
+
   const summary = useMemo(() => {
     const totalAmount = records.reduce((sum, record) => sum + Number(record.total || 0), 0);
     const completedCount = records.filter((record) => ['green', 'blue'].includes(record.color)).length;
@@ -1269,6 +1279,73 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     setEditorState(null);
     setSearch('');
     setStatusFilter('All');
+    setSelectedRecordKeys([]);
+  };
+
+  const handleToggleRecordSelection = (record: any) => {
+    const recordKey = getRecordKey(record);
+    setSelectedRecordKeys((prev) => (prev[0] === recordKey ? [] : [recordKey]));
+  };
+
+  const handleToggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedRecordKeys([]);
+      return;
+    }
+    const firstVisibleRecord = filteredRecords[0];
+    setSelectedRecordKeys(firstVisibleRecord ? [getRecordKey(firstVisibleRecord)] : []);
+  };
+
+  const requireSingleSelection = async (actionLabel: string) => {
+    if (selectedRecords.length !== 1) {
+      await showAppAlert({
+        title: `${actionLabel} requires one document`,
+        message: `Please select exactly one ${config.label.toLowerCase()} document to ${actionLabel.toLowerCase()}.`,
+        tone: 'warning',
+      });
+      return null;
+    }
+
+    return selectedRecords[0];
+  };
+
+  const handleDeleteSelectedRecords = async () => {
+    if (selectedRecords.length === 0) {
+      await showAppAlert({ title: 'No documents selected', message: `Select ${config.label.toLowerCase()} document(s) first.`, tone: 'warning' });
+      return;
+    }
+
+    const confirmed = await showAppConfirm({
+      title: `Delete ${config.label}`,
+      message: `Delete ${selectedRecords.length} selected ${config.label.toLowerCase()} document(s)?\n\nThis action cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      tone: 'danger',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const selectedKeys = selectedRecords.map((record) => getRecordKey(record));
+
+    try {
+      await Promise.all(selectedRecords.map((record) => documentService.delete(selectedType, getRecordKey(record))));
+      setDocumentsByType((prev) => ({
+        ...prev,
+        [selectedType]: prev[selectedType].filter((item) => !selectedKeys.includes(getRecordKey(item))),
+      }));
+      if (selectedRecord && selectedKeys.includes(getRecordKey(selectedRecord))) {
+        setSelectedRecord(null);
+      }
+      setSelectedRecordKeys([]);
+    } catch (_error) {
+      await showAppAlert({
+        title: 'Delete Failed',
+        message: `Failed to delete selected ${config.label.toLowerCase()} document(s).`,
+        tone: 'danger',
+      });
+    }
   };
 
   const handleCreateDocument = async () => {
@@ -1916,14 +1993,117 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                   <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{filteredRecords.length} visible of {records.length}</div>
                 </div>
 
-                <div className={`grid px-6 py-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: 'minmax(140px, 1.1fr) minmax(180px, 1.3fr) minmax(140px, 1fr) 120px 120px 140px 340px' }}>
+                <div className={`flex flex-wrap items-center gap-2 border-b px-6 py-4 ${darkMode ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50/80'}`}>
+                  <button
+                    type="button"
+                    onClick={() => { void handleToggleSelectAllVisible(); }}
+                    disabled={!hasSelectableRecords}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium ${!hasSelectableRecords
+                      ? 'cursor-not-allowed bg-gray-400 text-white'
+                      : darkMode
+                        ? 'bg-gray-700 text-white hover:bg-gray-600'
+                        : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                  >
+                    {allVisibleSelected ? 'Clear Selection' : 'Select Visible'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { if (singleSelectedRecord) { void handleViewRecord(singleSelectedRecord); } else { void requireSingleSelection('View'); } }}
+                    disabled={selectedRecords.length !== 1}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${selectedRecords.length === 1 ? 'bg-blue-600 hover:bg-blue-700' : 'cursor-not-allowed bg-gray-500'}`}
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { if (singleSelectedRecord) { void handleEditRecord(singleSelectedRecord); } else { void requireSingleSelection('Edit'); } }}
+                    disabled={selectedRecords.length !== 1}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${selectedRecords.length === 1 ? 'bg-emerald-600 hover:bg-emerald-700' : 'cursor-not-allowed bg-gray-500'}`}
+                  >
+                    Edit
+                  </button>
+                  {selectedType === 'quotation' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (singleSelectedRecord && !isLinkedQuotation(singleSelectedRecord)) {
+                            handleLinkQuotationToInvoice(singleSelectedRecord);
+                          }
+                        }}
+                        disabled={!singleSelectedRecord || isLinkedQuotation(singleSelectedRecord)}
+                        className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${singleSelectedRecord && !isLinkedQuotation(singleSelectedRecord) ? 'bg-violet-600 hover:bg-violet-700' : 'cursor-not-allowed bg-gray-500'}`}
+                      >
+                        Link Invoice
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (singleSelectedRecord && !hasLinkedDepositReceipt(singleSelectedRecord, depositReceiptRecords)) {
+                            handleLinkQuotationToDepositReceipt(singleSelectedRecord);
+                          }
+                        }}
+                        disabled={!singleSelectedRecord || hasLinkedDepositReceipt(singleSelectedRecord, depositReceiptRecords)}
+                        className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${singleSelectedRecord && !hasLinkedDepositReceipt(singleSelectedRecord, depositReceiptRecords) ? 'bg-cyan-600 hover:bg-cyan-700' : 'cursor-not-allowed bg-gray-500'}`}
+                      >
+                        Deposit Receipt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (singleSelectedRecord && isConfirmedQuotation(singleSelectedRecord)) {
+                            handleLinkQuotationToPurchaseOrder(singleSelectedRecord);
+                          }
+                        }}
+                        disabled={!singleSelectedRecord || !isConfirmedQuotation(singleSelectedRecord)}
+                        className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${singleSelectedRecord && isConfirmedQuotation(singleSelectedRecord) ? 'bg-fuchsia-600 hover:bg-fuchsia-700' : 'cursor-not-allowed bg-gray-500'}`}
+                      >
+                        Create PO
+                      </button>
+                    </>
+                  ) : null}
+                  {selectedType === 'invoice' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (singleSelectedRecord && !isLinkedInvoice(singleSelectedRecord)) {
+                          handleLinkInvoiceToReceipt(singleSelectedRecord);
+                        }
+                      }}
+                      disabled={!singleSelectedRecord || isLinkedInvoice(singleSelectedRecord)}
+                      className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${singleSelectedRecord && !isLinkedInvoice(singleSelectedRecord) ? 'bg-amber-600 hover:bg-amber-700' : 'cursor-not-allowed bg-gray-500'}`}
+                    >
+                      Link Receipt
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteSelectedRecords()}
+                    disabled={selectedRecords.length === 0}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${selectedRecords.length > 0 ? 'bg-red-600 hover:bg-red-700' : 'cursor-not-allowed bg-gray-500'}`}
+                  >
+                    Delete
+                  </button>
+                  <div className={`ml-auto text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Selected: {selectedRecords.length}
+                  </div>
+                </div>
+
+                <div className={`grid px-6 py-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: '44px minmax(140px, 1.1fr) minmax(180px, 1.3fr) minmax(140px, 1fr) 120px 120px 140px' }}>
+                  <div>
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={() => { void handleToggleSelectAllVisible(); }}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  </div>
                   <div>Document No</div>
                   <div>Title</div>
                   <div>{selectedType === 'purchase_order' ? 'Vendor / Party' : 'Customer / Party'}</div>
                   <div>Date</div>
                   <div>Status</div>
                   <div>Total</div>
-                  <div>Action</div>
                 </div>
 
                 {filteredRecords.length === 0 ? (
@@ -1932,69 +2112,29 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                   </div>
                 ) : (
                   filteredRecords.map((record) => (
-                    <div key={getRecordKey(record)} className={`grid items-center px-6 py-4 text-sm ${darkMode ? 'border-t border-gray-700 text-gray-100' : 'border-t border-gray-200 text-gray-900'}`} style={{ gridTemplateColumns: 'minmax(140px, 1.1fr) minmax(180px, 1.3fr) minmax(140px, 1fr) 120px 120px 140px 340px' }}>
+                    <div
+                      key={getRecordKey(record)}
+                      onClick={() => handleToggleRecordSelection(record)}
+                      className={`grid cursor-pointer items-center px-6 py-4 text-sm transition-colors ${selectedRecordKeys.includes(getRecordKey(record))
+                        ? (darkMode ? 'bg-blue-500/10' : 'bg-blue-50')
+                        : ''} ${darkMode ? 'border-t border-gray-700 text-gray-100 hover:bg-gray-700/40' : 'border-t border-gray-200 text-gray-900 hover:bg-gray-50'}`}
+                      style={{ gridTemplateColumns: '44px minmax(140px, 1.1fr) minmax(180px, 1.3fr) minmax(140px, 1fr) 120px 120px 140px' }}
+                    >
+                      <div>
+                        <input
+                          type="checkbox"
+                          checked={selectedRecordKeys.includes(getRecordKey(record))}
+                          onChange={() => handleToggleRecordSelection(record)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      </div>
                       <div className="font-semibold">{record.documentNumber || '-'}</div>
                       <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{record.title || '-'}</div>
                       <div className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{getRecordParty(record)}</div>
                       <div>{formatDate(record.documentDate)}</div>
                       <div>{renderStatus(record)}</div>
                       <div>฿{formatCurrency(record.total)}</div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button type="button"
-                          onClick={() => handleViewRecord(record)}
-                          className="rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700">
-                          View
-                        </button>
-                        {record.documentType === 'quotation' ? (
-                          <>
-                            {(() => {
-                              const depositReceiptLinked = hasLinkedDepositReceipt(record, depositReceiptRecords);
-
-                              return (
-                                <>
-                            <button
-                              type="button"
-                              onClick={() => handleLinkQuotationToInvoice(record)}
-                              disabled={isLinkedQuotation(record)}
-                              className={`rounded-md px-3 py-2 text-xs font-medium text-white 
-                            ${isLinkedQuotation(record) ? 'cursor-not-allowed bg-gray-500' :
-                                'bg-violet-600 hover:bg-violet-700'}`}>
-                              {isLinkedQuotation(record) ? 'Linked' : 'Link Invoice'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLinkQuotationToDepositReceipt(record)}
-                              disabled={depositReceiptLinked}
-                              className={`rounded-md px-3 py-2 text-xs font-medium text-white ${depositReceiptLinked ? 'cursor-not-allowed bg-gray-500' : 'bg-cyan-600 hover:bg-cyan-700'}`}
-                            >
-                              {depositReceiptLinked ? 'DR Linked' : 'Deposit Receipt'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLinkQuotationToPurchaseOrder(record)}
-                              disabled={!isConfirmedQuotation(record)}
-                              className={`rounded-md px-3 py-2 text-xs font-medium text-white ${!isConfirmedQuotation(record) ? 'cursor-not-allowed bg-gray-500' : 'bg-fuchsia-600 hover:bg-fuchsia-700'}`}
-                            >
-                              {!isConfirmedQuotation(record) ? 'PO when Confirmed' : 'Create PO'}
-                            </button>
-                                </>
-                              );
-                            })()}
-                          </>
-                        ) : null}
-                        {record.documentType === 'invoice' ? (
-                          <button
-                            type="button"
-                            onClick={() => handleLinkInvoiceToReceipt(record)}
-                            disabled={isLinkedInvoice(record)}
-                            className={`rounded-md px-3 py-2 text-xs font-medium text-white ${isLinkedInvoice(record) ? 'cursor-not-allowed bg-gray-500' : 'bg-amber-600 hover:bg-amber-700'}`}
-                          >
-                            {isLinkedInvoice(record) ? 'Linked' : 'Link Receipt'}
-                          </button>
-                        ) : null}
-                        <button type="button" onClick={() => void handleEditRecord(record)} className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700">Edit</button>
-                        <button type="button" onClick={() => void handleDeleteRecord(record)} className="rounded-md bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700">Delete</button>
-                      </div>
                     </div>
                   ))
                 )}

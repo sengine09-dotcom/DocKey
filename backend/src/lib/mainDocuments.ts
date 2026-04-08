@@ -673,7 +673,12 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     });
   }
 
-  await prisma.documentItem.deleteMany({ where: { id: documentId } });
+  await prisma.documentItem.deleteMany({
+    where: {
+      documentNumber,
+      documentType: getPrismaDocumentType(type),
+    },
+  });
 
   console.log('[DEBUG] Incoming items for documentId:', documentId);
   console.log('[DEBUG] Items count:', items.length);
@@ -707,7 +712,8 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     console.log('[DEBUG] Creating DocumentItems...');
     await prisma.documentItem.createMany({
       data: validItems.map((item: any, index: number) => ({
-        id: documentId,
+        id: ulid(),
+        documentId,
         documentNumber,
         documentType: getPrismaDocumentType(type),
         lineNo: index + 1,

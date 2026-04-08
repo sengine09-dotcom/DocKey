@@ -7,6 +7,8 @@ import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 
 const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
 
+const normalizeText = (value: any) => String(value || '').trim().toLowerCase();
+
 const DOCUMENT_TYPE_LABELS: Record<MainDocumentType, string> = {
   quotation: 'Quotation',
   invoice: 'Invoice',
@@ -239,6 +241,7 @@ export default function AllDocumentForm({
   const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
   const [vendorCodes, setVendorCodes] = useState<any[]>([]);
   const [productCodes, setProductCodes] = useState<any[]>([]);
+  const [confirmedQuotationItems, setConfirmedQuotationItems] = useState<any[]>([]);
   const [companyInfo, setCompanyInfo] = useState<any | null>(null);
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -249,13 +252,14 @@ export default function AllDocumentForm({
     const loadCodeOptions = async () => {
       setIsLoadingCodes(true);
       try {
-        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse, companyResponse] = await Promise.all([
+        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse, companyResponse, quotationResponse] = await Promise.all([
           codeService.getAll('customer'),
           codeService.getAll('destination'),
           codeService.getAll('payment-term'),
           codeService.getAll('vendor'),
           codeService.getAll('product'),
           codeService.getAll('company'),
+          documentService.getAll('quotation'),
         ]);
         setCustomerCodes(customerResponse.data.data || []);
         setDestinationCodes(destinationResponse.data.data || []);
@@ -263,6 +267,25 @@ export default function AllDocumentForm({
         setVendorCodes(vendorResponse.data.data || []);
         setProductCodes(productResponse.data.data || []);
         setCompanyInfo((companyResponse.data.data || []).find((company: any) => company?.isActive !== false) || companyResponse.data.data?.[0] || null);
+        setConfirmedQuotationItems(
+          (quotationResponse.data.data || [])
+            .filter((quotation: any) => normalizeText(quotation?.status) === 'confirmed' && Array.isArray(quotation?.items) && quotation.items.length > 0)
+            .flatMap((quotation: any, quotationIndex: number) => quotation.items.map((item: any, itemIndex: number) => ({
+              id: item?.id || `${quotation?.documentId || quotation?.id || quotationIndex}-${itemIndex}`,
+              productCode: item?.productCode || '',
+              productName: item?.productName || '',
+              cost: item?.cost ?? '',
+              sellingPrice: item?.sellingPrice ?? '',
+              quantity: item?.quantity ?? '',
+              totalCost: item?.totalCost ?? '',
+              totalSellingPrice: item?.totalSellingPrice ?? '',
+              sourceType: 'quotation',
+              sourceLabel: quotation?.documentNumber ? `Quotation ${quotation.documentNumber}` : 'Confirmed Quotation',
+              sourceDocumentNumber: quotation?.documentNumber || '',
+              sourceDocumentId: quotation?.documentId || quotation?.id || '',
+              sourceCustomer: quotation?.customerName || quotation?.customer || '',
+            }))),
+        );
         setCodeError(null);
 
         console.log('Product codes xxx:', productResponse.data.data);
@@ -292,6 +315,21 @@ export default function AllDocumentForm({
       };
     }));
   }, [productCodes]);
+
+  const productSelectionOptions = useMemo(() => {
+    if (documentType !== 'purchase_order') {
+      return productCodes;
+    }
+
+    return [
+      ...confirmedQuotationItems,
+      ...productCodes.map((product) => ({
+        ...product,
+        sourceType: 'product',
+        sourceLabel: 'Product Master',
+      })),
+    ];
+  }, [confirmedQuotationItems, documentType, productCodes]);
 
   useEffect(() => {
     if (!initialData) {
@@ -484,18 +522,28 @@ export default function AllDocumentForm({
 
     setItems((prev) => {
       const next = [...prev];
+      const isQuotationSource = documentType === 'purchase_order' && normalizeText(product?.sourceType) === 'quotation';
+      const nextQuantity = isQuotationSource ? String(product.quantity ?? next[selectedItemIndex].quantity ?? '') : next[selectedItemIndex].quantity;
+      const nextCost = product.cost == null || product.cost === '' ? '' : Number(product.cost).toFixed(2);
+      const nextUnitPrice = isQuotationSource
+        ? (product.cost == null || product.cost === '' ? '' : Number(product.cost).toFixed(2))
+        : next[selectedItemIndex].sellingPrice;
       next[selectedItemIndex] = {
         ...next[selectedItemIndex],
         id: product.id,
         productCode: product.productCode || '',
         productName: product.productName || '',
+        quantity: nextQuantity,
         margin: header.margin,
-        cost: product.cost == null ? '' : Number(product.cost).toFixed(2),
+        cost: nextCost,
         sellingPrice: documentType === 'quotation'
-          ? calculateQuotationSalePrice(product.cost == null ? '' : Number(product.cost).toFixed(2), header.margin)
-          : next[selectedItemIndex].sellingPrice,
+          ? calculateQuotationSalePrice(nextCost, header.margin)
+          : nextUnitPrice,
       };
       if (documentType === 'quotation') {
+        next[selectedItemIndex].totalSellingPrice = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].sellingPrice);
+      } else if (documentType === 'purchase_order' && isQuotationSource) {
+        next[selectedItemIndex].totalCost = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].cost);
         next[selectedItemIndex].totalSellingPrice = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].sellingPrice);
       }
       return next;
@@ -1548,7 +1596,7 @@ export default function AllDocumentForm({
 
       <ProductSelectionModal
         isOpen={productModalOpen}
-        products={productCodes}
+        products={productSelectionOptions}
         onSelect={handleProductSelect}
         onClose={() => {
           setProductModalOpen(false);
