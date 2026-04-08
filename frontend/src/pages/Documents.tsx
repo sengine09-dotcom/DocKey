@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 import AllDocumentForm from '../components/Documents/AllDocumentForm';
 import documentService, { MainDocumentType } from '../services/documentService';
@@ -63,8 +63,8 @@ const documentTypeConfigs: Record<MainDocumentType, any> = {
 const documentTypeGroups = [
   {
     title: 'Commercial Documents',
-    subtitle: 'Quotation / Invoice / Receipt / Deposit Receipt',
-    types: ['quotation', 'invoice', 'receipt', 'deposit_receipt'] as MainDocumentType[],
+    subtitle: 'Quotation / Deposit Receipt / Invoice / Receipt ',
+    types: ['quotation', 'deposit_receipt', 'invoice', 'receipt'] as MainDocumentType[],
   },
   {
     title: 'Operations Documents',
@@ -130,6 +130,446 @@ const formatCurrency = (value: any) => {
   return amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const escapeHtml = (value: any) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const formatPrintDate = (value: any) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: '2-digit',
+  });
+};
+
+const buildQuotationPrintHtml = (record: any) => {
+  const items = Array.isArray(record?.items) ? record.items : [];
+  const customerName = String(record?.customer || '').trim();
+  const billTo = String(record?.billTo || customerName || '-').trim() || '-';
+  const shipTo = String(record?.shipTo || billTo || '-').trim() || '-';
+  const paymentLabel = String(record?.paymentTerm || record?.paymentMethod || '-').trim() || '-';
+  const subtotal = Number(record?.total || 0) - Number(record?.tax || 0);
+
+  return `
+    <style>
+      .quotation-pdf-root {
+        color: #0f172a;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .quotation-sheet {
+        min-height: 297mm;
+        background: #ffffff;
+        padding: 14mm 16mm 18mm;
+      }
+
+      .quotation-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 14px;
+      }
+
+      .quotation-title {
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: #1d4ed8;
+        margin: 0;
+      }
+
+      .quotation-subtitle {
+        margin: 4px 0 0;
+        color: #475569;
+        font-size: 12px;
+      }
+
+      .quotation-meta {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+
+      .quotation-meta td {
+        border: 1px solid #cbd5e1;
+        padding: 7px 8px;
+        vertical-align: top;
+      }
+
+      .label-cell {
+        width: 120px;
+        font-weight: 700;
+        background: #eff6ff;
+        color: #1e3a8a;
+      }
+
+      .value-cell {
+        color: #0f172a;
+      }
+
+      .emphasis {
+        font-weight: 700;
+      }
+
+      .quotation-lines {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+
+      .quotation-lines th,
+      .quotation-lines td {
+        border: 1px solid #cbd5e1;
+        padding: 8px;
+      }
+
+      .quotation-lines th {
+        background: #1d4ed8;
+        color: #ffffff;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .text-center {
+        text-align: center;
+      }
+
+      .text-right {
+        text-align: right;
+      }
+
+      .quotation-summary {
+        margin-top: 18px;
+        margin-left: auto;
+        width: 320px;
+        border-collapse: collapse;
+      }
+
+      .quotation-summary td {
+        border: 1px solid #cbd5e1;
+        padding: 8px 10px;
+      }
+
+      .quotation-summary .summary-label {
+        background: #f8fafc;
+        font-weight: 700;
+      }
+
+      .quotation-summary .summary-total {
+        background: #dbeafe;
+        color: #1e3a8a;
+        font-weight: 700;
+      }
+
+      .quotation-remark {
+        margin-top: 18px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #f8fafc;
+      }
+
+      .quotation-remark-title {
+        margin: 0 0 6px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #475569;
+        font-weight: 700;
+      }
+
+      .quotation-remark-body {
+        margin: 0;
+        white-space: pre-wrap;
+      }
+    </style>
+    <div class="quotation-pdf-root">
+      <div class="quotation-sheet">
+        <div class="quotation-header">
+          <div>
+            <h1 class="quotation-title">QUOTATION</h1>
+            <p class="quotation-subtitle">${escapeHtml(record?.title || 'Quotation Document')}</p>
+          </div>
+        </div>
+
+        <table class="quotation-meta">
+          <tbody>
+            <tr>
+              <td class="label-cell">Document No</td>
+              <td class="value-cell emphasis">${escapeHtml(record?.documentNumber || '-')}</td>
+              <td class="label-cell">Document Date</td>
+              <td class="value-cell">${escapeHtml(formatPrintDate(record?.documentDate))}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Customer</td>
+              <td class="value-cell">${escapeHtml(customerName || '-')}</td>
+              <td class="label-cell">Status</td>
+              <td class="value-cell">${escapeHtml(record?.status || '-')}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Bill To</td>
+              <td class="value-cell">${escapeHtml(billTo)}</td>
+              <td class="label-cell">Ship To</td>
+              <td class="value-cell">${escapeHtml(shipTo)}</td>
+            </tr>
+            <tr>
+              <td class="label-cell">Reference No</td>
+              <td class="value-cell">${escapeHtml(record?.referenceNo || '-')}</td>
+              <td class="label-cell">Payment</td>
+              <td class="value-cell">${escapeHtml(paymentLabel)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table class="quotation-lines">
+          <thead>
+            <tr>
+              <th style="width: 52px;">Line</th>
+              <th style="width: 92px;">Code</th>
+              <th>Product Name</th>
+              <th style="width: 76px;">Qty</th>
+              <th style="width: 86px;">Unit Price</th>
+              <th style="width: 86px;">Margin</th>
+              <th style="width: 108px;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.length === 0 ? '<tr><td colspan="7" class="text-center">-</td></tr>' : items.map((item: any, index: number) => `
+              <tr>
+                <td class="text-center">${escapeHtml(item?.lineNo || index + 1)}</td>
+                <td class="text-center">${escapeHtml(item?.productCode || '-')}</td>
+                <td>${escapeHtml(item?.productName || '-')}</td>
+                <td class="text-right">${Number(item?.quantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
+                <td class="text-right">${Number(item?.sellingPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="text-right">${Number(item?.margin || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="text-right">${Number(item?.totalSellingPrice || item?.totalCost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <table class="quotation-summary">
+          <tbody>
+            <tr>
+              <td class="summary-label">Subtotal</td>
+              <td class="text-right">${Number(subtotal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td class="summary-label">Tax</td>
+              <td class="text-right">${Number(record?.tax || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td class="summary-label">Total Quantity</td>
+              <td class="text-right">${Number(record?.totalQuantity || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</td>
+            </tr>
+            <tr>
+              <td class="summary-total">Grand Total</td>
+              <td class="summary-total text-right">${Number(record?.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="quotation-remark">
+          <p class="quotation-remark-title">Remark</p>
+          <p class="quotation-remark-body">${escapeHtml(record?.remark || '-')}</p>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const generatePdfPreviewUrl = async (title: string, html: string) => {
+  const renderHost = document.createElement('div');
+  renderHost.setAttribute('aria-hidden', 'true');
+  renderHost.style.position = 'fixed';
+  renderHost.style.left = '-200vw';
+  renderHost.style.top = '0';
+  renderHost.style.width = '210mm';
+  renderHost.style.background = '#ffffff';
+  renderHost.style.pointerEvents = 'none';
+  renderHost.style.opacity = '0';
+  renderHost.innerHTML = html;
+  document.body.appendChild(renderHost);
+
+  try {
+    const html2pdfModule = await import('html2pdf.js');
+    const html2pdf = html2pdfModule.default;
+    const worker = html2pdf()
+      .set({
+        margin: 0,
+        filename: `${String(title || 'quotation').replace(/[\\/:*?"<>|]+/g, '-')}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+        },
+      })
+      .from(renderHost);
+
+    const pdfBlob = await worker.outputPdf('blob');
+    return URL.createObjectURL(pdfBlob);
+  } finally {
+    renderHost.remove();
+  }
+};
+
+const getRecordVendorLabel = (record: any) => {
+  const vendorCode = String(record?.vendorCode || '').trim();
+  const supplierName = String(record?.supplierName || '').trim();
+  if (vendorCode && supplierName) {
+    return `${vendorCode} - ${supplierName}`;
+  }
+  return vendorCode || supplierName || '-';
+};
+
+const normalizeText = (value: any) => String(value || '').trim().toLowerCase();
+
+const isQuotationCustomerConfirmed = (quotation: any) => {
+  const status = normalizeText(quotation?.status);
+  return ['confirmed', 'approved', 'won', 'converted', 'link invoice'].includes(status);
+};
+
+const isGoodsReceivedFromPo = (purchaseOrder: any) => {
+  const status = normalizeText(purchaseOrder?.status);
+  return ['received', 'completed', 'closed'].includes(status);
+};
+
+const isGoodsDelivered = (invoice: any, workOrders: any[]) => {
+  const invoiceStatus = normalizeText(invoice?.status);
+  const doNo = String(invoice?.doNo || '').trim();
+  if (doNo || ['delivered', 'sent', 'completed'].includes(invoiceStatus)) {
+    return true;
+  }
+
+  return workOrders.some((workOrder) => {
+    const workOrderStatus = normalizeText(workOrder?.status);
+    return ['completed', 'closed'].includes(workOrderStatus);
+  });
+};
+
+const buildQuotationSalesProgress = (
+  quotation: any,
+  purchaseOrders: any[],
+  invoices: any[],
+  receipts: any[],
+  depositReceipts: any[],
+  workOrders: any[],
+) => {
+  const quotationId = String(quotation?.documentId || quotation?.id || '').trim();
+  const quotationNumber = String(quotation?.documentNumber || '').trim();
+
+  const linkedPurchaseOrders = purchaseOrders.filter((purchaseOrder) => {
+    const referenceNo = String(purchaseOrder?.referenceNo || '').trim();
+    return quotationNumber && referenceNo === quotationNumber;
+  });
+
+  const linkedInvoices = invoices.filter((invoice) => {
+    const linkedQuotationId = String(invoice?.linkedQuotationId || '').trim();
+    const linkedQuotationNumber = String(invoice?.linkedQuotationNumber || invoice?.referenceNo || '').trim();
+    return (quotationId && linkedQuotationId === quotationId)
+      || (quotationNumber && linkedQuotationNumber === quotationNumber);
+  });
+
+  const linkedDepositReceipts = depositReceipts.filter((depositReceipt) => {
+    const linkedQuotationId = String(depositReceipt?.linkedQuotationId || '').trim();
+    const linkedQuotationNumber = String(depositReceipt?.linkedQuotationNumber || depositReceipt?.referenceNo || '').trim();
+    return (quotationId && linkedQuotationId === quotationId)
+      || (quotationNumber && linkedQuotationNumber === quotationNumber);
+  });
+
+  const linkedReceipts = receipts.filter((receipt) => {
+    const linkedInvoiceId = String(receipt?.linkedInvoiceId || '').trim();
+    const linkedInvoiceNumber = String(receipt?.linkedInvoiceNumber || receipt?.referenceNo || '').trim();
+    return linkedInvoices.some((invoice) => {
+      const invoiceId = String(invoice?.documentId || invoice?.id || '').trim();
+      const invoiceNumber = String(invoice?.documentNumber || '').trim();
+      return (invoiceId && linkedInvoiceId === invoiceId)
+        || (invoiceNumber && linkedInvoiceNumber === invoiceNumber);
+    });
+  });
+
+  const linkedWorkOrders = workOrders.filter((workOrder) => {
+    const referenceNo = String(workOrder?.referenceNo || '').trim();
+    return quotationNumber && referenceNo === quotationNumber;
+  });
+
+  const latestPurchaseOrder = linkedPurchaseOrders[0] || null;
+  const latestInvoice = linkedInvoices[0] || null;
+  const customerConfirmed = isQuotationCustomerConfirmed(quotation);
+  const ordered = linkedPurchaseOrders.length > 0;
+  const goodsReceived = linkedPurchaseOrders.some(isGoodsReceivedFromPo);
+  const invoiceIssued = linkedInvoices.length > 0;
+  const delivered = isGoodsDelivered(latestInvoice, linkedWorkOrders);
+
+  const stepDefinitions = [
+    {
+      key: 'confirmed',
+      title: 'ลูกค้ายืนยันแล้ว',
+      subtitle: customerConfirmed ? `สถานะใบเสนอราคา: ${quotation?.status || 'Confirmed'}` : 'รอลูกค้ายืนยันใบเสนอราคา',
+      active: customerConfirmed,
+      tone: 'emerald',
+    },
+    {
+      key: 'ordered',
+      title: 'สั่งของแล้ว',
+      subtitle: ordered ? `PO: ${latestPurchaseOrder?.documentNumber || linkedPurchaseOrders.length + ' PO'}` : 'ยังไม่มีการออก Purchase Order',
+      active: ordered,
+      tone: 'fuchsia',
+    },
+    {
+      key: 'goods_received',
+      title: 'ของเข้าแล้ว',
+      subtitle: goodsReceived ? `สถานะ PO: ${latestPurchaseOrder?.status || 'Received'}` : 'รออัปเดตสถานะรับของจาก PO',
+      active: goodsReceived,
+      tone: 'cyan',
+    },
+    {
+      key: 'invoice',
+      title: 'ออก invoice แล้ว',
+      subtitle: invoiceIssued ? `Invoice: ${latestInvoice?.documentNumber || linkedInvoices.length + ' ใบ'}` : 'ยังไม่มีการออก Invoice',
+      active: invoiceIssued,
+      tone: 'violet',
+    },
+    {
+      key: 'delivery',
+      title: 'ส่งสินค้าแล้ว',
+      subtitle: delivered ? (latestInvoice?.doNo ? `DO No: ${latestInvoice.doNo}` : 'มีหลักฐานการส่งสินค้าแล้ว') : 'รอส่งสินค้า / DO / ปิดงาน',
+      active: delivered,
+      tone: 'amber',
+    },
+  ];
+
+  const completedCount = stepDefinitions.filter((step) => step.active).length;
+
+  return {
+    progressPercent: stepDefinitions.length > 1
+      ? Math.round(((completedCount - 1 > 0 ? completedCount - 1 : 0) / (stepDefinitions.length - 1)) * 100)
+      : 0,
+    completedCount,
+    steps: stepDefinitions,
+    linkedPurchaseOrders,
+    linkedInvoices,
+    linkedReceipts,
+    linkedDepositReceipts,
+  };
+};
+
 const toDateInputValue = (value: any) => {
   if (!value) return '';
   const parsed = new Date(value);
@@ -172,7 +612,7 @@ const getSubtypeDetails = (record: any) => {
 
   if (record?.documentType === 'purchase_order') {
     return [
-      { label: 'Supplier', value: record.supplierName || '-' },
+      { label: 'Vendor', value: getRecordVendorLabel(record) },
       { label: 'Delivery Date', value: formatDate(record.deliveryDate) },
     ];
   }
@@ -211,6 +651,23 @@ const isConfirmedQuotation = (record: any) => {
   if (record?.documentType !== 'quotation') return false;
   const status = String(record?.status || '').trim().toLowerCase();
   return status === 'confirmed';
+};
+
+const hasLinkedDepositReceipt = (quotation: any, depositReceipts: any[]) => {
+  if (quotation?.documentType !== 'quotation') return false;
+
+  const quotationId = String(quotation?.documentId || quotation?.id || '').trim();
+  const quotationNumber = String(quotation?.documentNumber || '').trim();
+
+  return depositReceipts.some((depositReceipt) => {
+    const linkedQuotationId = String(depositReceipt?.linkedQuotationId || '').trim();
+    const linkedQuotationNumber = String(
+      depositReceipt?.linkedQuotationNumber || depositReceipt?.referenceNo || ''
+    ).trim();
+
+    return (quotationId && linkedQuotationId === quotationId)
+      || (quotationNumber && linkedQuotationNumber === quotationNumber);
+  });
 };
 
 const buildPreviewDocumentNumber = (type: MainDocumentType, records: any[]) => {
@@ -337,7 +794,7 @@ const buildPurchaseOrderDraftFromQuotation = (quotation: any) => {
     __mode: 'create',
     title: quotationTitle ? `PO for ${quotationTitle}` : 'Purchase Order',
     documentDate: toDateInputValue(new Date()),
-    customer: quotation?.customer || '',
+    customer: '',
     billTo: quotation?.billTo || quotation?.customerName || '',
     shipTo: quotation?.shipTo || '',
     destination: quotation?.destination || quotation?.shipTo || '',
@@ -347,6 +804,7 @@ const buildPurchaseOrderDraftFromQuotation = (quotation: any) => {
     status: 'Open',
     remark: quotationRemark ? `${quotationRemark}\n\n${linkRemark}` : linkRemark,
     taxRate: String(quotation?.taxRate ?? 0),
+    vendorCode: '',
     supplierName: '',
     deliveryDate: '',
     items: Array.isArray(quotation?.items)
@@ -418,6 +876,11 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
   const [statusFilter, setStatusFilter] = useState('All');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewTitle, setPdfPreviewTitle] = useState('Quotation Preview');
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
+  const [isGeneratingPdfPreview, setIsGeneratingPdfPreview] = useState(false);
+  const editorSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const nextType = normalizeMainDocumentType(initialData?.selectedType);
@@ -486,10 +949,41 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     };
   }, []);
 
+  useEffect(() => {
+    if (!editorState) return;
+
+    window.requestAnimationFrame(() => {
+      editorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [editorState]);
+
+  useEffect(() => () => {
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+    }
+  }, [pdfPreviewUrl]);
+
   const config = documentTypeConfigs[selectedType];
   const records = documentsByType[selectedType] || [];
+  const depositReceiptRecords = documentsByType.deposit_receipt || [];
+  const quotationProgress = useMemo(() => {
+    if (!selectedRecord || selectedRecord.documentType !== 'quotation') return null;
+
+    return buildQuotationSalesProgress(
+      selectedRecord,
+      documentsByType.purchase_order || [],
+      documentsByType.invoice || [],
+      documentsByType.receipt || [],
+      documentsByType.deposit_receipt || [],
+      documentsByType.work_order || [],
+    );
+  }, [documentsByType, selectedRecord]);
 
   const getRecordParty = (record: any) => {
+    if (record?.documentType === 'purchase_order') {
+      return getRecordVendorLabel(record);
+    }
+
     const customerValue = String(record?.customer || '').trim();
     const matchedCustomer = customerCodes.find((customer) => customer.customerCode === customerValue);
     return matchedCustomer?.customerName
@@ -509,6 +1003,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
         record.title,
         record.customerName,
         record.customer,
+        record.vendorCode,
         record.referenceNo,
         record.status,
         record.remark,
@@ -665,6 +1160,32 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
     onNavigate(page, state);
   };
 
+  const closePdfPreview = () => {
+    setIsPdfPreviewOpen(false);
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+    }
+    setPdfPreviewUrl(null);
+  };
+
+  const handlePreviewQuotationPdf = async (record: any) => {
+    try {
+      setIsGeneratingPdfPreview(true);
+      const html = buildQuotationPrintHtml(record);
+      const nextUrl = await generatePdfPreviewUrl(record?.documentNumber || 'quotation', html);
+      if (pdfPreviewUrl) {
+        URL.revokeObjectURL(pdfPreviewUrl);
+      }
+      setPdfPreviewTitle(record?.documentNumber ? `Quotation ${record.documentNumber}` : 'Quotation Preview');
+      setPdfPreviewUrl(nextUrl);
+      setIsPdfPreviewOpen(true);
+    } catch (_error) {
+      await showAppAlert({ title: 'Print Error', message: 'Unable to generate quotation PDF preview.', tone: 'danger' });
+    } finally {
+      setIsGeneratingPdfPreview(false);
+    }
+  };
+
   const renderStatus = (record: any) => {
     const status = record?.status || 'Draft';
     const tone = record?.color === 'green'
@@ -770,7 +1291,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder={`Search ${config.label.toLowerCase()} number, title, customer, status`}
+                    placeholder={`Search ${config.label.toLowerCase()} number, title, ${selectedType === 'purchase_order' ? 'vendor' : 'customer'}, status`}
                     className={`rounded-lg border px-4 py-2 text-sm ${darkMode
                       ? 'border-gray-600 bg-gray-800 text-white placeholder:text-gray-500'
                       : 'border-gray-300 bg-white text-gray-900 placeholder:text-gray-400'
@@ -817,13 +1338,15 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
               </div>
 
               {editorState ? (
-                <AllDocumentForm
-                  darkMode={darkMode}
-                  onNavigate={handleEditorNavigate}
-                  initialData={editorState.initialData}
-                  documentType={editorState.type}
-                  suggestedDocumentNumber={buildPreviewDocumentNumber(editorState.type, documentsByType[editorState.type] || [])}
-                />
+                <div ref={editorSectionRef}>
+                  <AllDocumentForm
+                    darkMode={darkMode}
+                    onNavigate={handleEditorNavigate}
+                    initialData={editorState.initialData}
+                    documentType={editorState.type}
+                    suggestedDocumentNumber={buildPreviewDocumentNumber(editorState.type, documentsByType[editorState.type] || [])}
+                  />
+                </div>
               ) : null}
 
               {selectedRecord && !editorState ? (
@@ -843,6 +1366,19 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                       {renderStatus(selectedRecord)}
                       {selectedRecord.documentType === 'quotation' ? (
                         <>
+                          {(() => {
+                            const depositReceiptLinked = hasLinkedDepositReceipt(selectedRecord, depositReceiptRecords);
+
+                            return (
+                              <>
+                          <button
+                            type="button"
+                            onClick={() => void handlePreviewQuotationPdf(selectedRecord)}
+                            disabled={isGeneratingPdfPreview}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${isGeneratingPdfPreview ? 'cursor-not-allowed bg-gray-500' : 'bg-slate-700 hover:bg-slate-800'}`}
+                          >
+                            {isGeneratingPdfPreview ? 'Preparing PDF...' : 'Print'}
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleLinkQuotationToInvoice(selectedRecord)}
@@ -854,9 +1390,10 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                           <button
                             type="button"
                             onClick={() => handleLinkQuotationToDepositReceipt(selectedRecord)}
-                            className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700"
+                            disabled={depositReceiptLinked}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${depositReceiptLinked ? 'cursor-not-allowed bg-gray-500' : 'bg-cyan-600 hover:bg-cyan-700'}`}
                           >
-                            Create Deposit Receipt
+                            {depositReceiptLinked ? 'Deposit Receipt Linked' : 'Create Deposit Receipt'}
                           </button>
                           <button
                             type="button"
@@ -866,6 +1403,9 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                           >
                             {!isConfirmedQuotation(selectedRecord) ? 'PO available when Confirmed' : 'Create PO'}
                           </button>
+                              </>
+                            );
+                          })()}
                         </>
                       ) : null}
                       {selectedRecord.documentType === 'invoice' ? (
@@ -888,11 +1428,89 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                     </div>
                   </div>
 
+                  {selectedRecord.documentType === 'quotation' && quotationProgress ? (
+                    <div className={`border-b px-6 py-6 ${darkMode ? 'border-gray-700 bg-gradient-to-r from-slate-900 via-blue-950/60 to-violet-950/60' : 'border-gray-200 bg-gradient-to-r from-blue-50 via-white to-violet-50'}`}>
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>Sales Progress</p>
+                          <h4 className={`mt-2 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>สถานะงานขายของใบเสนอราคา</h4>
+                          <p className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>ติดตามตั้งแต่ลูกค้ายืนยัน จนถึงการสั่งของ ออก invoice และส่งมอบสินค้า</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>
+                            {quotationProgress.completedCount}/{quotationProgress.steps.length} completed
+                          </span>
+                          {quotationProgress.linkedDepositReceipts.length > 0 ? (
+                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-100 text-cyan-700'}`}>
+                              Deposit Receipt {quotationProgress.linkedDepositReceipts.length}
+                            </span>
+                          ) : null}
+                          {quotationProgress.linkedReceipts.length > 0 ? (
+                            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                              Receipt {quotationProgress.linkedReceipts.length}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-6">
+                        <div className={`relative h-2 overflow-hidden rounded-full ${darkMode ? 'bg-gray-800' : 'bg-white/80 border border-blue-100'}`}>
+                          <div
+                            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-violet-500 transition-all duration-500"
+                            style={{ width: `${quotationProgress.progressPercent}%` }}
+                          />
+                        </div>
+
+                        <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-5">
+                          {quotationProgress.steps.map((step, index) => {
+                            const isActive = step.active;
+                            const toneClasses = isActive
+                              ? darkMode
+                                ? 'border-transparent bg-white/10 text-white shadow-lg shadow-blue-950/30'
+                                : 'border-transparent bg-white text-gray-900 shadow-md shadow-blue-100/80'
+                              : darkMode
+                                ? 'border-gray-700 bg-gray-900/80 text-gray-400'
+                                : 'border-gray-200 bg-white/70 text-gray-500';
+
+                            const dotClasses = isActive
+                              ? 'bg-gradient-to-r from-emerald-500 to-violet-500 text-white ring-4 ring-blue-500/20'
+                              : darkMode
+                                ? 'bg-gray-800 text-gray-500 ring-1 ring-gray-700'
+                                : 'bg-gray-100 text-gray-400 ring-1 ring-gray-200';
+
+                            return (
+                              <div key={step.key} className={`rounded-2xl border p-4 transition-all ${toneClasses}`}>
+                                <div className="flex items-start gap-3">
+                                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-bold ${dotClasses}`}>
+                                    {isActive ? '✓' : index + 1}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-semibold">{step.title}</p>
+                                      {isActive ? (
+                                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${darkMode ? 'bg-white/10 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
+                                          Done
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className={`mt-2 text-xs leading-5 ${isActive ? (darkMode ? 'text-gray-200' : 'text-gray-600') : (darkMode ? 'text-gray-500' : 'text-gray-500')}`}>
+                                      {step.subtitle}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="space-y-6 px-6 py-6">
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                       {[
                         { label: 'Document Date', value: formatDate(selectedRecord.documentDate) },
-                        { label: 'Customer / Party', value: getRecordParty(selectedRecord) },
+                        { label: selectedRecord.documentType === 'purchase_order' ? 'Vendor / Party' : 'Customer / Party', value: getRecordParty(selectedRecord) },
                         { label: 'Reference No', value: selectedRecord.referenceNo || '-' },
                         { label: 'Total Amount', value: `฿${formatCurrency(selectedRecord.total)}` },
                         { label: 'Bill To', value: selectedRecord.billTo || '-' },
@@ -924,8 +1542,8 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                         <div>Qty</div>
                         <div>Margin</div>
                         <div>Cost</div>
-                        <div>Selling Price</div>
-                        <div>Total Cost</div>
+                        <div>{selectedRecord.documentType === 'purchase_order' ? 'Cost Price' : 'Selling Price'}</div>
+                        <div>{selectedRecord.documentType === 'purchase_order' ? 'Total Cost Price' : 'Total Cost'}</div>
                         <div>Unit</div>
                         <div>Total</div>
                       </div>
@@ -988,6 +1606,52 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                 </div>
               ) : null}
 
+              {isPdfPreviewOpen ? (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4 py-6">
+                  <div className={`flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border shadow-2xl ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                    <div className={`flex items-center justify-between border-b px-6 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                      <div>
+                        <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>PDF Preview</p>
+                        <h3 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{pdfPreviewTitle}</h3>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {pdfPreviewUrl ? (
+                          <a
+                            href={pdfPreviewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                          >
+                            Open PDF
+                          </a>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={closePdfPreview}
+                          className={`rounded-lg px-4 py-2 text-sm font-medium ${darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={`${darkMode ? 'bg-gray-950' : 'bg-gray-100'} flex-1 p-4`}>
+                      {pdfPreviewUrl ? (
+                        <iframe
+                          title={pdfPreviewTitle}
+                          src={pdfPreviewUrl}
+                          className="h-full w-full rounded-2xl border border-gray-300 bg-white"
+                        />
+                      ) : (
+                        <div className={`flex h-full items-center justify-center rounded-2xl border text-sm ${darkMode ? 'border-gray-700 bg-gray-900 text-gray-400' : 'border-gray-200 bg-white text-gray-500'}`}>
+                          PDF preview is not available.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
                 <div className={`flex items-center justify-between gap-4 border-b px-6 py-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                   <div>
@@ -1000,7 +1664,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                 <div className={`grid px-6 py-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'bg-gray-700 text-gray-100' : 'bg-gray-50 text-gray-600'}`} style={{ gridTemplateColumns: 'minmax(140px, 1.1fr) minmax(180px, 1.3fr) minmax(140px, 1fr) 120px 120px 140px 340px' }}>
                   <div>Document No</div>
                   <div>Title</div>
-                  <div>Customer / Party</div>
+                  <div>{selectedType === 'purchase_order' ? 'Vendor / Party' : 'Customer / Party'}</div>
                   <div>Date</div>
                   <div>Status</div>
                   <div>Total</div>
@@ -1028,6 +1692,11 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                         </button>
                         {record.documentType === 'quotation' ? (
                           <>
+                            {(() => {
+                              const depositReceiptLinked = hasLinkedDepositReceipt(record, depositReceiptRecords);
+
+                              return (
+                                <>
                             <button
                               type="button"
                               onClick={() => handleLinkQuotationToInvoice(record)}
@@ -1040,9 +1709,10 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                             <button
                               type="button"
                               onClick={() => handleLinkQuotationToDepositReceipt(record)}
-                              className="rounded-md bg-cyan-600 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-700"
+                              disabled={depositReceiptLinked}
+                              className={`rounded-md px-3 py-2 text-xs font-medium text-white ${depositReceiptLinked ? 'cursor-not-allowed bg-gray-500' : 'bg-cyan-600 hover:bg-cyan-700'}`}
                             >
-                              Deposit Receipt
+                              {depositReceiptLinked ? 'DR Linked' : 'Deposit Receipt'}
                             </button>
                             <button
                               type="button"
@@ -1052,6 +1722,9 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                             >
                               {!isConfirmedQuotation(record) ? 'PO when Confirmed' : 'Create PO'}
                             </button>
+                                </>
+                              );
+                            })()}
                           </>
                         ) : null}
                         {record.documentType === 'invoice' ? (

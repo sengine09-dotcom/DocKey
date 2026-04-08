@@ -307,6 +307,7 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
   if (documentType === 'purchase_order') {
     return {
       ...baseRecord,
+      vendorCode: document.purchaseOrderDocument?.vendorCode || '',
       supplierName: document.purchaseOrderDocument?.supplierName || '',
       deliveryDate: document.purchaseOrderDocument?.deliveryDate || null,
     };
@@ -430,11 +431,13 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
       create: {
         id: documentId,
         documentNumber,
+        vendorCode: parseString(header.vendorCode),
         supplierName: parseString(header.supplierName),
         deliveryDate: parseDate(header.deliveryDate),
       },
       update: {
         documentNumber,
+        vendorCode: parseString(header.vendorCode),
         supplierName: parseString(header.supplierName),
         deliveryDate: parseDate(header.deliveryDate),
       },

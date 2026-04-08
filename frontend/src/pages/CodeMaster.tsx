@@ -81,6 +81,93 @@ const pageConfigs: Record<string, any> = {
       productCode: '', productName: '', brand: '', category: '', model: '',
     },
   },
+  'vendor-code': {
+    apiType: 'vendor',
+    title: 'Vendor Codes',
+    icon: '🚚',
+    cardDescription: 'เลือกรหัสผู้ขายเพื่อจัดการข้อมูลคู่ค้าสำหรับการสั่งซื้อสินค้าเข้ามาขาย',
+    description: 'Master vendor codes used for purchase orders and supplier management.',
+    searchPlaceholder: 'Search vendor code or vendor name',
+    listTitle: 'Recent Vendor Codes',
+    createLabel: 'Add Vendor Code',
+    idField: 'vendorCode',
+    nameField: 'name',
+    columns: [
+      { key: 'vendorCode', label: 'Code' },
+      { key: 'name', label: 'Vendor Name' },
+      { key: 'contactName', label: 'Contact' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'isActive', label: 'Status', type: 'booleanStatus' },
+    ],
+    fields: [
+      { key: 'vendorCode', label: 'Vendor Code', required: true },
+      { key: 'name', label: 'Vendor Name', required: true },
+      { key: 'contactName', label: 'Contact Name' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'email', label: 'Email', type: 'email' },
+      { key: 'taxId', label: 'Tax ID' },
+      { key: 'paymentType', label: 'Payment Type', type: 'select', options: [
+        { value: 'CASH', label: 'Cash' },
+        { value: 'CREDIT', label: 'Credit' },
+        { value: 'TRANSFER', label: 'Transfer' },
+      ] },
+      { key: 'paymentTerm', label: 'Payment Term (Days)', type: 'number' },
+      { key: 'bankName', label: 'Bank Name' },
+      { key: 'bankAccount', label: 'Bank Account' },
+      { key: 'accountName', label: 'Account Name' },
+      { key: 'isActive', label: 'Active', type: 'select', options: [
+        { value: 'true', label: 'Active' },
+        { value: 'false', label: 'Inactive' },
+      ] },
+      { key: 'address', label: 'Address', type: 'textarea', fullWidth: true },
+      { key: 'note', label: 'Note', type: 'textarea', fullWidth: true },
+    ],
+    initialValues: {
+      vendorCode: '', name: '', contactName: '', phone: '', email: '', address: '', taxId: '', paymentType: 'CASH', paymentTerm: 0, bankName: '', bankAccount: '', accountName: '', isActive: 'true', note: '',
+    },
+  },
+  'company-info': {
+    apiType: 'company',
+    title: 'Company Info',
+    icon: '🏛️',
+    cardDescription: 'จัดการข้อมูลบริษัทสำหรับเอกสารทางการค้า โลโก้ ข้อมูลภาษี และบัญชีธนาคารของกิจการ',
+    description: 'Company master data used for corporate profile, tax information, logo, signature, and banking details.',
+    searchPlaceholder: 'Search company code or company name',
+    listTitle: 'Company Profiles',
+    createLabel: 'Add Company Info',
+    idField: 'companyCode',
+    nameField: 'name',
+    columns: [
+      { key: 'companyCode', label: 'Code' },
+      { key: 'name', label: 'Company Name' },
+      { key: 'taxId', label: 'Tax ID' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'isActive', label: 'Status', type: 'booleanStatus' },
+    ],
+    fields: [
+      { key: 'companyCode', label: 'Company Code', required: true },
+      { key: 'name', label: 'Company Name', required: true },
+      { key: 'nameEn', label: 'Company Name (EN)' },
+      { key: 'taxId', label: 'Tax ID' },
+      { key: 'branch', label: 'Branch' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'email', label: 'Email', type: 'email' },
+      { key: 'website', label: 'Website' },
+      { key: 'bankName', label: 'Bank Name' },
+      { key: 'bankAccount', label: 'Bank Account' },
+      { key: 'accountName', label: 'Account Name' },
+      { key: 'logoUrl', label: 'Logo URL' },
+      { key: 'signatureUrl', label: 'Signature URL' },
+      { key: 'isActive', label: 'Active', type: 'select', options: [
+        { value: 'true', label: 'Active' },
+        { value: 'false', label: 'Inactive' },
+      ] },
+      { key: 'address', label: 'Address', type: 'textarea', fullWidth: true },
+    ],
+    initialValues: {
+      companyCode: '', name: '', nameEn: '', taxId: '', branch: '', address: '', phone: '', email: '', website: '', logoUrl: '', signatureUrl: '', bankName: '', bankAccount: '', accountName: '', isActive: 'true',
+    },
+  },
   'destination-code': {
     apiType: 'destination',
     title: 'Destination Codes',
@@ -195,7 +282,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const [error, setError] = useState('');
   const [paymentTermOptions, setPaymentTermOptions] = useState<{ value: string; label: string }[]>([]);
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
-  const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, destination: 0, paymentTerm: 0, endUser: 0 });
+  const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0 });
 
   const config = pageConfigs[currentPage] || pageConfigs['customer-code'];
 
@@ -243,13 +330,17 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     Promise.allSettled([
       codeService.getAll('customer'),
       codeService.getAll('product'),
+      codeService.getAll('vendor'),
+      codeService.getAll('company'),
       codeService.getAll('destination'),
       codeService.getAll('payment-term'),
       codeService.getAll('end-user'),
-    ]).then(([cust, prod, dest, term, endUser]) => {
+    ]).then(([cust, prod, vendor, company, dest, term, endUser]) => {
       setCodeCounts({
         customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
         product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
+        vendor:      vendor.status === 'fulfilled' ? (vendor.value?.data?.data?.length ?? 0) : 0,
+        company:     company.status === 'fulfilled' ? (company.value?.data?.data?.length ?? 0) : 0,
         destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
         paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
         endUser:     endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
@@ -341,7 +432,12 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   }, [records, search]);
 
   const currentSummary = useMemo(() => {
-    const activeCount = records.filter((row: any) => String(row.used || 'Y') === 'Y').length;
+    const activeCount = records.filter((row: any) => {
+      if ('isActive' in row) {
+        return row.isActive !== false && String(row.isActive) !== 'false';
+      }
+      return String(row.used || 'Y') === 'Y';
+    }).length;
     const inactiveCount = records.length - activeCount;
 
     return [
@@ -352,8 +448,10 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   }, [records]);
 
   const codeCards = [
+    { id: 'company-info', icon: '🏛️', label: 'Company Info', count: codeCounts.company, description: pageConfigs['company-info'].cardDescription },
     { id: 'customer-code', icon: '🏢', label: 'Customer', count: codeCounts.customer, description: pageConfigs['customer-code'].cardDescription },
     { id: 'product-code', icon: '📦', label: 'Product', count: codeCounts.product, description: pageConfigs['product-code'].cardDescription },
+    { id: 'vendor-code', icon: '🚚', label: 'Vendor', count: codeCounts.vendor, description: pageConfigs['vendor-code'].cardDescription },
     { id: 'destination-code', icon: '📍', label: 'Destination', count: codeCounts.destination, description: pageConfigs['destination-code'].cardDescription },
     { id: 'payment-term-code', icon: '💳', label: 'Payment Term', count: codeCounts.paymentTerm, description: pageConfigs['payment-term-code'].cardDescription },
     { id: 'end-user-code', icon: '👤', label: 'End User', count: codeCounts.endUser, description: pageConfigs['end-user-code'].cardDescription },
@@ -623,6 +721,17 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                         <div key={column.key}>
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${String(value || 'Y') === 'Y' ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700') : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700')}`}>
                             {String(value || 'Y') === 'Y' ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    if (column.type === 'booleanStatus') {
+                      const isActive = value !== false && String(value) !== 'false';
+                      return (
+                        <div key={column.key}>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isActive ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700') : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700')}`}>
+                            {isActive ? 'Active' : 'Inactive'}
                           </span>
                         </div>
                       );

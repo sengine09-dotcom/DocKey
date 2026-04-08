@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 import documentService from '../../services/documentService';
 import codeService from '../../services/codeService';
-import { showAppAlert } from '../../services/dialogService';
+import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import { formatDate } from '../../utils/date';
 
 const TOKEN_EXPIRY_CACHE_PREFIX = 'doc-key-token-expiry-v3';
@@ -74,6 +74,24 @@ const readLatestTokenExpiryCache = () => {
   }
 };
 
+const createEmptyCompanyForm = () => ({
+  companyCode: '',
+  name: '',
+  nameEn: '',
+  taxId: '',
+  branch: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
+  logoUrl: '',
+  signatureUrl: '',
+  bankName: '',
+  bankAccount: '',
+  accountName: '',
+  isActive: 'true',
+});
+
 export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard', topBarCaption = '' }: any) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -89,20 +107,21 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     try {
       const saved = localStorage.getItem('doc-key-open-submenus');
       if (!saved) {
-        return { documents: true, codes: true };
+        return { documents: true, codes: true, administrator: true };
       }
       const parsed = JSON.parse(saved);
       return {
         documents: parsed?.documents !== false,
         codes: parsed?.codes !== false,
+        administrator: parsed?.administrator !== false,
       };
     } catch (_error) {
-      return { documents: true, codes: true };
+      return { documents: true, codes: true, administrator: true };
     }
   });
   const [sidebarCounts, setSidebarCounts] = useState({
     quotation: 0, invoice: 0, receipt: 0, purchaseOrder: 0, workOrder: 0,
-    customer: 0, product: 0, destination: 0, paymentTerm: 0, endUser: 0,
+    customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0,
   });
   const [user, setUser] = useState({
     name: 'User',
@@ -111,6 +130,13 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     role: 'User'
   });
   const [tokenExpiry, setTokenExpiry] = useState<TokenExpirySummary | null>(() => readLatestTokenExpiryCache());
+  const [companyModalOpen, setCompanyModalOpen] = useState(false);
+  const [companyForm, setCompanyForm] = useState<Record<string, any>>(createEmptyCompanyForm());
+  const [editingCompanyCode, setEditingCompanyCode] = useState<string | null>(null);
+  const [isCompanyEditMode, setIsCompanyEditMode] = useState(false);
+  const [isLoadingCompany, setIsLoadingCompany] = useState(false);
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
+  const [companyError, setCompanyError] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -230,6 +256,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   const codeSubmenu = [
     { id: 'customer-code', label: 'Customer', icon: '🏢', href: '/codes/customer', count: sidebarCounts.customer, isActive: currentPage === 'customer-code' },
     { id: 'product-code', label: 'Product', icon: '📦', href: '/codes/product', count: sidebarCounts.product, isActive: currentPage === 'product-code' },
+    { id: 'vendor-code', label: 'Vendor', icon: '🚚', href: '/codes/vendor', count: sidebarCounts.vendor, isActive: currentPage === 'vendor-code' },
     { id: 'destination-code', label: 'Destination', icon: '📍', href: '/codes/destination', count: sidebarCounts.destination, isActive: currentPage === 'destination-code' },
     { id: 'payment-term-code', label: 'Payment Term', icon: '💳', href: '/codes/payment-term', count: sidebarCounts.paymentTerm, isActive: currentPage === 'payment-term-code' },
     { id: 'end-user-code', label: 'End User', icon: '👤', href: '/codes/end-user', count: sidebarCounts.endUser, isActive: currentPage === 'end-user-code' },
@@ -244,6 +271,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     currentPage === 'codes' ||
     currentPage === 'customer-code' ||
     currentPage === 'product-code' ||
+    currentPage === 'vendor-code' ||
     currentPage === 'destination-code' ||
     currentPage === 'payment-term-code' ||
     currentPage === 'end-user-code';
@@ -258,7 +286,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   useEffect(() => {
     const fetchCounts = async () => {
-      const [quotation, invoice, receipt, purchaseOrder, workOrder, cust, prod, dest, term, endUser] = await Promise.allSettled([
+      const [quotation, invoice, receipt, purchaseOrder, workOrder, cust, prod, vendor, company, dest, term, endUser] = await Promise.allSettled([
         documentService.getAll('quotation'),
         documentService.getAll('invoice'),
         documentService.getAll('receipt'),
@@ -266,6 +294,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         documentService.getAll('work_order'),
         codeService.getAll('customer'),
         codeService.getAll('product'),
+        codeService.getAll('vendor'),
+        codeService.getAll('company'),
         codeService.getAll('destination'),
         codeService.getAll('payment-term'),
         codeService.getAll('end-user'),
@@ -278,6 +308,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         workOrder:   workOrder.status === 'fulfilled' ? (workOrder.value?.data?.data?.length ?? 0) : 0,
         customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
         product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
+        vendor:      vendor.status === 'fulfilled' ? (vendor.value?.data?.data?.length ?? 0) : 0,
+        company:     company.status === 'fulfilled' ? (company.value?.data?.data?.length ?? 0) : 0,
         destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
         paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
         endUser:     endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
@@ -316,6 +348,10 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('customer-code');
     } else if (id === 'product-code') {
       onNavigate('product-code');
+    } else if (id === 'vendor-code') {
+      onNavigate('vendor-code');
+    } else if (id === 'company-info') {
+      onNavigate('company-info');
     } else if (id === 'destination-code') {
       onNavigate('destination-code');
     } else if (id === 'payment-term-code') {
@@ -392,6 +428,97 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     ? 'Expiry : no expiry date'
     : `Expiry : ${tokenExpiryLabel} ${tokenExpiry.expiryDateLabel || formatDate(tokenExpiry.expiresAt)}`;
 
+  const normalizedUserRole = String(user.role || '').toLowerCase();
+  const canShowAdminNavigation = normalizedUserRole === 'admin' || user.email === 'No email';
+
+  const loadCompanyRecords = async () => {
+    try {
+      setIsLoadingCompany(true);
+      setCompanyError('');
+      const response = await codeService.getAll('company');
+      const records = response?.data?.data || [];
+      const primaryCompany = records[0] || null;
+      if (primaryCompany) {
+        setEditingCompanyCode(primaryCompany.companyCode || null);
+        setIsCompanyEditMode(false);
+        setCompanyForm({
+          companyCode: primaryCompany.companyCode || '',
+          name: primaryCompany.name || '',
+          nameEn: primaryCompany.nameEn || '',
+          taxId: primaryCompany.taxId || '',
+          branch: primaryCompany.branch || '',
+          address: primaryCompany.address || '',
+          phone: primaryCompany.phone || '',
+          email: primaryCompany.email || '',
+          website: primaryCompany.website || '',
+          logoUrl: primaryCompany.logoUrl || '',
+          signatureUrl: primaryCompany.signatureUrl || '',
+          bankName: primaryCompany.bankName || '',
+          bankAccount: primaryCompany.bankAccount || '',
+          accountName: primaryCompany.accountName || '',
+          isActive: primaryCompany.isActive === false || String(primaryCompany.isActive) === 'false' ? 'false' : 'true',
+        });
+      } else {
+        setEditingCompanyCode(null);
+        setIsCompanyEditMode(true);
+        setCompanyForm(createEmptyCompanyForm());
+      }
+    } catch (error: any) {
+      setCompanyError(error?.response?.data?.message || error?.message || 'Failed to load company information');
+    } finally {
+      setIsLoadingCompany(false);
+    }
+  };
+
+  const openCompanyModal = async () => {
+    setShowUserMenu(false);
+    setCompanyModalOpen(true);
+    await loadCompanyRecords();
+  };
+
+  const closeCompanyModal = () => {
+    setCompanyModalOpen(false);
+    setEditingCompanyCode(null);
+    setIsCompanyEditMode(false);
+    setCompanyForm(createEmptyCompanyForm());
+    setCompanyError('');
+  };
+
+  const resetCompanyForm = () => {
+    void loadCompanyRecords();
+  };
+
+  const openCompanyEditMode = () => {
+    setCompanyError('');
+    setIsCompanyEditMode(true);
+  };
+
+  const handleCompanyFieldChange = (key: string, value: string) => {
+    setCompanyForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveCompany = async () => {
+    if (!String(companyForm.name || '').trim()) {
+      setCompanyError('Company Name is required');
+      return;
+    }
+
+    try {
+      setIsSavingCompany(true);
+      setCompanyError('');
+      if (editingCompanyCode) {
+        await codeService.update('company', editingCompanyCode, companyForm);
+      } else {
+        await codeService.create('company', companyForm);
+      }
+      await loadCompanyRecords();
+    } catch (error: any) {
+      setCompanyError(error?.response?.data?.message || error?.message || 'Failed to save company information');
+    } finally {
+      setIsSavingCompany(false);
+    }
+  };
+
   return (
     <div className={`flex h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
       {/* Sidebar */}
@@ -456,7 +583,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
                         isCodeSectionActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                       }`}>
-                        {sidebarCounts.customer + sidebarCounts.product + sidebarCounts.destination + sidebarCounts.paymentTerm + sidebarCounts.endUser}
+                        {sidebarCounts.customer + sidebarCounts.product + sidebarCounts.vendor + sidebarCounts.destination + sidebarCounts.paymentTerm + sidebarCounts.endUser}
                       </span>
                     )}
                     {/* Submenu toggle button */}
@@ -543,6 +670,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 if (!label && currentPage === 'key-invoice') label = '🧾 Invoice Document';
                 if (!label && currentPage === 'customer-code') label = '🏢 Customer Codes';
                 if (!label && currentPage === 'product-code') label = '📦 Product Codes';
+                if (!label && currentPage === 'vendor-code') label = '🚚 Vendor Codes';
+                if (!label && currentPage === 'company-info') label = '🏛️ Company Info';
                 if (!label && currentPage === 'destination-code') label = '📍 Destination Codes';
                 if (!label && currentPage === 'payment-term-code') label = '💳 Payment Term Codes';
                 if (!label && currentPage === 'end-user-code') label = '👤 End User Codes';
@@ -651,6 +780,22 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   🔐 Change Password
                 </a>
                 <a
+                  href="#company-info"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void openCompanyModal();
+                  }}
+                  className={`block px-4 py-2 text-sm transition-colors ${
+                    canShowAdminNavigation
+                      ? darkMode
+                        ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        : 'text-gray-700 hover:bg-gray-50'
+                      : 'hidden'
+                  }`}
+                >
+                  🏛️ Company Info
+                </a>
+                <a
                   href="#user-management"
                   onClick={(e) => {
                     e.preventDefault();
@@ -658,7 +803,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                     onNavigate('user-management');
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
-                    String(user.role).toLowerCase() === 'admin'
+                    canShowAdminNavigation
                       ? darkMode
                         ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         : 'text-gray-700 hover:bg-gray-50'
@@ -675,7 +820,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                     onNavigate('token-status');
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
-                    String(user.role).toLowerCase() === 'admin'
+                    canShowAdminNavigation
                       ? darkMode
                         ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         : 'text-gray-700 hover:bg-gray-50'
@@ -731,6 +876,178 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         <div className="flex-1 overflow-auto">
           {children}
         </div>
+
+        {companyModalOpen ? (
+          <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/50 px-4 py-8">
+            <div className="flex min-h-full items-center justify-center">
+              <div className={`max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-3xl border shadow-2xl ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                <div className={`flex items-center justify-between border-b px-6 py-5 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                  <div>
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>Administrator</p>
+                    <h2 className={`mt-1 text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Company Info</h2>
+                    <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>จัดการข้อมูลบริษัท โลโก้ ข้อมูลภาษี และบัญชีธนาคารจาก popup เดียว</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetCompanyForm();
+                        void loadCompanyRecords();
+                      }}
+                      className={`rounded-lg px-4 py-2 text-sm font-medium ${darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeCompanyModal}
+                      className={`rounded-lg px-4 py-2 text-sm font-medium ${darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`max-h-[calc(90vh-96px)] overflow-y-auto ${darkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
+                  <div className="p-6">
+                    <div className={`sticky top-0 z-10 -mx-6 mb-5 flex items-center justify-between gap-3 border-b px-6 py-4 ${darkMode ? 'border-gray-800 bg-gray-950' : 'border-gray-200 bg-gray-50'}`}>
+                      <div>
+                        <h3 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Company Settings</h3>
+                        <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>ใช้ข้อมูลบริษัทเดียวสำหรับเอกสารที่ส่งให้ลูกค้า เช่น Quotation</p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-3">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${String(companyForm.isActive ?? 'true') === 'true' ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700') : (darkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-200 text-gray-700')}`}>
+                          {String(companyForm.isActive ?? 'true') === 'true' ? 'Active' : 'Inactive'}
+                        </span>
+                        {editingCompanyCode && !isCompanyEditMode ? (
+                          <button
+                            type="button"
+                            onClick={openCompanyEditMode}
+                            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                        {isCompanyEditMode ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveCompany()}
+                            disabled={isSavingCompany}
+                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                          >
+                            {isSavingCompany ? 'Saving...' : 'Save'}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={resetCompanyForm}
+                          className={`rounded-lg px-4 py-2 text-sm font-medium ${darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'}`}
+                        >
+                          Reload
+                        </button>
+                      </div>
+                    </div>
+
+                    {companyError ? (
+                      <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-red-200 bg-red-50 text-red-700'}`}>
+                        {companyError}
+                      </div>
+                    ) : null}
+
+                    {isLoadingCompany ? (
+                      <div className={`mb-6 rounded-2xl border px-6 py-12 text-center text-sm ${darkMode ? 'border-gray-700 bg-gray-900 text-gray-400' : 'border-gray-200 bg-white text-gray-500'}`}>
+                        Loading company information...
+                      </div>
+                    ) : null}
+
+                    <div className={`mb-6 rounded-2xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                      <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Company Code</p>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                        <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {editingCompanyCode || 'Will be generated automatically on first save'}
+                        </p>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                          ULID Auto
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      {[
+                        { key: 'name', label: 'Company Name', required: true },
+                        { key: 'nameEn', label: 'Company Name (EN)' },
+                        { key: 'taxId', label: 'Tax ID' },
+                        { key: 'branch', label: 'Branch' },
+                        { key: 'phone', label: 'Phone' },
+                        { key: 'email', label: 'Email', type: 'email' },
+                        { key: 'website', label: 'Website' },
+                        { key: 'bankName', label: 'Bank Name' },
+                        { key: 'bankAccount', label: 'Bank Account' },
+                        { key: 'accountName', label: 'Account Name' },
+                        { key: 'logoUrl', label: 'Logo URL' },
+                        { key: 'signatureUrl', label: 'Signature URL' },
+                      ].map((field) => (
+                        <label key={field.key} className="flex flex-col gap-2 text-sm">
+                          <span className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{field.label}{field.required ? ' *' : ''}</span>
+                          <input
+                            type={field.type || 'text'}
+                            value={companyForm[field.key] ?? ''}
+                            disabled={!isCompanyEditMode}
+                            onChange={(e) => handleCompanyFieldChange(field.key, e.target.value)}
+                            className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900 text-white disabled:bg-gray-800 disabled:text-gray-500' : 'border-gray-300 bg-white text-gray-900 disabled:bg-gray-100 disabled:text-gray-500'}`}
+                          />
+                        </label>
+                      ))}
+
+                      <label className="flex flex-col gap-2 text-sm">
+                        <span className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Active</span>
+                        <select
+                          value={companyForm.isActive ?? 'true'}
+                          disabled={!isCompanyEditMode}
+                          onChange={(e) => handleCompanyFieldChange('isActive', e.target.value)}
+                          className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
+                        >
+                          <option value="true">Active</option>
+                          <option value="false">Inactive</option>
+                        </select>
+                      </label>
+
+                      <label className="md:col-span-2 flex flex-col gap-2 text-sm">
+                        <span className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Address</span>
+                        <textarea
+                          rows={4}
+                          value={companyForm.address ?? ''}
+                          disabled={!isCompanyEditMode}
+                          onChange={(e) => handleCompanyFieldChange('address', e.target.value)}
+                          className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="mt-6 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setCompanyForm(createEmptyCompanyForm())}
+                        disabled={!isCompanyEditMode}
+                        className={`rounded-lg px-4 py-3 text-sm font-medium ${darkMode ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'}`}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveCompany()}
+                        disabled={isSavingCompany || !isCompanyEditMode}
+                        className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                      >
+                        {isSavingCompany ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -9,7 +9,8 @@
     "dev": "npm run prisma:generate && ts-node-dev --respawn --transpile-only src/index.ts",
     "postinstall": "npm run prisma:generate",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "reset:seed": "node scripts/reset-and-seed.js"
   },
   "keywords": [
     "document",

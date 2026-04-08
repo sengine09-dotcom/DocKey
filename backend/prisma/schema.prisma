@@ -17,6 +17,12 @@ enum DocumentType {
   WORK_ORDER
 }
 
+enum PaymentType {
+  CASH
+  CREDIT
+  TRANSFER
+}
+
 model User {
   id        String   @id @map("ID") @db.Char(26)
   email     String   @unique @map("Email") @db.VarChar(191)
@@ -82,6 +88,52 @@ model PaymentTerm {
   shortName String? @map("ShortName") @db.VarChar(20)
   days      String? @map("Days") @db.VarChar(3)
   used      String? @map("Used") @db.VarChar(1)
+}
+
+model Vendor {
+  id           String      @id @map("ID") @db.VarChar(26)
+  vendorCode   String      @map("VendorCode") @db.VarChar(50)
+  name         String      @map("Name") @db.VarChar(255)
+  contactName  String?     @map("ContactName") @db.VarChar(255)
+  phone        String?     @map("Phone") @db.VarChar(50)
+  email        String?     @map("Email") @db.VarChar(100)
+  address      String?     @map("Address") @db.Text
+  taxId        String?     @map("TaxID") @db.VarChar(50)
+  paymentType  PaymentType @default(CASH) @map("PaymentType")
+  paymentTerm  Int         @default(0) @map("PaymentTerm")
+  bankName     String?     @map("BankName") @db.VarChar(100)
+  bankAccount  String?     @map("BankAccount") @db.VarChar(100)
+  accountName  String?     @map("AccountName") @db.VarChar(255)
+  isActive     Boolean     @default(true) @map("IsActive")
+  note         String?     @map("Note") @db.Text
+  createdAt    DateTime    @default(now()) @map("CreatedAt")
+  updatedAt    DateTime    @updatedAt @map("UpdatedAt")
+
+  @@unique([vendorCode])
+  @@index([vendorCode])
+}
+
+model Company {
+  id           String   @id @default(cuid()) @map("ID") @db.VarChar(191)
+  companyCode  String   @unique @map("CompanyCode") @db.VarChar(50)
+  name         String   @map("Name") @db.VarChar(255)
+  nameEn       String?  @map("NameEn") @db.VarChar(255)
+  taxId        String?  @map("TaxID") @db.VarChar(50)
+  branch       String?  @map("Branch") @db.VarChar(50)
+  address      String?  @map("Address") @db.Text
+  phone        String?  @map("Phone") @db.VarChar(50)
+  email        String?  @map("Email") @db.VarChar(100)
+  website      String?  @map("Website") @db.VarChar(255)
+  logoUrl      String?  @map("LogoUrl") @db.VarChar(500)
+  signatureUrl String?  @map("SignatureUrl") @db.VarChar(500)
+  bankName     String?  @map("BankName") @db.VarChar(100)
+  bankAccount  String?  @map("BankAccount") @db.VarChar(100)
+  accountName  String?  @map("AccountName") @db.VarChar(255)
+  isActive     Boolean  @default(true) @map("IsActive")
+  createdAt    DateTime @default(now()) @map("CreatedAt")
+  updatedAt    DateTime @updatedAt @map("UpdatedAt")
+
+  @@index([companyCode])
 }
 
 model Document {
@@ -185,6 +237,7 @@ model DepositReceiptDocument {
 model PurchaseOrderDocument {
   id             String    @id @map("ID") @db.Char(26)
   documentNumber String    @map("DocumentNumber") @db.Char(26)
+  vendorCode     String?   @map("VendorCode") @db.VarChar(50)
   supplierName   String?   @map("SupplierName") @db.VarChar(255)
   deliveryDate   DateTime? @map("DeliveryDate")
   document       Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)

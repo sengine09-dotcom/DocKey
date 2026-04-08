@@ -100,6 +100,12 @@ const parseNumberInput = (value: any) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const formatDisplayAmount = (value: any) =>
+  parseNumberInput(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 const sanitizeDecimalInput = (value: string) => value.replace(/[^0-9.]/g, '');
 
 const calculateQuotationSalePrice = (costPrce: any, marginPercent: any) => {
@@ -154,6 +160,7 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   paymentReference: '',
   paymentAmount: '0',
   paymentType: 'full',
+  vendorCode: '',
   supplierName: '',
   deliveryDate: '',
 });
@@ -190,6 +197,7 @@ const getSubtypeFields = (documentType: MainDocumentType) => {
 
   if (documentType === 'purchase_order') {
     return [
+      { key: 'vendorCode', label: 'Vendor Code', type: 'text' },
       { key: 'supplierName', label: 'Supplier Name', type: 'text' },
       { key: 'deliveryDate', label: 'Delivery Date', type: 'date' },
     ];
@@ -220,6 +228,7 @@ export default function AllDocumentForm({
   const [customerCodes, setCustomerCodes] = useState<any[]>([]);
   const [destinationCodes, setDestinationCodes] = useState<any[]>([]);
   const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
+  const [vendorCodes, setVendorCodes] = useState<any[]>([]);
   const [productCodes, setProductCodes] = useState<any[]>([]);
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -230,15 +239,17 @@ export default function AllDocumentForm({
     const loadCodeOptions = async () => {
       setIsLoadingCodes(true);
       try {
-        const [customerResponse, destinationResponse, paymentTermResponse, productResponse] = await Promise.all([
+        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse] = await Promise.all([
           codeService.getAll('customer'),
           codeService.getAll('destination'),
           codeService.getAll('payment-term'),
+          codeService.getAll('vendor'),
           codeService.getAll('product'),
         ]);
         setCustomerCodes(customerResponse.data.data || []);
         setDestinationCodes(destinationResponse.data.data || []);
         setPaymentTermCodes(paymentTermResponse.data.data || []);
+        setVendorCodes(vendorResponse.data.data || []);
         setProductCodes(productResponse.data.data || []);
         setCodeError(null);
 
@@ -285,7 +296,7 @@ export default function AllDocumentForm({
     setHeader({
       ...getEmptyHeader(documentType),
       id: initialData.id || initialData.documentId || '',
-      documentId: initialData.documentId || initialData.id || '',
+      //documentId: initialData.documentId || initialData.id || '',
       documentNumber: initialData.documentNumber || '',
       title: initialData.title || DOCUMENT_TYPE_LABELS[documentType],
       documentDate: initialData.documentDate ? String(initialData.documentDate).slice(0, 10) : getTodayDateInputValue(),
@@ -309,6 +320,7 @@ export default function AllDocumentForm({
       paymentReference: initialData.paymentReference || '',
       paymentAmount: String(initialData.paymentAmount ?? getEmptyHeader(documentType).paymentAmount),
       paymentType: initialData.paymentType || getEmptyHeader(documentType).paymentType,
+      vendorCode: initialData.vendorCode || '',
       supplierName: initialData.supplierName || '',
       deliveryDate: initialData.deliveryDate ? String(initialData.deliveryDate).slice(0, 10) : '',
     });
@@ -351,6 +363,19 @@ export default function AllDocumentForm({
     return selectedCustomer.customerName || selectedCustomer.shortName || selectedCustomer.customerCode || customerCode;
   })();
 
+  const vendorDisplay = (() => {
+    const vendorCode = String(header.vendorCode || '').trim();
+    if (!vendorCode) return '';
+    const selectedVendor = vendorCodes.find((vendor) => vendor.vendorCode === vendorCode);
+    if (!selectedVendor) return vendorCode;
+    return selectedVendor.name || selectedVendor.vendorCode || vendorCode;
+  })();
+
+  const partyLabel = documentType === 'purchase_order' ? 'Vendor' : 'Customer';
+  const partyDisplay = documentType === 'purchase_order'
+    ? (vendorDisplay || header.supplierName || header.vendorCode || '')
+    : (customerDisplay || header.customer || '');
+
   const shipToDisplay = (() => {
     const destinationId = String(header.shipTo || '').trim();
     if (!destinationId) return '';
@@ -380,6 +405,15 @@ export default function AllDocumentForm({
   const handleHeaderChange = (field: string, value: string) => {
     if (isViewMode) return;
     setHeader((prev) => {
+      if (documentType === 'purchase_order' && field === 'vendorCode') {
+        const selectedVendor = vendorCodes.find((vendor) => vendor.vendorCode === value);
+        return {
+          ...prev,
+          vendorCode: value,
+          supplierName: selectedVendor?.name || prev.supplierName,
+        };
+      }
+
       if (documentType === 'deposit_receipt' && field === 'paymentType') {
         if (value === 'full') {
           return {
@@ -484,8 +518,8 @@ export default function AllDocumentForm({
       <table class="meta-table">
         <tbody>
           <tr><td class="label-cell">Document No :</td><td class="value-cell emphasis">${escapeHtml(header.documentNumber || '-')}</td><td class="label-cell">Document Date :</td><td class="value-cell">${escapeHtml(formatPrintDate(header.documentDate))}</td></tr>
-          <tr><td class="label-cell">Customer :</td><td class="value-cell">${escapeHtml(customerDisplay || '-')}</td><td class="label-cell">Status :</td><td class="value-cell">${escapeHtml(header.status || '-')}</td></tr>
-          <tr><td class="label-cell">Bill To :</td><td class="value-cell">${escapeHtml(header.billTo || customerDisplay || '-')}</td><td class="label-cell">Ship To :</td><td class="value-cell">${escapeHtml(shipToDisplay || '-')}</td></tr>
+          <tr><td class="label-cell">${escapeHtml(partyLabel)} :</td><td class="value-cell">${escapeHtml(partyDisplay || '-')}</td><td class="label-cell">Status :</td><td class="value-cell">${escapeHtml(header.status || '-')}</td></tr>
+          <tr><td class="label-cell">Bill To :</td><td class="value-cell">${escapeHtml(header.billTo || partyDisplay || '-')}</td><td class="label-cell">Ship To :</td><td class="value-cell">${escapeHtml(shipToDisplay || '-')}</td></tr>
           <tr><td class="label-cell">Reference No :</td><td class="value-cell">${escapeHtml(header.referenceNo || '-')}</td><td class="label-cell">Payment :</td><td class="value-cell">${escapeHtml(paymentTermDisplay || header.paymentMethod || '-')}</td></tr>
         </tbody>
       </table>
@@ -536,7 +570,7 @@ export default function AllDocumentForm({
       header: {
         ...header,
         id: header.id || '',
-        documentId: header.documentId || header.id || '',
+        documentId: header.id || '',
         documentNumber: header.documentNumber || '',
         title: header.title || typeLabel,
         totalCost,
@@ -633,9 +667,26 @@ export default function AllDocumentForm({
                 <label className="space-y-2 md:col-span-2">
                   <span
                     className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Customer
+                    {partyLabel}
                   </span>
-                  {isViewMode ? (
+                  {documentType === 'purchase_order' ? (
+                    isViewMode ? (
+                      <input
+                        readOnly
+                        className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+                        value={partyDisplay}
+                      />
+                    ) : (
+                      <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                        value={header.vendorCode} onChange={(e) => handleHeaderChange('vendorCode', e.target.value)}>
+                        <option value="">{isLoadingCodes ? 'Loading vendors...' : 'Select vendor code'}</option>
+                        {vendorCodes.map((vendor) =>
+                          <option key={vendor.vendorCode}
+                            value={vendor.vendorCode}>{vendor.vendorCode} - {vendor.name || vendor.vendorCode || 'Unnamed'}
+                          </option>)}
+                      </select>
+                    )
+                  ) : isViewMode ? (
                     <input
                       readOnly
                       className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600"
@@ -733,6 +784,17 @@ export default function AllDocumentForm({
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
+                  ) : field.key === 'vendorCode' && documentType === 'purchase_order' ? (
+                    <select
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={(header as any)[field.key]}
+                      onChange={(e) => handleHeaderChange(field.key, e.target.value)}
+                    >
+                      <option value="">{isLoadingCodes ? 'Loading vendors...' : 'Select vendor code'}</option>
+                      {vendorCodes.map((vendor) => (
+                        <option key={vendor.vendorCode} value={vendor.vendorCode}>{vendor.vendorCode} - {vendor.name || 'Unnamed Vendor'}</option>
+                      ))}
+                    </select>
                   ) : (
                     <input
                       type={field.type}
@@ -757,24 +819,27 @@ export default function AllDocumentForm({
 
             <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
               <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
-                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Customer Name</p>
-                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{customerDisplay || '-'}</p>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{documentType === 'purchase_order' ? 'Vendor Name' : 'Customer Name'}</p>
+                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{documentType === 'purchase_order' ? (vendorDisplay || header.supplierName || '-') : (customerDisplay || '-')}</p>
               </div>
-              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
-                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Ship To</p>
-                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{shipToDisplay || '-'}</p>
-              </div>
+             
               <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {documentType === 'quotation' ? 'Margin (%)' : 'Subtotal'}</p>
+                  {documentType === 'quotation' ? 'Margin (%)' : documentType === 'purchase_order' ? 'Total Cost Price' : 'Subtotal'}</p>
                 <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  {documentType === 'quotation' ? `${parseNumberInput(header.margin).toFixed(2)}%` : totalCost.toFixed(2)}
+                  {documentType === 'quotation' ? `${parseNumberInput(header.totalAmount).toFixed(2)}%` : formatDisplayAmount(totalSellingPrice)}
+                </p>
+              </div>
+              <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Vat</p>
+                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  {formatDisplayAmount(tax)}
                 </p>
               </div>
               <div className={`rounded-xl border px-4 py-3 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}`}>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Amount</p>
                 <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  {total.toFixed(2)}
+                  {formatDisplayAmount(total)}
                 </p>
               </div>
             </div>
@@ -801,8 +866,8 @@ export default function AllDocumentForm({
                   </>
                   : null
                 }
-                <div>Selling Price</div>
-                <div>Total</div>
+                <div>{documentType === 'purchase_order' ? 'Cost Price' : 'Selling Price'}</div>
+                <div>{documentType === 'purchase_order' ? 'Total Cost Price' : 'Total'}</div>
                 <div></div>
               </div>
               {items.map((item, index) => (
