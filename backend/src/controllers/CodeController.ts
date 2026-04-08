@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { ulid } from 'ulid';
 import { prisma } from '../lib/prisma';
 
 const parseDate = (value: any) => {
@@ -88,6 +89,43 @@ const mapPaymentTerm = (row: any) => ({
   used: row.used || 'Y',
 });
 
+const mapVendor = (row: any) => ({
+  vendorCode: row.vendorCode || '',
+  name: row.name || '',
+  contactName: row.contactName || '',
+  phone: row.phone || '',
+  email: row.email || '',
+  address: row.address || '',
+  taxId: row.taxId || '',
+  paymentType: row.paymentType || 'CASH',
+  paymentTerm: row.paymentTerm == null ? 0 : Number(row.paymentTerm),
+  bankName: row.bankName || '',
+  bankAccount: row.bankAccount || '',
+  accountName: row.accountName || '',
+  isActive: row.isActive !== false,
+  note: row.note || '',
+});
+
+const mapCompany = (row: any) => ({
+  companyCode: row.companyCode || '',
+  name: row.name || '',
+  nameEn: row.nameEn || '',
+  taxId: row.taxId || '',
+  branch: row.branch || '',
+  address: row.address || '',
+  phone: row.phone || '',
+  email: row.email || '',
+  website: row.website || '',
+  logoUrl: row.logoUrl || '',
+  signatureUrl: row.signatureUrl || '',
+  bankName: row.bankName || '',
+  bankAccount: row.bankAccount || '',
+  accountName: row.accountName || '',
+  isActive: row.isActive !== false,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
 const mapEndUser = (row: any) => ({
   eUserId: row.eUserId,
   eUserName: row.eUserName || '',
@@ -174,9 +212,60 @@ const codeConfigs: Record<string, any> = {
       used: parseString(payload.used) || 'Y',
     }),
   },
+  vendor: {
+    model: prisma.vendor,
+    idField: 'vendorCode',
+    orderBy: { vendorCode: 'asc' },
+    mapRecord: mapVendor,
+    toData: (payload: any) => ({
+      id: parseString(payload.id) || ulid(),
+      vendorCode: parseString(payload.vendorCode),
+      name: parseString(payload.name) || 'Unnamed Vendor',
+      contactName: parseString(payload.contactName),
+      phone: parseString(payload.phone),
+      email: parseString(payload.email),
+      address: parseString(payload.address),
+      taxId: parseString(payload.taxId),
+      paymentType: parseString(payload.paymentType) || 'CASH',
+      paymentTerm: parseInteger(payload.paymentTerm) ?? 0,
+      bankName: parseString(payload.bankName),
+      bankAccount: parseString(payload.bankAccount),
+      accountName: parseString(payload.accountName),
+      isActive: payload.isActive == null ? true : String(payload.isActive).trim().toLowerCase() !== 'false',
+      note: parseString(payload.note),
+    }),
+  },
+  company: {
+    model: prisma.company,
+    idField: 'companyCode',
+    orderBy: { companyCode: 'asc' },
+    mapRecord: mapCompany,
+    toData: (payload: any) => ({
+      companyCode: parseString(payload.companyCode) || ulid(),
+      name: parseString(payload.name) || 'Unnamed Company',
+      nameEn: parseString(payload.nameEn),
+      taxId: parseString(payload.taxId),
+      branch: parseString(payload.branch),
+      address: parseString(payload.address),
+      phone: parseString(payload.phone),
+      email: parseString(payload.email),
+      website: parseString(payload.website),
+      logoUrl: parseString(payload.logoUrl),
+      signatureUrl: parseString(payload.signatureUrl),
+      bankName: parseString(payload.bankName),
+      bankAccount: parseString(payload.bankAccount),
+      accountName: parseString(payload.accountName),
+      isActive: payload.isActive == null ? true : String(payload.isActive).trim().toLowerCase() !== 'false',
+    }),
+  },
 };
 
 const getConfig = (type: string) => codeConfigs[type];
+
+const isMissingCompanyTableError = (error: any) => {
+  const message = String(error?.message || '');
+  return message.includes('The table `Company` does not exist in the current database');
+};
 
 class CodeController {
   static async getAll(req: Request, res: Response) {
@@ -196,6 +285,9 @@ class CodeController {
 
       res.json({ success: true, data: rows.map(config.mapRecord) });
     } catch (error: any) {
+      if (req.params.type === 'company' && isMissingCompanyTableError(error)) {
+        return res.json({ success: true, data: [] });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   }
@@ -214,13 +306,19 @@ class CodeController {
 
       const data = config.toData(req.body);
       const idValue = data[config.idField];
-      if (!idValue) {
+      if (!idValue && req.params.type !== 'company') {
         return res.status(400).json({ success: false, message: `${config.idField} is required` });
       }
 
       const created = await config.model.create({ data });
       res.json({ success: true, data: config.mapRecord(created) });
     } catch (error: any) {
+      if (req.params.type === 'company' && isMissingCompanyTableError(error)) {
+        return res.status(503).json({
+          success: false,
+          message: 'Company table is not initialized yet. Please run Prisma migration before saving Company Info.',
+        });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   }
@@ -245,6 +343,12 @@ class CodeController {
 
       res.json({ success: true, data: config.mapRecord(updated) });
     } catch (error: any) {
+      if (req.params.type === 'company' && isMissingCompanyTableError(error)) {
+        return res.status(503).json({
+          success: false,
+          message: 'Company table is not initialized yet. Please run Prisma migration before updating Company Info.',
+        });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   }
@@ -264,6 +368,12 @@ class CodeController {
       await config.model.delete({ where: { [config.idField]: req.params.id } });
       res.json({ success: true, message: 'Code deleted' });
     } catch (error: any) {
+      if (req.params.type === 'company' && isMissingCompanyTableError(error)) {
+        return res.status(503).json({
+          success: false,
+          message: 'Company table is not initialized yet. Please run Prisma migration before deleting Company Info.',
+        });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   }

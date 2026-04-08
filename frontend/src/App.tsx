@@ -20,8 +20,10 @@ const pageRouteMap: Record<string, string> = {
   documents: '/documents',
   'invoice-home': '/documents/invoice',
   'key-invoice': '/documents/invoice/detail',
+  'company-info': '/admin/company-info',
   'customer-code': '/codes/customer',
   'product-code': '/codes/product',
+  'vendor-code': '/codes/vendor',
   'destination-code': '/codes/destination',
   'payment-term-code': '/codes/payment-term',
   'end-user-code': '/codes/end-user',
@@ -121,6 +123,10 @@ function ActivationAwareRoutes() {
         path="/documents/invoice/detail"
         element={<RoutedPage component={KeyInvoice} currentPage="key-invoice" useLocationState={true} />}
       />
+      <Route
+        path="/admin/company-info"
+        element={<RoutedPage component={CodeMaster} currentPage="company-info" requireAdmin={true} />}
+      />
       <Route path="/invoices" element={<Navigate to="/documents/invoice" replace />} />
       <Route path="/invoices/detail" element={<Navigate to="/documents/invoice/detail" replace />} />
       <Route
@@ -130,6 +136,10 @@ function ActivationAwareRoutes() {
       <Route
         path="/codes/product"
         element={<RoutedPage component={CodeMaster} currentPage="product-code" />}
+      />
+      <Route
+        path="/codes/vendor"
+        element={<RoutedPage component={CodeMaster} currentPage="vendor-code" />}
       />
       <Route
         path="/codes/destination"

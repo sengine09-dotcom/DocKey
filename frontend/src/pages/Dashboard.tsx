@@ -221,19 +221,19 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                 <h2 className={`text-lg font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>💰 Business Metrics Summary</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   <StatCard 
-                    title="ราคาขายรวม (Invoice)" 
-                    value={`฿${derivedBusinessMetrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                    icon="💵"
-                    bgClass={darkMode ? 'bg-green-900/40' : 'bg-green-100'}
-                    textClass={darkMode ? 'text-green-300' : 'text-green-700'} />
-                  <StatCard 
-                    title="ทุนรวม (PO)" 
+                    title="ต้นทุน" 
                     value={`฿${derivedBusinessMetrics.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     icon="💸"
                     bgClass={darkMode ? 'bg-red-900/40' : 'bg-red-100'}
                     textClass={darkMode ? 'text-red-300' : 'text-red-700'} />
                   <StatCard 
-                    title="กำไร / ขาดทุน (ออก REC แล้ว - หักทุน PO)" 
+                    title="ยอดขาย" 
+                    value={`฿${derivedBusinessMetrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    icon="💵"
+                    bgClass={darkMode ? 'bg-green-900/40' : 'bg-green-100'}
+                    textClass={darkMode ? 'text-green-300' : 'text-green-700'} />                  
+                  <StatCard 
+                    title="กำไร / ขาดทุน" 
                     value={`฿${derivedBusinessMetrics.netProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     icon={derivedBusinessMetrics.netProfit >= 0 ? "📈" : "📉"}
                     bgClass={derivedBusinessMetrics.netProfit >= 0 ? (darkMode ? 'bg-emerald-900/40' : 'bg-emerald-100') : (darkMode ? 'bg-red-900/40' : 'bg-red-100')}

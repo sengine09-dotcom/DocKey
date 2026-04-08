@@ -107,3 +107,44 @@ ON DUPLICATE KEY UPDATE
   `ShortName` = VALUES(`ShortName`),
   `Days` = VALUES(`Days`),
   `Used` = VALUES(`Used`);
+
+-- Vendors / suppliers
+INSERT INTO `Vendor` (
+  `ID`,
+  `VendorCode`,
+  `Name`,
+  `ContactName`,
+  `Phone`,
+  `Email`,
+  `Address`,
+  `TaxID`,
+  `PaymentType`,
+  `PaymentTerm`,
+  `BankName`,
+  `BankAccount`,
+  `AccountName`,
+  `IsActive`,
+  `Note`,
+  `CreatedAt`,
+  `UpdatedAt`
+) VALUES
+  ('01KN6Z8QJ1K8J8R2N5P1Q3R4S', 'VND-0001', 'Siam Network Distribution Co., Ltd.', 'Arthit Saelim', '02-510-2001', 'sales@siamnetworkdist.co.th', '89/11 IT Logistics Center, Bang Khen, Bangkok 10220', '0105569001011', 'CASH', 0, 'Kasikorn Bank', '123-4-56789-1', 'Siam Network Distribution Co., Ltd.', TRUE, 'Main distributor for switches and access points', '2026-01-20 09:00:00', NOW()),
+  ('01KN6Z8QJ1L8J8R2N5P1Q3R4S', 'VND-0002', 'Metro Computer Supply Co., Ltd.', 'Nuttapong Charoen', '02-510-2002', 'procurement@metrocomputer.co.th', '44/8 Hardware Plaza, Din Daeng, Bangkok 10400', '0105569001012', 'CREDIT', 30, 'Bangkok Bank', '234-5-67890-2', 'Metro Computer Supply Co., Ltd.', TRUE, 'Desktop, monitor and office IT hardware supplier', '2026-01-21 09:00:00', NOW()),
+  ('01KN6Z8QJ1M8J8R2N5P1Q3R4S', 'VND-0003', 'SecureNet Systems Limited', 'Patcharee Wongchai', '02-510-2003', 'contact@securenet.co.th', '77/5 Security Tech Park, Prawet, Bangkok 10250', '0105569001013', 'TRANSFER', 15, 'SCB', '345-6-78901-3', 'SecureNet Systems Limited', TRUE, 'Firewall, security appliance and surveillance vendor', '2026-01-22 09:00:00', NOW()),
+  ('01KN6Z8QJ1N8J8R2N5P1Q3R4S', 'VND-0004', 'Eastern Cabling & Power Co., Ltd.', 'Siriporn Boonsri', '038-410-204', 'vendor@easterncabling.co.th', '155/12 Industrial Estate Road, Mueang, Chonburi 20000', '0205569001014', 'CREDIT', 45, 'Krungthai Bank', '456-7-89012-4', 'Eastern Cabling & Power Co., Ltd.', TRUE, 'Cable, rack and UPS supplier for infrastructure projects', '2026-01-23 09:00:00', NOW()),
+  ('01KN6Z8QJ1O8J8R2N5P1Q3R4S', 'VND-0005', 'Infra Device Wholesale Co., Ltd.', 'Thanawat Kijtrakool', '02-510-2005', 'wholesale@infradevice.co.th', '200/18 Device Hub Building, Suan Luang, Bangkok 10250', '0105569001015', 'CASH', 0, 'Krungsri Bank', '567-8-90123-5', 'Infra Device Wholesale Co., Ltd.', TRUE, 'General spare parts and fast-moving IT stock supplier', '2026-01-24 09:00:00', NOW())
+ON DUPLICATE KEY UPDATE
+  `Name` = VALUES(`Name`),
+  `ContactName` = VALUES(`ContactName`),
+  `Phone` = VALUES(`Phone`),
+  `Email` = VALUES(`Email`),
+  `Address` = VALUES(`Address`),
+  `TaxID` = VALUES(`TaxID`),
+  `PaymentType` = VALUES(`PaymentType`),
+  `PaymentTerm` = VALUES(`PaymentTerm`),
+  `BankName` = VALUES(`BankName`),
+  `BankAccount` = VALUES(`BankAccount`),
+  `AccountName` = VALUES(`AccountName`),
+  `IsActive` = VALUES(`IsActive`),
+  `Note` = VALUES(`Note`),
+  `UpdatedAt` = VALUES(`UpdatedAt`);
