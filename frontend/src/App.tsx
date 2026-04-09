@@ -14,6 +14,7 @@ import UserManagement from './pages/UserManagement';
 import TokenStatus from './pages/TokenStatus';
 import DialogProvider from './components/DialogProvider';
 import './index.css';
+import Home from './pages/Home';
 
 const pageRouteMap: Record<string, string> = {
   dashboard: '/dashboard',
@@ -102,6 +103,7 @@ function ActivationAwareRoutes() {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route path='/' element={<Home/>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/dockey/init/admin" element={<InitAdmin />} />
