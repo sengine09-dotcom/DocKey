@@ -89,11 +89,13 @@ function ActivationAwareRoutes() {
     };
   }, []);
 
-  if (isCheckingActivation) {
+  const publicPaths = ['/', '/login'];
+
+  if (isCheckingActivation && !publicPaths.includes(location.pathname)) {
     return <div className="min-h-screen flex items-center justify-center">Checking system activation...</div>;
   }
 
-  if (!isActivated && location.pathname !== '/dockey/init/admin') {
+  if (!isActivated && location.pathname !== '/dockey/init/admin' && !publicPaths.includes(location.pathname)) {
     return (
       <Routes>
         <Route path="*" element={<ActivationLocked reason={activationReason} token={activationToken} onRefresh={() => void loadActivationStatus()} isRefreshing={isCheckingActivation} />} />

@@ -59,7 +59,7 @@ const findAuthenticatedUser = async (token: string) => {
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
-    select: { id: true, email: true, name: true, role: true, companyId: true },
+    select: { id: true, email: true, name: true, role: true, companyId: true, tokenId: true },
   });
 
   return user;
@@ -583,9 +583,10 @@ router.post('/init-admin/claim', async (req: Request, res: Response) => {
     const token = String(req.body?.token || req.body?.id || '').trim();
     const email = String(req.body?.email || '').trim().toLowerCase();
     const password = String(req.body?.password || '');
+    const companyName = String(req.body?.companyName || '').trim();
 
-    if (!token || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Token, email, and password are required' });
+    if (!token || !email || !password || !companyName) {
+      return res.status(400).json({ success: false, message: 'Token, email, password, and company name are required' });
     }
 
     if (password.length < 6) {
@@ -607,38 +608,60 @@ router.post('/init-admin/claim', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Token is invalid or unavailable', reason: status.reason });
     }
 
+    const companyId = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+    const rawCode = companyName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 18);
+    const baseCompanyCode = rawCode || `CO${companyId.slice(0, 8).toUpperCase()}`;
+
     tokenConsumed = await consumeAdminInitToken(token, email);
     if (!tokenConsumed) {
       return res.status(409).json({ success: false, message: 'Token has already been used or expired' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        id: ulid(),
-        email,
-        password: hashedPassword,
-        name: 'Administrator',
-        role: 'admin',
-      },
+
+    const [company, user] = await prisma.$transaction(async (tx) => {
+      const existingCompany = await tx.company.findUnique({ where: { companyCode: baseCompanyCode } });
+      const companyCode = existingCompany
+        ? `${baseCompanyCode.slice(0, 15)}${Math.random().toString(36).slice(2, 5).toUpperCase()}`
+        : baseCompanyCode;
+
+      const newCompany = await tx.company.create({
+        data: { id: companyId, companyCode, name: companyName, isActive: true },
+      });
+
+      const newUser = await tx.user.create({
+        data: {
+          id: ulid(),
+          email,
+          password: hashedPassword,
+          name: 'Administrator',
+          role: 'admin',
+          companyId: newCompany.id,
+          tokenId: token,
+        },
+      });
+
+      return [newCompany, newUser];
     });
 
     try {
-      await saveSystemActivation(token, email);
+      await saveSystemActivation(token, email, company.id);
     } catch (saveActivationError) {
       await prisma.user.delete({ where: { id: user.id } });
+      await prisma.company.delete({ where: { id: company.id } });
       await releaseAdminInitToken(token);
       await clearSystemActivation();
       throw saveActivationError;
     }
 
-    const authToken = jwt.sign({ id: user.id, cid: null }, JWT_SECRET, { expiresIn: '7d' });
+    const authToken = jwt.sign({ id: user.id, cid: company.id }, JWT_SECRET, { expiresIn: '7d' });
     markUserHeartbeat(user.id);
     setAuthCookie(res, authToken);
 
     return res.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: null },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId, tokenId: user.tokenId },
+      company: { id: company.id, companyCode: company.companyCode, name: company.name },
     });
   } catch (error: any) {
     if (tokenConsumed) {

@@ -30,6 +30,7 @@ model User {
   name      String   @map("Name") @db.VarChar(255)
   role      String   @default("user") @map("Role") @db.VarChar(50)
   companyId String?  @map("CompanyID") @db.VarChar(191)
+  tokenId   String?  @map("TokenID") @db.VarChar(191)
   createdAt DateTime @default(now()) @map("CreatedAt")
   updatedAt DateTime @updatedAt @map("UpdatedAt")
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -154,7 +155,8 @@ model Company {
   products     Product[]     @relation("ProductCompany")
   vendors      Vendor[]      @relation("VendorCompany")
   destinations Destination[] @relation("DestinationCompany")
-  paymentTerms PaymentTerm[] @relation("PaymentTermCompany")
+  paymentTerms      PaymentTerm[]      @relation("PaymentTermCompany")
+  systemActivations SystemActivation[]
 
   @@index([companyCode])
 }
@@ -281,7 +283,9 @@ model SystemActivation {
   id          String   @id @map("ID") @db.Char(26)
   adminToken  String   @unique @map("AdminToken") @db.VarChar(191)
   adminEmail  String?  @map("AdminEmail") @db.VarChar(191)
+  companyId   String?  @map("CompanyId") @db.VarChar(191)
   activatedAt DateTime @default(now()) @map("ActivatedAt")
   createdAt   DateTime @default(now()) @map("CreatedAt")
   updatedAt   DateTime @updatedAt @map("UpdatedAt")
+  company     Company? @relation(fields: [companyId], references: [id])
 }

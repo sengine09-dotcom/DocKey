@@ -33,6 +33,7 @@ export default function InitAdmin() {
     email: '',
     password: '',
     confirmPassword: '',
+    companyName: '',
   });
 
   useEffect(() => {
@@ -46,9 +47,6 @@ export default function InitAdmin() {
         const response =  await axios.post(`${API_VENDOR_URL}/admin-init-tokens/first-time`,{ token : token } );
         const nextStatus = response.data?.data || { valid: false, reason: 'not-found' };
         setStatus(nextStatus);
-        if (nextStatus.customerEmail) {
-          setForm((prev) => ({ ...prev, email: nextStatus.customerEmail }));
-        }
       } catch (statusError: any) {
         setStatus({ valid: false, reason: statusError?.response?.data?.reason || 'not-found' });
         setError(statusError?.response?.data?.message || 'Failed to validate activation link');
@@ -64,7 +62,7 @@ export default function InitAdmin() {
     event.preventDefault();
     setError('');
 
-    if (!form.email.trim() || !form.password || !form.confirmPassword) {
+    if (!form.companyName.trim() || !form.email.trim() || !form.password || !form.confirmPassword) {
       setError('Please fill in all fields.');
       return;
     }
@@ -86,6 +84,7 @@ export default function InitAdmin() {
         token,
         email: form.email,
         password: form.password,
+        companyName: form.companyName,
       });
 
       navigate('/dashboard');
@@ -141,13 +140,25 @@ export default function InitAdmin() {
 
                 <form onSubmit={handleSubmit} className="mt-8 space-y-5">
                   <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">ชื่อบริษัท</label>
+                    <input
+                      type="text"
+                      value={form.companyName}
+                      onChange={(event) => setForm((prev) => ({ ...prev, companyName: event.target.value }))}
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                      placeholder="บริษัท ตัวอย่าง จำกัด"
+                      required
+                    />
+                  </div>
+
+                  <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">Email</label>
                     <input
                       type="email"
                       value={form.email}
                       onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                       className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
-                      placeholder="admin@customer.com"
+                      placeholder="admin@company.com"
                       required
                     />
                   </div>
