@@ -318,15 +318,15 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     fetchCounts();
   }, []);
 
-  const toggleSubmenu = (menuId) => {
+  const toggleSubmenu = (menuId: string) => {
     if (menuId !== 'documents' && menuId !== 'codes') return;
     setOpenSubmenus((prev) => ({
       ...prev,
-      [menuId]: !prev[menuId],
+      [menuId]: !prev[menuId as keyof typeof prev],
     }));
   };
 
-  const handleMenuClick = (id) => {
+  const handleMenuClick = (id: string) => {
     // Navigate to the appropriate page
     if (id === 'dashboard') {
       onNavigate('dashboard');
@@ -369,7 +369,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     }
   };
 
-  const renderSubmenu = (items) => (
+  const renderSubmenu = (items: { id: string; label: string; icon: string; href: string; count: number; isActive: boolean }[]) => (
     <div className="ml-3 space-y-1">
       {items.map((submenu) => (
         <button
@@ -392,7 +392,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     </div>
   );
 
-  const getMenuItemClasses = (isActive) => (
+  const getMenuItemClasses = (isActive: boolean) => (
     isActive
       ? 'bg-blue-600 text-white shadow-md'
       : darkMode
@@ -598,10 +598,10 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                         className={`w-6 h-6 rounded flex items-center justify-center text-xs ${
                           darkMode ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
-                        aria-label={openSubmenus[item.id] ? `Collapse ${item.label} submenu` : `Expand ${item.label} submenu`}
-                        title={openSubmenus[item.id] ? 'Collapse submenu' : 'Expand submenu'}
+                        aria-label={(openSubmenus as Record<string, boolean>)[item.id] ? `Collapse ${item.label} submenu` : `Expand ${item.label} submenu`}
+                        title={(openSubmenus as Record<string, boolean>)[item.id] ? 'Collapse submenu' : 'Expand submenu'}
                       >
-                        {openSubmenus[item.id] ? '▾' : '▸'}
+                        {(openSubmenus as Record<string, boolean>)[item.id] ? '▾' : '▸'}
                       </button>
                     )}
                     {/* Active page indicator bar */}

@@ -1,6 +1,11 @@
 import React from 'react';
 
-export default function StatusBadge({ status, darkMode }) {
+interface StatusBadgeProps {
+  status: string;
+  darkMode: boolean;
+}
+
+export default function StatusBadge({ status, darkMode }: StatusBadgeProps) {
   const isCompleted = status === 'Completed';
   const isDraft = status === 'Draft';
 

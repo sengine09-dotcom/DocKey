@@ -164,8 +164,7 @@ function ActivationAwareRoutes() {
         element={<RoutedPage component={TokenStatus} currentPage="token-status" requireAdmin={true} />}
       />
 
-      {/* Redirect to dashboard or login */}
-      <Route path="/" element={<Navigate to="/dashboard" />} />
+      {/* Redirect unknown to dashboard */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

@@ -78,7 +78,18 @@ const FOOTER_LINKS = {
 
 // ===== SUB COMPONENTS =====
 
-const Logo = () => (
+interface Product {
+    id: number;
+    icon: React.ReactNode;
+    iconBg: string;
+    name: string;
+    desc: string;
+    tags: string[];
+    price: string;
+    featured: boolean;
+}
+
+const Logo: React.FC = () => (
     <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -91,7 +102,11 @@ const Logo = () => (
     </div>
 );
 
-const ProductCard = ({ product }) => (
+interface ProductCardProps {
+    product: Product;
+}
+
+const ProductCard: React.FC<ProductCardProps> = ({ product }) => (
     <div
         className={`bg-slate-900 border rounded-2xl p-6 relative transition-all duration-250 hover:-translate-y-1 hover:shadow-[0_20px_40px_rgba(37,99,235,0.12)] hover:border-blue-500 ${product.featured ? "border-blue-700/40" : "border-slate-800"
             }`}
