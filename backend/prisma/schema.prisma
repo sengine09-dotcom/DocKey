@@ -29,10 +29,13 @@ model User {
   password  String   @map("Password") @db.VarChar(255)
   name      String   @map("Name") @db.VarChar(255)
   role      String   @default("user") @map("Role") @db.VarChar(50)
+  companyId String?  @map("CompanyID") @db.VarChar(191)
   createdAt DateTime @default(now()) @map("CreatedAt")
   updatedAt DateTime @updatedAt @map("UpdatedAt")
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([email])
+  @@index([companyId])
 }
 
 model Customer {
@@ -46,31 +49,34 @@ model Customer {
   taxId        String?  @map("TaxID") @db.VarChar(50)
   branch       String?  @map("Branch") @db.VarChar(50)
   used         String?  @map("Used") @db.VarChar(1)
+  companyId    String   @map("CompanyID") @db.VarChar(191)
   createdAt    DateTime @default(now()) @map("CreatedAt")
   updatedAt    DateTime @updatedAt @map("UpdatedAt")
+  company      Company  @relation("CustomerCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  @@unique([id])
-  @@index([id])
+  @@unique([companyId, customerCode])
+  @@index([companyId])
 }
 
 model Product {
-  id            String         @id @map("ID") @db.VarChar(26)
-  productCode   String         @map("ProductCode") @db.VarChar(50)
-  productName   String         @map("ProductName") @db.VarChar(255)
-  category      String         @map("Category") @db.VarChar(255)
-  brand         String         @map("Brand") @db.VarChar(255)
-  model         String?        @map("Model") @db.VarChar(255)
-  price         Decimal        @map("Price") @db.Decimal(19, 4)
-  cost          Decimal?       @map("Cost") @db.Decimal(19, 4)
-  stockQty      Int            @default(0) @map("StockQty")
-  minQty        Int            @default(0) @map("MinQty")
-  maxQty        Int            @default(0) @map("MaxQty")
-  createdAt     DateTime       @default(now()) @map("CreatedAt")
-  updatedAt     DateTime       @updatedAt @map("UpdatedAt")
-  documentItems DocumentItem[]
+  id            String   @id @map("ID") @db.VarChar(26)
+  productCode   String   @map("ProductCode") @db.VarChar(50)
+  productName   String   @map("ProductName") @db.VarChar(255)
+  category      String   @map("Category") @db.VarChar(255)
+  brand         String   @map("Brand") @db.VarChar(255)
+  model         String?  @map("Model") @db.VarChar(255)
+  price         Decimal  @map("Price") @db.Decimal(19, 4)
+  cost          Decimal? @map("Cost") @db.Decimal(19, 4)
+  stockQty      Int      @default(0) @map("StockQty")
+  minQty        Int      @default(0) @map("MinQty")
+  maxQty        Int      @default(0) @map("MaxQty")
+  companyId     String   @map("CompanyID") @db.VarChar(191)
+  createdAt     DateTime @default(now()) @map("CreatedAt")
+  updatedAt     DateTime @updatedAt @map("UpdatedAt")
+  company       Company  @relation("ProductCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  @@unique([productCode])
-  @@index([productCode])
+  @@unique([companyId, productCode])
+  @@index([companyId])
 }
 
 model Destination {
@@ -79,6 +85,10 @@ model Destination {
   destination     String? @map("Destination") @db.VarChar(50)
   location        String? @map("Location") @db.VarChar(50)
   used            String? @map("Used") @db.VarChar(1)
+  companyId       String  @map("CompanyID") @db.VarChar(191)
+  company         Company @relation("DestinationCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId])
 }
 
 model PaymentTerm {
@@ -88,6 +98,10 @@ model PaymentTerm {
   shortName String? @map("ShortName") @db.VarChar(20)
   days      String? @map("Days") @db.VarChar(3)
   used      String? @map("Used") @db.VarChar(1)
+  companyId String  @map("CompanyID") @db.VarChar(191)
+  company   Company @relation("PaymentTermCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId])
 }
 
 model Vendor {
@@ -106,71 +120,82 @@ model Vendor {
   accountName  String?     @map("AccountName") @db.VarChar(255)
   isActive     Boolean     @default(true) @map("IsActive")
   note         String?     @map("Note") @db.Text
+  companyId    String      @map("CompanyID") @db.VarChar(191)
   createdAt    DateTime    @default(now()) @map("CreatedAt")
   updatedAt    DateTime    @updatedAt @map("UpdatedAt")
+  company      Company     @relation("VendorCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  @@unique([vendorCode])
-  @@index([vendorCode])
+  @@unique([companyId, vendorCode])
+  @@index([companyId])
 }
 
 model Company {
-  id           String   @id @default(cuid()) @map("ID") @db.VarChar(191)
-  companyCode  String   @unique @map("CompanyCode") @db.VarChar(50)
-  name         String   @map("Name") @db.VarChar(255)
-  nameEn       String?  @map("NameEn") @db.VarChar(255)
-  taxId        String?  @map("TaxID") @db.VarChar(50)
-  branch       String?  @map("Branch") @db.VarChar(50)
-  address      String?  @map("Address") @db.Text
-  phone        String?  @map("Phone") @db.VarChar(50)
-  email        String?  @map("Email") @db.VarChar(100)
-  website      String?  @map("Website") @db.VarChar(255)
-  logoUrl      String?  @map("LogoUrl") @db.VarChar(500)
-  signatureUrl String?  @map("SignatureUrl") @db.VarChar(500)
-  bankName     String?  @map("BankName") @db.VarChar(100)
-  bankAccount  String?  @map("BankAccount") @db.VarChar(100)
-  accountName  String?  @map("AccountName") @db.VarChar(255)
-  isActive     Boolean  @default(true) @map("IsActive")
-  createdAt    DateTime @default(now()) @map("CreatedAt")
-  updatedAt    DateTime @updatedAt @map("UpdatedAt")
+  id           String        @id @default(cuid()) @map("ID") @db.VarChar(191)
+  companyCode  String        @unique @map("CompanyCode") @db.VarChar(50)
+  name         String        @map("Name") @db.VarChar(255)
+  nameEn       String?       @map("NameEn") @db.VarChar(255)
+  taxId        String?       @map("TaxID") @db.VarChar(50)
+  branch       String?       @map("Branch") @db.VarChar(50)
+  address      String?       @map("Address") @db.Text
+  phone        String?       @map("Phone") @db.VarChar(50)
+  email        String?       @map("Email") @db.VarChar(100)
+  website      String?       @map("Website") @db.VarChar(255)
+  logoUrl      String?       @map("LogoUrl") @db.VarChar(500)
+  signatureUrl String?       @map("SignatureUrl") @db.VarChar(500)
+  bankName     String?       @map("BankName") @db.VarChar(100)
+  bankAccount  String?       @map("BankAccount") @db.VarChar(100)
+  accountName  String?       @map("AccountName") @db.VarChar(255)
+  isActive     Boolean       @default(true) @map("IsActive")
+  createdAt    DateTime      @default(now()) @map("CreatedAt")
+  updatedAt    DateTime      @updatedAt @map("UpdatedAt")
+  users        User[]
+  documents    Document[]    @relation("DocumentCompany")
+  customers    Customer[]    @relation("CustomerCompany")
+  products     Product[]     @relation("ProductCompany")
+  vendors      Vendor[]      @relation("VendorCompany")
+  destinations Destination[] @relation("DestinationCompany")
+  paymentTerms PaymentTerm[] @relation("PaymentTermCompany")
 
   @@index([companyCode])
 }
 
 model Document {
-  id                    String                 @id @map("ID") @db.Char(26)
-  documentType          DocumentType           @map("DocumentType")
-  documentNumber        String                 @map("DocumentNumber") @db.VarChar(50)
-  title                 String?                @map("Title") @db.VarChar(255)
-  documentDate          DateTime?              @map("DocumentDate")
-  customerId            String?                @map("CustomerID") @db.VarChar(10)
-  billTo                String?                @map("BillTo") @db.VarChar(255)
-  shipTo                String?                @map("ShipTo") @db.VarChar(255)
-  destinationId         String?                @map("DestinationID") @db.VarChar(10)
-  paymentTermId         String?                @map("PaymentTermID") @db.VarChar(10)
-  paymentMethod         String?                @map("PaymentMethod") @db.VarChar(100)
-  referenceNo           String?                @map("ReferenceNo") @db.VarChar(100)
-  status                String?                @map("Status") @db.VarChar(30)
-  remark                String?                @map("Remark") @db.VarChar(500)
-  totalCost             Decimal?               @map("TotalCost") @db.Decimal(19, 4)
-  totalSellingPrice     Decimal?               @map("TotalSellingPrice") @db.Decimal(19, 4)
-  totalProfit           Decimal?               @map("TotalProfit") @db.Decimal(19, 4)
-  margin                Decimal?               @map("Margin") @db.Decimal(19, 4)
-  taxRate               Decimal?               @map("TaxRate") @db.Decimal(10, 4)
-  taxAmount             Decimal?               @map("TaxAmount") @db.Decimal(19, 4)
-  totalAmount           Decimal?               @map("TotalAmount") @db.Decimal(19, 4)
-  totalQuantity         Decimal?               @map("TotalQuantity") @db.Decimal(18, 2)
-  createdAt             DateTime               @default(now()) @map("CreatedAt")
-  updatedAt             DateTime               @updatedAt @map("UpdatedAt")
-  items                 DocumentItem[]
-  quotationDocument     QuotationDocument?
-  invoiceDocument       InvoiceDocument?
-  receiptDocument       ReceiptDocument?
+  id                     String                  @id @map("ID") @db.Char(26)
+  documentType           DocumentType            @map("DocumentType")
+  documentNumber         String                  @map("DocumentNumber") @db.VarChar(50)
+  title                  String?                 @map("Title") @db.VarChar(255)
+  documentDate           DateTime?               @map("DocumentDate")
+  customerId             String?                 @map("CustomerID") @db.VarChar(10)
+  billTo                 String?                 @map("BillTo") @db.VarChar(255)
+  shipTo                 String?                 @map("ShipTo") @db.VarChar(255)
+  destinationId          String?                 @map("DestinationID") @db.VarChar(10)
+  paymentTermId          String?                 @map("PaymentTermID") @db.VarChar(10)
+  paymentMethod          String?                 @map("PaymentMethod") @db.VarChar(100)
+  referenceNo            String?                 @map("ReferenceNo") @db.VarChar(100)
+  status                 String?                 @map("Status") @db.VarChar(30)
+  remark                 String?                 @map("Remark") @db.VarChar(500)
+  totalCost              Decimal?                @map("TotalCost") @db.Decimal(19, 4)
+  totalSellingPrice      Decimal?                @map("TotalSellingPrice") @db.Decimal(19, 4)
+  totalProfit            Decimal?                @map("TotalProfit") @db.Decimal(19, 4)
+  margin                 Decimal?                @map("Margin") @db.Decimal(19, 4)
+  taxRate                Decimal?                @map("TaxRate") @db.Decimal(10, 4)
+  taxAmount              Decimal?                @map("TaxAmount") @db.Decimal(19, 4)
+  totalAmount            Decimal?                @map("TotalAmount") @db.Decimal(19, 4)
+  totalQuantity          Decimal?                @map("TotalQuantity") @db.Decimal(18, 2)
+  companyId              String                  @map("CompanyID") @db.VarChar(191)
+  createdAt              DateTime                @default(now()) @map("CreatedAt")
+  updatedAt              DateTime                @updatedAt @map("UpdatedAt")
+  company                Company                 @relation("DocumentCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  items                  DocumentItem[]
+  quotationDocument      QuotationDocument?
+  invoiceDocument        InvoiceDocument?
+  receiptDocument        ReceiptDocument?
   depositReceiptDocument DepositReceiptDocument?
-  purchaseOrderDocument PurchaseOrderDocument?
-  workOrderDocument     WorkOrderDocument?
+  purchaseOrderDocument  PurchaseOrderDocument?
+  workOrderDocument      WorkOrderDocument?
 
-  @@unique([documentType, documentNumber])
-  @@index([documentType, documentDate])
+  @@unique([companyId, documentType, documentNumber])
+  @@index([companyId, documentType, documentDate])
 }
 
 model DocumentItem {
@@ -190,7 +215,6 @@ model DocumentItem {
   createdAt         DateTime     @default(now()) @map("CreatedAt")
   updatedAt         DateTime     @updatedAt @map("UpdatedAt")
   document          Document     @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  product           Product?     @relation(fields: [productCode], references: [productCode], onDelete: SetNull, onUpdate: Cascade)
 
   @@unique([documentType, documentNumber, lineNo])
   @@index([documentId])

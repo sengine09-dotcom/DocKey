@@ -7,6 +7,7 @@ export type DocKeyUser = {
   email: string;
   name: string;
   role: 'admin' | 'user';
+  companyId: string | null;
   online?: boolean;
   lastSeenAt?: string | null;
   createdAt: string;

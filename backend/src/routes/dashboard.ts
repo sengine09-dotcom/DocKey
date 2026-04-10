@@ -1,9 +1,10 @@
-import express from 'express';
+import express, { Request } from 'express';
 import { prisma } from '../lib/prisma';
+import { resolveCompanyContext } from '../lib/companyContext';
 
 const router = express.Router();
 
-const attachCustomerNames = async (documents: any[]) => {
+const attachCustomerNames = async (documents: any[], companyId: string) => {
   const customerCodes = Array.from(new Set(
     documents
       .map((document) => String(document?.customerId || '').trim())
@@ -16,6 +17,7 @@ const attachCustomerNames = async (documents: any[]) => {
 
   const customers = await prisma.customer.findMany({
     where: {
+      companyId,
       customerCode: { in: customerCodes },
     },
     select: {
@@ -36,35 +38,40 @@ const attachCustomerNames = async (documents: any[]) => {
 };
 
 // Get business metrics for dashboard
-router.get('/dashboard/metrics', async (_req, res) => {
+router.get('/dashboard/metrics', async (req: Request, res) => {
   try {
+    const ctx = await resolveCompanyContext(req);
+    if (!ctx) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
     console.log('[DEBUG] Dashboard metrics API called');
-    
-    // Fetch all documents
+
+    // Fetch all documents scoped by company
     const [quotations, invoices, receipts, purchaseOrders] = await Promise.all([
       prisma.document.findMany({
-        where: { documentType: 'QUOTATION' },
+        where: { companyId: ctx.companyId, documentType: 'QUOTATION' },
         include: {
           quotationDocument: true,
           items: true
         }
       }),
       prisma.document.findMany({
-        where: { documentType: 'INVOICE' },
+        where: { companyId: ctx.companyId, documentType: 'INVOICE' },
         include: {
           invoiceDocument: true,
           items: true
         }
       }),
       prisma.document.findMany({
-        where: { documentType: 'RECEIPT' },
+        where: { companyId: ctx.companyId, documentType: 'RECEIPT' },
         include: {
           receiptDocument: true,
           items: true
         }
       }),
       prisma.document.findMany({
-        where: { documentType: 'PURCHASE_ORDER' },
+        where: { companyId: ctx.companyId, documentType: 'PURCHASE_ORDER' },
         include: {
           purchaseOrderDocument: true,
           items: true
@@ -73,10 +80,10 @@ router.get('/dashboard/metrics', async (_req, res) => {
     ]);
 
     const [quotationsWithCustomerNames, invoicesWithCustomerNames, receiptsWithCustomerNames, purchaseOrdersWithCustomerNames] = await Promise.all([
-      attachCustomerNames(quotations),
-      attachCustomerNames(invoices),
-      attachCustomerNames(receipts),
-      attachCustomerNames(purchaseOrders),
+      attachCustomerNames(quotations, ctx.companyId),
+      attachCustomerNames(invoices, ctx.companyId),
+      attachCustomerNames(receipts, ctx.companyId),
+      attachCustomerNames(purchaseOrders, ctx.companyId),
     ]);
 
     console.log('[DEBUG] Documents fetched:', {

@@ -12,7 +12,7 @@ const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-dockey-2026';
 const TOKEN_COOKIE_NAME = 'auth_token';
-type AuthTokenPayload = { id: string };
+type AuthTokenPayload = { id: string; cid?: string | null };
 type VendorExpirySummary = {
   warningLevel?: 'none' | 'healthy' | 'warning' | 'critical' | 'expired';
   daysUntilExpiry?: number | null;
@@ -59,7 +59,7 @@ const findAuthenticatedUser = async (token: string) => {
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, name: true, role: true, companyId: true },
   });
 
   return user;
@@ -327,14 +327,14 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     // Generate JWT
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, cid: user.companyId ?? null }, JWT_SECRET, { expiresIn: '7d' });
     markUserHeartbeat(user.id);
 
     setAuthCookie(res, token);
 
     res.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId ?? null },
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -372,14 +372,14 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     // Generate JWT
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, cid: user.companyId ?? null }, JWT_SECRET, { expiresIn: '7d' });
     markUserHeartbeat(user.id);
 
     setAuthCookie(res, token);
 
     res.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId ?? null },
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -632,13 +632,13 @@ router.post('/init-admin/claim', async (req: Request, res: Response) => {
       throw saveActivationError;
     }
 
-    const authToken = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const authToken = jwt.sign({ id: user.id, cid: null }, JWT_SECRET, { expiresIn: '7d' });
     markUserHeartbeat(user.id);
     setAuthCookie(res, authToken);
 
     return res.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: null },
     });
   } catch (error: any) {
     if (tokenConsumed) {
@@ -704,6 +704,78 @@ router.get('/verify', async (req: Request, res: Response) => {
     res.json({ success: true, user });
   } catch (error) {
     res.status(401).json({ success: false, message: 'Invalid token' });
+  }
+});
+
+// Register a new company with its first admin user
+router.post('/register-company', async (req: Request, res: Response) => {
+  try {
+    await ensureUserTableExists();
+
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey is locked until the system is activated' });
+    }
+
+    const { companyCode, companyName, adminEmail, adminPassword, adminName } = req.body;
+
+    if (!companyCode || !companyName || !adminEmail || !adminPassword || !adminName) {
+      return res.status(400).json({ success: false, message: 'companyCode, companyName, adminEmail, adminPassword and adminName are required' });
+    }
+
+    if (String(adminPassword).length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const existingCompany = await prisma.company.findUnique({ where: { companyCode } });
+    if (existingCompany) {
+      return res.status(400).json({ success: false, message: 'Company code already exists' });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email: adminEmail } });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Email already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    const companyId = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+
+    const [company, user] = await prisma.$transaction(async (tx) => {
+      const newCompany = await tx.company.create({
+        data: {
+          id: companyId,
+          companyCode,
+          name: companyName,
+          isActive: true,
+        },
+      });
+
+      const newUser = await tx.user.create({
+        data: {
+          id: ulid(),
+          email: adminEmail,
+          password: hashedPassword,
+          name: adminName,
+          role: 'admin',
+          companyId: newCompany.id,
+        },
+      });
+
+      return [newCompany, newUser];
+    });
+
+    const token = jwt.sign({ id: user.id, cid: company.id }, JWT_SECRET, { expiresIn: '7d' });
+    markUserHeartbeat(user.id);
+    setAuthCookie(res, token);
+
+    return res.json({
+      success: true,
+      company: { id: company.id, companyCode: company.companyCode, name: company.name },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId },
+    });
+  } catch (error: any) {
+    console.error('Register company error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Failed to register company' });
   }
 });
 

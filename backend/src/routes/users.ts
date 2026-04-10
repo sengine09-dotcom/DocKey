@@ -18,6 +18,7 @@ type AuthenticatedRequest = Request & {
     email: string;
     name: string;
     role: string;
+    companyId: string | null;
   };
 };
 
@@ -47,7 +48,7 @@ const requireAdmin = async (req: AuthenticatedRequest, res: Response, next: Next
     const decoded = jwt.verify(token, JWT_SECRET) as AuthTokenPayload;
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, name: true, role: true },
+      select: { id: true, email: true, name: true, role: true, companyId: true },
     });
 
     if (!user) {
@@ -65,19 +66,27 @@ const requireAdmin = async (req: AuthenticatedRequest, res: Response, next: Next
   }
 };
 
-const countAdmins = async () => prisma.user.count({ where: { role: 'admin' } });
+const countAdmins = async (companyId: string) =>
+  prisma.user.count({ where: { role: 'admin', companyId } });
 
 router.use(requireAdmin);
 
-router.get('/users', async (_req: AuthenticatedRequest, res: Response) => {
+router.get('/users', async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const companyId = req.currentUser?.companyId;
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'No company assigned' });
+    }
+
     const users = await prisma.user.findMany({
+      where: { companyId },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
+        companyId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -95,14 +104,19 @@ router.get('/users', async (_req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-router.post('/users', async (_req: AuthenticatedRequest, res: Response) => {
+router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensureUserTableExists();
 
-    const email = String(_req.body?.email || '').trim().toLowerCase();
-    const password = String(_req.body?.password || '');
-    const name = String(_req.body?.name || '').trim();
-    const role = String(_req.body?.role || 'user').trim().toLowerCase();
+    const companyId = req.currentUser?.companyId;
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'No company assigned' });
+    }
+
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const name = String(req.body?.name || '').trim();
+    const role = String(req.body?.role || 'user').trim().toLowerCase();
 
     if (!email || !password || !name) {
       return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
@@ -129,12 +143,14 @@ router.post('/users', async (_req: AuthenticatedRequest, res: Response) => {
         password: hashedPassword,
         name,
         role,
+        companyId, // always forced to admin's company
       },
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
+        companyId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -149,6 +165,11 @@ router.post('/users', async (_req: AuthenticatedRequest, res: Response) => {
 router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
   try {
     await ensureUserTableExists();
+
+    const companyId = req.currentUser?.companyId;
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'No company assigned' });
+    }
 
     const id = String(req.params.id || '').trim();
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -168,16 +189,14 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { id } });
+    // Ensure the target user belongs to admin's company
+    const existingUser = await prisma.user.findFirst({ where: { id, companyId } });
     if (!existingUser) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     const duplicateEmail = await prisma.user.findFirst({
-      where: {
-        email,
-        NOT: { id },
-      },
+      where: { email, NOT: { id } },
       select: { id: true },
     });
     if (duplicateEmail) {
@@ -189,18 +208,13 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
     }
 
     if (existingUser.role === 'admin' && role !== 'admin') {
-      const adminCount = await countAdmins();
+      const adminCount = await countAdmins(companyId);
       if (adminCount <= 1) {
         return res.status(400).json({ success: false, message: 'At least one administrator must remain in the system' });
       }
     }
 
-    const updateData: Record<string, any> = {
-      email,
-      name,
-      role,
-    };
-
+    const updateData: Record<string, any> = { email, name, role };
     if (password) {
       updateData.password = await bcrypt.hash(password, 10);
     }
@@ -213,6 +227,7 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
         email: true,
         name: true,
         role: true,
+        companyId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -228,12 +243,18 @@ router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => 
   try {
     await ensureUserTableExists();
 
+    const companyId = req.currentUser?.companyId;
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: 'No company assigned' });
+    }
+
     const id = String(req.params.id || '').trim();
     if (!id) {
       return res.status(400).json({ success: false, message: 'User id is required' });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { id } });
+    // Ensure the target user belongs to admin's company
+    const existingUser = await prisma.user.findFirst({ where: { id, companyId } });
     if (!existingUser) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -243,7 +264,7 @@ router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => 
     }
 
     if (existingUser.role === 'admin') {
-      const adminCount = await countAdmins();
+      const adminCount = await countAdmins(companyId);
       if (adminCount <= 1) {
         return res.status(400).json({ success: false, message: 'At least one administrator must remain in the system' });
       }
