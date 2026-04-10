@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ulid } from 'ulid';
 import { prisma } from '../lib/prisma';
+import { resolveCompanyContext } from '../lib/companyContext';
 
 const parseDate = (value: any) => {
   if (!value) return null;
@@ -107,6 +108,7 @@ const mapVendor = (row: any) => ({
 });
 
 const mapCompany = (row: any) => ({
+  id: row.id || '',
   companyCode: row.companyCode || '',
   name: row.name || '',
   nameEn: row.nameEn || '',
@@ -135,20 +137,20 @@ const mapEndUser = (row: any) => ({
 
 const listEndUsers = async () => [] as any[];
 
-const createEndUser = async (payload: any) => {
+const createEndUser = async (_payload: any) => {
   throw new Error('End User master is not available in the current database schema');
 };
 
-const updateEndUser = async (eUserId: string, payload: any) => {
-  void eUserId;
-  void payload;
+const updateEndUser = async (_eUserId: string, _payload: any) => {
   throw new Error('End User master is not available in the current database schema');
 };
 
-const deleteEndUser = async (eUserId: string) => {
-  void eUserId;
+const deleteEndUser = async (_eUserId: string) => {
   throw new Error('End User master is not available in the current database schema');
 };
+
+// Types that are scoped per company
+const COMPANY_SCOPED_TYPES = new Set(['customer', 'product', 'vendor', 'destination', 'payment-term']);
 
 const codeConfigs: Record<string, any> = {
   customer: {
@@ -280,9 +282,14 @@ class CodeController {
         return res.status(400).json({ success: false, message: 'Invalid code type' });
       }
 
-      const rows = await config.model.findMany({ orderBy: config.orderBy });
+      let where: any = {};
+      if (COMPANY_SCOPED_TYPES.has(req.params.type)) {
+        const ctx = await resolveCompanyContext(req);
+        if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+        where = { companyId: ctx.companyId };
+      }
 
-
+      const rows = await config.model.findMany({ where, orderBy: config.orderBy });
       res.json({ success: true, data: rows.map(config.mapRecord) });
     } catch (error: any) {
       if (req.params.type === 'company' && isMissingCompanyTableError(error)) {
@@ -304,7 +311,14 @@ class CodeController {
         return res.status(400).json({ success: false, message: 'Invalid code type' });
       }
 
-      const data = config.toData(req.body);
+      let extraData: any = {};
+      if (COMPANY_SCOPED_TYPES.has(req.params.type)) {
+        const ctx = await resolveCompanyContext(req);
+        if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+        extraData = { companyId: ctx.companyId };
+      }
+
+      const data = { id: ulid(), ...config.toData(req.body), ...extraData };
       const idValue = data[config.idField];
       if (!idValue && req.params.type !== 'company') {
         return res.status(400).json({ success: false, message: `${config.idField} is required` });
@@ -335,12 +349,30 @@ class CodeController {
         return res.status(400).json({ success: false, message: 'Invalid code type' });
       }
 
+      if (COMPANY_SCOPED_TYPES.has(req.params.type)) {
+        const ctx = await resolveCompanyContext(req);
+        if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+        // Find the record by companyId + business code to get its actual id (PK)
+        const existing = await config.model.findFirst({
+          where: { companyId: ctx.companyId, [config.idField]: req.params.id },
+          select: { id: true },
+        });
+        if (!existing) {
+          return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+
+        const data = config.toData({ ...req.body, [config.idField]: req.params.id });
+        const updated = await config.model.update({ where: { id: existing.id }, data });
+        return res.json({ success: true, data: config.mapRecord(updated) });
+      }
+
+      // Non-scoped types (company): update by idField directly
       const data = config.toData({ ...req.body, [config.idField]: req.params.id });
       const updated = await config.model.update({
         where: { [config.idField]: req.params.id },
         data,
       });
-
       res.json({ success: true, data: config.mapRecord(updated) });
     } catch (error: any) {
       if (req.params.type === 'company' && isMissingCompanyTableError(error)) {
@@ -365,6 +397,24 @@ class CodeController {
         return res.status(400).json({ success: false, message: 'Invalid code type' });
       }
 
+      if (COMPANY_SCOPED_TYPES.has(req.params.type)) {
+        const ctx = await resolveCompanyContext(req);
+        if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+        // Find the record by companyId + business code to get its actual id (PK)
+        const existing = await config.model.findFirst({
+          where: { companyId: ctx.companyId, [config.idField]: req.params.id },
+          select: { id: true },
+        });
+        if (!existing) {
+          return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+
+        await config.model.delete({ where: { id: existing.id } });
+        return res.json({ success: true, message: 'Code deleted' });
+      }
+
+      // Non-scoped types (company): delete by idField directly
       await config.model.delete({ where: { [config.idField]: req.params.id } });
       res.json({ success: true, message: 'Code deleted' });
     } catch (error: any) {

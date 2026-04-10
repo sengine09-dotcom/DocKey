@@ -127,7 +127,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     name: 'User',
     email: 'No email',
     avatar: '👤',
-    role: 'User'
+    role: 'User',
+    companyId: null as string | null,
   });
   const [tokenExpiry, setTokenExpiry] = useState<TokenExpirySummary | null>(() => readLatestTokenExpiryCache());
   const [companyModalOpen, setCompanyModalOpen] = useState(false);
@@ -151,7 +152,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
             name: profile.name || 'User',
             email: profile.email || 'No email',
             avatar: '👤',
-            role: profile.role || 'User'
+            role: profile.role || 'User',
+            companyId: profile.companyId ?? null,
           });
         }
 
@@ -437,7 +439,10 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       setCompanyError('');
       const response = await codeService.getAll('company');
       const records = response?.data?.data || [];
-      const primaryCompany = records[0] || null;
+      // Match by user's companyId (the company's actual id) if available, otherwise fallback to first
+      const primaryCompany = (user.companyId
+        ? records.find((r: any) => r.id === user.companyId)
+        : null) || records[0] || null;
       if (primaryCompany) {
         setEditingCompanyCode(primaryCompany.companyCode || null);
         setIsCompanyEditMode(false);

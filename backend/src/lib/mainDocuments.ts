@@ -40,9 +40,8 @@ const DOCUMENT_PREFIX: Record<MainDocumentType, string> = {
 type MainDocumentType = keyof typeof DOCUMENT_TYPE_MAP;
 
 const documentInclude = {
-  items: { 
+  items: {
     orderBy: { lineNo: 'asc' as const },
-    include: { product: true }
   },
   quotationDocument: true,
   invoiceDocument: true,
@@ -107,11 +106,12 @@ const isAutoDocumentNumber = (type: MainDocumentType, value: string | null) => {
   return new RegExp(`^${DOCUMENT_PREFIX[type]}-\\d{2}-\\d{6}$`).test(documentNumber);
 };
 
-const buildFallbackDocumentNumber = async (type: MainDocumentType) => {
+const buildFallbackDocumentNumber = async (type: MainDocumentType, companyId: string) => {
   const yearPart = String(new Date().getFullYear()).slice(-2);
   const prefix = `${DOCUMENT_PREFIX[type]}-${yearPart}-`;
   const latestDocument = await prisma.document.findFirst({
     where: {
+      companyId,
       documentType: getPrismaDocumentType(type),
       documentNumber: {
         startsWith: prefix,
@@ -165,7 +165,7 @@ const mapDocumentItem = (item: any, productNameMap: Record<string, string> = {})
   unitID: item.unitId || 'x',
 });
 
-const buildCustomerNameMap = async (documents: any[]) => {
+const buildCustomerNameMap = async (documents: any[], companyId: string) => {
   const customerCodes = Array.from(new Set(
     documents
       .map((document) => String(document?.customerId || '').trim())
@@ -178,6 +178,7 @@ const buildCustomerNameMap = async (documents: any[]) => {
 
   const customers = await prisma.customer.findMany({
     where: {
+      companyId,
       customerCode: { in: customerCodes },
     },
     select: {
@@ -193,7 +194,7 @@ const buildCustomerNameMap = async (documents: any[]) => {
   }, {} as Record<string, string>);
 };
 
-const buildProductNameMap = async (documents: any[]) => {
+const buildProductNameMap = async (documents: any[], companyId: string) => {
   const productCodes = Array.from(new Set(
     documents
       .flatMap((document) => Array.isArray(document?.items) ? document.items : [])
@@ -207,6 +208,7 @@ const buildProductNameMap = async (documents: any[]) => {
 
   const products = await prisma.product.findMany({
     where: {
+      companyId,
       productCode: { in: productCodes },
     },
     select: {
@@ -320,10 +322,11 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
   };
 };
 
-const buildDocumentWhere = (type: MainDocumentType, identifier: string) => {
+const buildDocumentWhere = (type: MainDocumentType, identifier: string, companyId: string) => {
   const prismaType = getPrismaDocumentType(type);
 
   return {
+    companyId,
     documentType: prismaType,
     OR: [
       { id: identifier },
@@ -332,16 +335,16 @@ const buildDocumentWhere = (type: MainDocumentType, identifier: string) => {
   };
 };
 
-const fetchDocumentRecord = async (type: MainDocumentType, identifier: string) => {
+const fetchDocumentRecord = async (type: MainDocumentType, identifier: string, companyId: string) => {
   const document = await prisma.document.findFirst({
-    where: buildDocumentWhere(type, identifier),
+    where: buildDocumentWhere(type, identifier, companyId),
     include: documentInclude,
   });
   if (!document) {
     return null;
   }
-  const customerNameMap = await buildCustomerNameMap([document]);
-  const productNameMap = await buildProductNameMap([document]);
+  const customerNameMap = await buildCustomerNameMap([document], companyId);
+  const productNameMap = await buildProductNameMap([document], companyId);
   return mapDocumentRecord(document, customerNameMap, productNameMap);
 };
 
@@ -460,31 +463,31 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
   });
 };
 
-export const listDocumentsByType = async (typeInput: string) => {
+export const listDocumentsByType = async (typeInput: string, companyId: string) => {
   const type = parseDocumentType(typeInput);
   if (!type) {
     throw new Error('Invalid document type');
   }
 
   const documents = await prisma.document.findMany({
-    where: { documentType: getPrismaDocumentType(type) },
+    where: { companyId, documentType: getPrismaDocumentType(type) },
     include: documentInclude,
     orderBy: [{ documentDate: 'desc' }, { updatedAt: 'desc' }],
   });
-  const customerNameMap = await buildCustomerNameMap(documents);
-  const productNameMap = await buildProductNameMap(documents);
+  const customerNameMap = await buildCustomerNameMap(documents, companyId);
+  const productNameMap = await buildProductNameMap(documents, companyId);
   return documents.map((document) => mapDocumentRecord(document, customerNameMap, productNameMap));
 };
 
-export const getDocumentById = async (typeInput: string, identifier: string) => {
+export const getDocumentById = async (typeInput: string, identifier: string, companyId: string) => {
   const type = parseDocumentType(typeInput);
   if (!type) {
     throw new Error('Invalid document type');
   }
-  return fetchDocumentRecord(type, identifier);
+  return fetchDocumentRecord(type, identifier, companyId);
 };
 
-export const saveDocumentByType = async (typeInput: string, payload: any) => {
+export const saveDocumentByType = async (typeInput: string, payload: any, companyId: string) => {
   const type = parseDocumentType(typeInput);
   if (!type) {
     throw new Error('Invalid document type');
@@ -515,6 +518,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
   const existing = existingLookupConditions.length > 0
     ? await prisma.document.findFirst({
       where: {
+        companyId,
         documentType: prismaType,
         OR: existingLookupConditions,
       },
@@ -522,7 +526,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     })
     : null;
 
-  const documentNumber = existing?.documentNumber || await buildFallbackDocumentNumber(type);
+  const documentNumber = existing?.documentNumber || await buildFallbackDocumentNumber(type, companyId);
 
   const documentId = existing?.id || requestedDocumentId || ulid();
   const status = parseString(header.status) || DOCUMENT_DEFAULT_STATUS[type];
@@ -536,6 +540,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
       console.log('[DEBUG] Checking for duplicate linked invoice...');
       const duplicateLinkedInvoice = await prisma.document.findFirst({
         where: {
+          companyId,
           documentType: prismaType,
           id: { not: documentId },
           referenceNo: quotationReference,
@@ -559,6 +564,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     if (quotationReference) {
       const duplicateDepositReceipt = await prisma.document.findFirst({
         where: {
+          companyId,
           documentType: prismaType,
           id: { not: documentId },
           referenceNo: quotationReference,
@@ -580,6 +586,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     if (invoiceReference) {
       const duplicateLinkedReceipt = await prisma.document.findFirst({
         where: {
+          companyId,
           documentType: prismaType,
           id: { not: documentId },
           referenceNo: invoiceReference,
@@ -600,6 +607,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     where: { id: documentId },
     create: {
       id: documentId,
+      companyId,
       documentType: prismaType,
       documentNumber,
       title: parseString(header.title) || type.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
@@ -696,6 +704,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
   if (requestedProductCodes.length > 0) {
     const existingProducts = await prisma.product.findMany({
       where: {
+        companyId,
         productCode: { in: requestedProductCodes },
       },
       select: {
@@ -744,6 +753,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
       // Find the quotation document first to get its ID
       const quotationDoc = await prisma.document.findFirst({
         where: {
+          companyId,
           documentType: DOCUMENT_TYPE_MAP.quotation,
           documentNumber: linkedQuotationNumber,
         },
@@ -753,6 +763,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
       // Update quotation status and link invoice data
       const updateResult = await prisma.document.updateMany({
         where: {
+          companyId,
           documentType: DOCUMENT_TYPE_MAP.quotation,
           documentNumber: linkedQuotationNumber,
         },
@@ -790,6 +801,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
       // Find the invoice document first to get its ID
       const invoiceDoc = await prisma.document.findFirst({
         where: {
+          companyId,
           documentType: DOCUMENT_TYPE_MAP.invoice,
           documentNumber: linkedInvoiceNumber,
         },
@@ -798,6 +810,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
       // Update invoice status and link receipt data
       const updateResult = await prisma.document.updateMany({
         where: {
+          companyId,
           documentType: DOCUMENT_TYPE_MAP.invoice,
           documentNumber: linkedInvoiceNumber,
         },
@@ -833,17 +846,17 @@ export const saveDocumentByType = async (typeInput: string, payload: any) => {
     include: documentInclude,
   });
 
-  return fetchDocumentRecord(type, documentId);
+  return fetchDocumentRecord(type, documentId, companyId);
 };
 
-export const deleteDocumentByType = async (typeInput: string, identifier: string) => {
+export const deleteDocumentByType = async (typeInput: string, identifier: string, companyId: string) => {
   const type = parseDocumentType(typeInput);
   if (!type) {
     throw new Error('Invalid document type');
   }
 
   const existing = await prisma.document.findFirst({
-    where: buildDocumentWhere(type, identifier),
+    where: buildDocumentWhere(type, identifier, companyId),
     include: { invoiceDocument: true },
   });
 

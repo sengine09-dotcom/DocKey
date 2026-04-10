@@ -15,6 +15,7 @@ import TokenStatus from './pages/TokenStatus';
 import DialogProvider from './components/DialogProvider';
 import './index.css';
 import Home from './pages/Home';
+import RegisterCompany from './pages/RegisterCompany';
 
 const pageRouteMap: Record<string, string> = {
   dashboard: '/dashboard',
@@ -106,6 +107,7 @@ function ActivationAwareRoutes() {
       <Route path='/' element={<Home/>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/register-company" element={<RegisterCompany />} />
       <Route path="/dockey/init/admin" element={<InitAdmin />} />
 
       {/* Protected Routes */}
