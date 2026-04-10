@@ -1,5 +1,6 @@
 import { useState } from "react";
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 // ===== DATA =====
 const NAV_LINKS = [
@@ -143,9 +144,9 @@ const Home: React.FC = () => {
                         ))}
                     </nav>
                     <div className="flex items-center gap-3">
-                        <button className="hidden md:block text-sm text-slate-300 hover:text-white transition-colors px-4 py-2">
+                        <Link to="/login" className="hidden md:block text-sm text-slate-300 hover:text-white transition-colors px-4 py-2">
                             เข้าสู่ระบบ
-                        </button>
+                        </Link>
                         <button className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors">
                             ทดลองใช้ฟรี
                         </button>
@@ -199,11 +200,11 @@ const Home: React.FC = () => {
                         ในที่เดียว ใช้งานได้ทุกที่ ทุกอุปกรณ์
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                        <button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-medium px-8 py-3.5 rounded-xl transition-colors text-sm">
-                            เริ่มต้นฟรี 30 วัน →
-                        </button>
+                        <Link to="/login" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-medium px-8 py-3.5 rounded-xl transition-colors text-sm text-center">
+                            เข้าสู่ระบบ
+                        </Link>
                         <button className="w-full sm:w-auto border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white font-medium px-8 py-3.5 rounded-xl transition-colors text-sm">
-                            ดูตัวอย่างระบบ
+                            View Demo
                         </button>
                     </div>
                     <p className="text-slate-600 text-xs mt-8">
