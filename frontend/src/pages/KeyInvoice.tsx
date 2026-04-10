@@ -136,7 +136,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
       setItems(
-        initialData.items.map((item) => ({
+        initialData.items.map((item: any) => ({
           id: item.id || '',
           productCode: item.productCode || '',
           productName: item.productName || '',
@@ -177,12 +177,12 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
     return selectedDestination.destination || selectedDestination.location || selectedDestination.destId || destinationId;
   })();
 
-  const handleHeaderChange = (field, value) => {
+  const handleHeaderChange = (field: string, value: string) => {
     if (isViewMode) return;
     setHeader((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleItemChange = (index, field, value) => {
+  const handleItemChange = (index: number, field: string, value: string) => {
     if (isViewMode) return;
     setItems((prev) => {
       const next = [...prev];
@@ -224,7 +224,7 @@ export default function KeyInvoice({ onNavigate = () => {}, initialData = null, 
     ]);
   };
 
-  const removeItemRow = (index) => {
+  const removeItemRow = (index: number) => {
     if (isViewMode) return;
     setItems((prev) => prev.filter((_, i) => i !== index));
   };

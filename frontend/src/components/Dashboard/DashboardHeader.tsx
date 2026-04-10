@@ -1,6 +1,15 @@
 import React from 'react';
 
-export default function DashboardHeader({ onNewDocument, onSearch, onFilterChange, searchValue, filterValue, darkMode }) {
+interface DashboardHeaderProps {
+  onNewDocument: () => void;
+  onSearch: (value: string) => void;
+  onFilterChange: (value: string) => void;
+  searchValue: string;
+  filterValue: string;
+  darkMode: boolean;
+}
+
+export default function DashboardHeader({ onNewDocument, onSearch, onFilterChange, searchValue, filterValue, darkMode }: DashboardHeaderProps) {
   return (
     <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b sticky top-0 z-10`}>
       <div className="max-w-7xl mx-auto px-6 py-6">

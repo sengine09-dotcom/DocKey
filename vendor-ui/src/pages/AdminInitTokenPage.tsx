@@ -197,17 +197,21 @@ export default function AdminInitTokenPage() {
     const validation = validateTokenForm(form);
 
     if (!validation.valid) {
-      setError(validation.message);
+      setError(validation.message || '');
       return;
     }
 
     const confirmed = window.confirm(
       editingId
-        ? `Confirm updating token for ${validation.data.customerName}?`
-        : `Confirm creating token for ${validation.data.customerName}?`
+        ? `Confirm updating token for ${validation.data?.customerName}?`
+        : `Confirm creating token for ${validation.data?.customerName}?`
     );
 
     if (!confirmed) {
+      return;
+    }
+
+    if (!validation.data) {
       return;
     }
 

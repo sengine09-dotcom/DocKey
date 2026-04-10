@@ -1,6 +1,16 @@
 import React from 'react';
 
-export default function SummaryCard({ title, value, icon, color, darkMode }) {
+type SummaryCardColor = 'blue' | 'yellow' | 'green';
+
+interface SummaryCardProps {
+  title: string;
+  value: string | number;
+  icon: string;
+  color: SummaryCardColor;
+  darkMode: boolean;
+}
+
+export default function SummaryCard({ title, value, icon, color, darkMode }: SummaryCardProps) {
   const colorClasses = darkMode ? {
     blue: 'bg-blue-900 border-blue-700',
     yellow: 'bg-yellow-900 border-yellow-700',

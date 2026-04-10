@@ -4,8 +4,24 @@ import invoiceService from '../services/invoiceService';
 import useThemePreference from '../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../services/dialogService';
 
+interface Invoice {
+  documentId?: string;
+  id?: string;
+  invoiceNo?: string;
+  invoiceId?: string;
+  documentNumber?: string;
+  customer?: string;
+  status?: string;
+  color?: string;
+  amount: number;
+  invoiceDate?: string;
+  dueDate?: string;
+  itemCount?: number;
+  lastUpdated?: string;
+}
+
 export default function InvoiceHome({ onNavigate = () => {} }: any) {
-  const [invoices, setInvoices] = useState([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [darkMode, setDarkMode] = useThemePreference();
 
@@ -29,11 +45,11 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
     onNavigate('key-invoice');
   };
 
-  const handleEditInvoice = (invoice) => {
+  const handleEditInvoice = (invoice: Invoice) => {
     onNavigate('key-invoice', { ...invoice, __mode: 'edit' });
   };
 
-  const handleDeleteInvoice = async (invoice) => {
+  const handleDeleteInvoice = async (invoice: Invoice) => {
     const invoiceIdentifier = invoice.documentId || invoice.id || invoice.invoiceNo || invoice.invoiceId;
     const confirmed = await showAppConfirm({
       title: 'Delete Invoice',
@@ -48,7 +64,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
     }
 
     try {
-      await invoiceService.delete(invoiceIdentifier);
+      await invoiceService.delete(invoiceIdentifier || '');
       setInvoices((prev: any) => prev.filter((i: any) => (i.documentId || i.id || i.invoiceNo) !== invoiceIdentifier));
       await showAppAlert({ title: 'Deleted', message: 'Invoice deleted successfully.', tone: 'success' });
     } catch (_error) {
@@ -56,7 +72,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
     }
   };
 
-  const handleViewInvoice = async (invoice) => {
+  const handleViewInvoice = async (invoice: Invoice) => {
     try {
       const invoiceIdentifier = invoice.documentId || invoice.id || invoice.invoiceNo || invoice.invoiceId;
       if (!invoiceIdentifier) {
@@ -70,15 +86,15 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     if (status === 'Paid') return 'bg-green-500/20 text-green-600';
     if (status === 'Pending') return 'bg-yellow-500/20 text-yellow-600';
     if (status === 'Overdue') return 'bg-red-500/20 text-red-600';
     return 'bg-gray-500/20 text-gray-600';
   };
 
-  const getColorClass = (color) => {
-    const colors = {
+  const getColorClass = (color: string) => {
+    const colors: Record<string, string> = {
       green: 'border-green-500',
       yellow: 'border-yellow-500',
       red: 'border-red-500',
@@ -156,13 +172,13 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
               {invoices.map((invoice) => (
                 <div
                   key={invoice.documentId || invoice.id || invoice.invoiceNo}
-                  className={`${darkMode ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-50'} border-2 ${getColorClass(invoice.color)} rounded-lg overflow-hidden transition-all`}
+                  className={`${darkMode ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-50'} border-2 ${getColorClass(invoice.color || '')} rounded-lg overflow-hidden transition-all`}
                 >
                   {/* Card Header */}
                   <div className={`px-6 py-4 ${darkMode ? 'bg-gray-700' : 'bg-gray-100'} border-b ${darkMode ? 'border-gray-600' : 'border-gray-200'}`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-2xl">📋</div>
-                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${getStatusColor(invoice.status)}`}>
+                      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${getStatusColor(invoice.status || '')}`}>
                         {invoice.status}
                       </span>
                     </div>
@@ -198,7 +214,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
                           INVOICE DATE
                         </p>
                         <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                          {new Date(invoice.invoiceDate).toLocaleDateString('th-TH')}
+                          {invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('th-TH') : '-'}
                         </p>
                       </div>
                     </div>
@@ -218,7 +234,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
                           Due Date:
                         </span>
                         <span className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                          {new Date(invoice.dueDate).toLocaleDateString('th-TH')}
+                          {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('th-TH') : '-'}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -233,7 +249,7 @@ export default function InvoiceHome({ onNavigate = () => {} }: any) {
 
                     {/* Last Updated */}
                     <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-                      Last updated: {new Date(invoice.lastUpdated).toLocaleDateString('th-TH')}
+                      Last updated: {invoice.lastUpdated ? new Date(invoice.lastUpdated).toLocaleDateString('th-TH') : '-'}
                     </p>
                   </div>
 

@@ -1672,9 +1672,9 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                   <div className={`flex flex-col gap-4 border-b px-6 py-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'} lg:flex-row lg:items-start lg:justify-between`}>
                     <div>
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl">{documentTypeConfigs[selectedRecord.documentType]?.icon || config.icon}</span>
+                        <span className="text-2xl">{documentTypeConfigs[selectedRecord.documentType as MainDocumentType]?.icon || config.icon}</span>
                         <div>
-                          <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{documentTypeConfigs[selectedRecord.documentType]?.label || config.label}</p>
+                          <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{documentTypeConfigs[selectedRecord.documentType as MainDocumentType]?.label || config.label}</p>
                           <h3 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{selectedRecord.documentNumber || '-'}</h3>
                         </div>
                       </div>
@@ -1741,7 +1741,7 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
                         onClick={() => void handleEditRecord(selectedRecord)}
                         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                       >
-                        Edit {documentTypeConfigs[selectedRecord.documentType]?.label || config.label}
+                        Edit {documentTypeConfigs[selectedRecord.documentType as MainDocumentType]?.label || config.label}
                       </button>
                     </div>
                   </div>

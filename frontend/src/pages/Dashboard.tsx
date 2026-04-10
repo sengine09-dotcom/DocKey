@@ -340,7 +340,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                       <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
                         {documentsData.receipts.slice(0, 10).map((rec: any, idx: number) => {
                           // Find linked invoice
-                          const linkedInvoice = documentsData.invoices.find(inv => 
+                          const linkedInvoice = documentsData.invoices.find((inv: any) => 
                             inv.documentNumber === rec.referenceNo || 
                             inv.documentNumber === rec.receiptDocument?.linkedInvoiceNumber ||
                             inv.documentNumber === rec.linkedInvoiceNumber

@@ -1,7 +1,23 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
 
-export default function DocumentTable({ documents, onEdit, onDelete, isLoading, darkMode }) {
+interface DocumentRecord {
+  id: string | number;
+  file_name: string;
+  customer_name: string;
+  upload_date: string;
+  status: string;
+}
+
+interface DocumentTableProps {
+  documents: DocumentRecord[];
+  onEdit: (id: string | number) => void;
+  onDelete: (id: string | number) => void;
+  isLoading: boolean;
+  darkMode: boolean;
+}
+
+export default function DocumentTable({ documents, onEdit, onDelete, isLoading, darkMode }: DocumentTableProps) {
   if (isLoading) {
     return (
       <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow overflow-hidden`}>
@@ -22,7 +38,7 @@ export default function DocumentTable({ documents, onEdit, onDelete, isLoading, 
     );
   }
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -44,7 +60,7 @@ export default function DocumentTable({ documents, onEdit, onDelete, isLoading, 
             </tr>
           </thead>
           <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
-            {documents.map((doc) => (
+            {documents.map((doc: DocumentRecord) => (
               <tr key={doc.id} className={`transition-colors ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
                 <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{doc.file_name}</td>
                 <td className={`px-6 py-4 whitespace-nowrap text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{doc.customer_name}</td>
