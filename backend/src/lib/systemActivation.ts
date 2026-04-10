@@ -5,6 +5,7 @@ type SystemActivationRow = {
   id: string;
   adminToken: string;
   adminEmail: string | null;
+  companyId: string | null;
   activatedAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -24,6 +25,7 @@ const createSystemActivationTable = async () => {
       id CHAR(26) NOT NULL,
       adminToken VARCHAR(191) NOT NULL,
       adminEmail VARCHAR(191) NULL,
+      companyId VARCHAR(191) NULL,
       activatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
       updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -60,7 +62,7 @@ export const ensureSystemActivationTableExists = async (force = false) => {
 
 export const getStoredSystemActivation = async () => {
   const rows = await withSystemActivationTable(() => prisma.$queryRawUnsafe<SystemActivationRow[]>(`
-      SELECT id, adminToken, adminEmail, activatedAt, createdAt, updatedAt
+      SELECT id, adminToken, adminEmail, companyId, activatedAt, createdAt, updatedAt
       FROM SystemActivation
       ORDER BY activatedAt DESC
       LIMIT 1
@@ -69,17 +71,18 @@ export const getStoredSystemActivation = async () => {
   return rows[0] || null;
 };
 
-export const saveSystemActivation = async (adminToken: string, adminEmail: string) => {
+export const saveSystemActivation = async (adminToken: string, adminEmail: string, companyId?: string | null) => {
   await withSystemActivationTable(() => prisma.$transaction([
       prisma.$executeRawUnsafe(`DELETE FROM SystemActivation`),
       prisma.$executeRawUnsafe(
         `
-          INSERT INTO SystemActivation (id, adminToken, adminEmail, activatedAt, createdAt, updatedAt)
-          VALUES (?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
+          INSERT INTO SystemActivation (id, adminToken, adminEmail, companyId, activatedAt, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
         `,
         ulid(),
         adminToken,
-        adminEmail || null
+        adminEmail || null,
+        companyId || null
       ),
     ]));
 };

@@ -19,6 +19,7 @@ type AuthenticatedRequest = Request & {
     name: string;
     role: string;
     companyId: string | null;
+    tokenId: string | null;
   };
 };
 
@@ -48,7 +49,7 @@ const requireAdmin = async (req: AuthenticatedRequest, res: Response, next: Next
     const decoded = jwt.verify(token, JWT_SECRET) as AuthTokenPayload;
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, name: true, role: true, companyId: true },
+      select: { id: true, email: true, name: true, role: true, companyId: true, tokenId: true },
     });
 
     if (!user) {
@@ -144,6 +145,7 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
         name,
         role,
         companyId, // always forced to admin's company
+        tokenId: req.currentUser?.tokenId ?? null, // inherit token from admin
       },
       select: {
         id: true,
@@ -151,6 +153,7 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
         name: true,
         role: true,
         companyId: true,
+        tokenId: true,
         createdAt: true,
         updatedAt: true,
       },
