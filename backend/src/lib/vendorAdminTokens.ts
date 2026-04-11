@@ -1,26 +1,6 @@
 // Vendor API base URL
 const vendorApiBaseUrl = (process.env.VENDOR_API_BASE_URL || 'http://localhost:5100/api').replace(/\/$/, '');
 
-const resolveStatusReason = (tokenRow: any | null) => {
-  if (!tokenRow) {
-    return 'not-found';
-  }
-
-  if (!tokenRow.isActive) {
-    return 'disabled';
-  }
-
-  if (tokenRow.usedAt) {
-    return 'used';
-  }
-
-  if (tokenRow.expiresAt && new Date(tokenRow.expiresAt).getTime() <= Date.now()) {
-    return 'expired';
-  }
-
-  return null;
-};
-
 export const getAdminInitTokenStatus = async (token: string) => {
   const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/status?id=${encodeURIComponent(token)}`);
   if (!response.ok) {
@@ -31,13 +11,25 @@ export const getAdminInitTokenStatus = async (token: string) => {
 };
 
 export const consumeAdminInitToken = async (token: string, email: string) => {
-  
   console.log('consumeAdminInitToken', token, email);
 
   const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/consume`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, email }),
+  });
+  if (!response.ok) {
+    return false;
+  }
+  const payload = await response.json();
+  return payload?.success === true;
+};
+
+export const updateAdminInitTokenCompany = async (token: string, companyId: string) => {
+  const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/set-company`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, companyId }),
   });
   if (!response.ok) {
     return false;
@@ -73,9 +65,7 @@ export const getVendorRuntimeTokenStatus = async (token: string) => {
 export const sendVendorRuntimeHeartbeat = async (token: string) => {
   const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/runtime-heartbeat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   });
 
@@ -90,9 +80,7 @@ export const sendVendorRuntimeHeartbeat = async (token: string) => {
 export const sendVendorRuntimeDisconnect = async (token: string) => {
   const response = await fetch(`${vendorApiBaseUrl}/admin-init-tokens/runtime-disconnect`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   });
 
