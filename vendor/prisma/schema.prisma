@@ -19,6 +19,7 @@ model AdminInitToken {
   expiresAt     DateTime?
   usedAt        DateTime?
   usedByEmail   String?  @db.VarChar(191)
+  usedByCompanyId String? @db.VarChar(191)
   lastSeenAt    DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.post('/admin-init-tokens/first-time', AdminInitTokenController.firstTime);
 router.post('/admin-init-tokens/consume', AdminInitTokenController.consume);
+router.post('/admin-init-tokens/set-company', AdminInitTokenController.setCompany);
 router.post('/admin-init-tokens/release', AdminInitTokenController.release);
 router.post('/admin-init-tokens/runtime-disconnect', AdminInitTokenController.disconnect);
 router.post('/admin-init-tokens/runtime-heartbeat', AdminInitTokenController.heartbeat);

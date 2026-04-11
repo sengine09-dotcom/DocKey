@@ -47,6 +47,7 @@ export default function InitAdmin() {
         const response =  await axios.post(`${API_VENDOR_URL}/admin-init-tokens/first-time`,{ token : token } );
         const nextStatus = response.data?.data || { valid: false, reason: 'not-found' };
         setStatus(nextStatus);
+        setForm((prev) => ({ ...prev, email: nextStatus.customerEmail }))
       } catch (statusError: any) {
         setStatus({ valid: false, reason: statusError?.response?.data?.reason || 'not-found' });
         setError(statusError?.response?.data?.message || 'Failed to validate activation link');
@@ -80,6 +81,9 @@ export default function InitAdmin() {
     setIsSubmitting(true);
 
     try {
+      
+      console.log("Check Email : ",form.email);
+
       await axios.post('/api/auth/init-admin/claim', {
         token,
         email: form.email,

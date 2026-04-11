@@ -366,6 +366,27 @@ class AdminInitTokenController {
     }
   }
 
+  static async setCompany(req: Request, res: Response) {
+    try {
+      const token = String(req.body?.token || '').trim();
+      const companyId = String(req.body?.companyId || '').trim();
+      if (!token || !companyId) {
+        return res.status(400).json({ success: false, message: 'Token and companyId are required' });
+      }
+      const tokenRecord = await prisma.adminInitToken.findUnique({ where: { token } });
+      if (!tokenRecord) {
+        return res.status(404).json({ success: false, message: 'Token not found' });
+      }
+      const updated = await prisma.adminInitToken.update({
+        where: { token },
+        data: { usedByCompanyId: companyId, updatedAt: new Date() },
+      });
+      return res.json({ success: true, data: toTokenResponse(updated) });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message || 'Failed to set company' });
+    }
+  }
+
   static async release(req: Request, res: Response) {
     try {
       const token = String(req.body?.token || req.body?.id || '').trim();
@@ -378,7 +399,7 @@ class AdminInitTokenController {
       }
       const updated = await prisma.adminInitToken.update({
         where: { token },
-        data: { usedAt: null, usedByEmail: null, updatedAt: new Date() },
+        data: { usedAt: null, usedByEmail: null, usedByCompanyId: null, updatedAt: new Date() },
       });
       return res.json({ success: true, data: toTokenResponse(updated) });
     } catch (error: any) {

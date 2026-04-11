@@ -49,6 +49,8 @@ model Customer {
   address      String?  @map("Address") @db.Text
   taxId        String?  @map("TaxID") @db.VarChar(50)
   branch       String?  @map("Branch") @db.VarChar(50)
+  fax          String?  @map("Fax") @db.VarChar(50)
+  idTerm       String?  @map("IdTerm") @db.VarChar(50)
   used         String?  @map("Used") @db.VarChar(1)
   companyId    String   @map("CompanyID") @db.VarChar(191)
   createdAt    DateTime @default(now()) @map("CreatedAt")

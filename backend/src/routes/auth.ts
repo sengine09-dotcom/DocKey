@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { ulid } from 'ulid';
 import { prisma } from '../lib/prisma';
 import { ensureUserTableExists } from '../lib/ensureUserTable';
-import { consumeAdminInitToken, getAdminInitTokenStatus, getVendorRuntimeTokenStatus, releaseAdminInitToken, sendVendorRuntimeDisconnect, sendVendorRuntimeHeartbeat } from '../lib/vendorAdminTokens';
+import { consumeAdminInitToken, getAdminInitTokenStatus, getVendorRuntimeTokenStatus, releaseAdminInitToken, sendVendorRuntimeDisconnect, sendVendorRuntimeHeartbeat, updateAdminInitTokenCompany } from '../lib/vendorAdminTokens';
 import { clearSystemActivation, getStoredSystemActivation, saveSystemActivation } from '../lib/systemActivation';
 import { markUserDisconnected, markUserHeartbeat } from '../lib/userPresence';
 
@@ -545,17 +545,6 @@ router.get('/init-admin/status', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Token is required' });
     }
 
-    const existingAdmin = await prisma.user.findFirst({ where: { role: 'admin' } });
-    if (existingAdmin) {
-      return res.json({
-        success: true,
-        data: {
-          valid: false,
-          reason: 'admin-configured',
-        },
-      });
-    }
-
     const status = await getAdminInitTokenStatus(token);
 
     return res.json({
@@ -591,11 +580,6 @@ router.post('/init-admin/claim', async (req: Request, res: Response) => {
 
     if (password.length < 6) {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
-    }
-
-    const existingAdmin = await prisma.user.findFirst({ where: { role: 'admin' } });
-    if (existingAdmin) {
-      return res.status(409).json({ success: false, message: 'Administrator is already configured' });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -652,6 +636,13 @@ router.post('/init-admin/claim', async (req: Request, res: Response) => {
       await releaseAdminInitToken(token);
       await clearSystemActivation();
       throw saveActivationError;
+    }
+
+    // Update vendor token with the confirmed companyId after activation succeeds
+    try {
+      await updateAdminInitTokenCompany(token, company.id);
+    } catch (_updateError) {
+      // Best effort only — activation is already complete
     }
 
     const authToken = jwt.sign({ id: user.id, cid: company.id }, JWT_SECRET, { expiresIn: '7d' });

@@ -26,29 +26,16 @@ const parseString = (value: any) => {
 
 const mapCustomer = (row: any) => ({
   customerCode: row.customerCode || '',
-  agentId: '',
   customerName: row.customerName || '',
   shortName: row.branch || '',
-  registerDate: row.createdAt,
-  registrationNo: '',
   address: row.address || '',
   phone: row.phone || '',
-  fax: '',
+  fax: row.fax || '',
   email: row.email || '',
   contactPerson: row.contactName || '',
-  creditLimit: '',
-  idTerm: '',
-  internalTerm: '',
-  remark: '',
-  used: row.used || 'Y',
-  totalShare: '',
+  idTerm: row.idTerm || '',
   gstId: row.taxId || '',
-  isGuarantee: '',
-  guaranteePrice: '',
-  guaranteeDateStart: null,
-  guaranteeDateEnd: null,
-  year: '',
-  runningNo: '',
+  used: row.used || 'Y',
   updatedAt: row.updatedAt,
 });
 
@@ -161,13 +148,14 @@ const codeConfigs: Record<string, any> = {
     toData: (payload: any) => ({
       customerCode: parseString(payload.customerCode),
       customerName: parseString(payload.customerName) || 'Unnamed Customer',
-      contactName: parseString(payload.contactName),
+      contactName: parseString(payload.contactPerson || payload.contactName),
       phone: parseString(payload.phone),
       email: parseString(payload.email),
       address: parseString(payload.address),
-      taxId: parseString(payload.taxId),
-      branch: parseString(payload.branch),
-      createdAt: parseDate(payload.createdAt),
+      taxId: parseString(payload.gstId || payload.taxId),
+      branch: parseString(payload.shortName || payload.branch),
+      fax: parseString(payload.fax),
+      idTerm: parseString(payload.idTerm),
       used: parseString(payload.used) || 'Y',
     }),
   },
@@ -315,7 +303,7 @@ class CodeController {
       if (COMPANY_SCOPED_TYPES.has(req.params.type)) {
         const ctx = await resolveCompanyContext(req);
         if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
-        extraData = { companyId: ctx.companyId };
+        extraData = { company: { connect: { id: ctx.companyId } } };
       }
 
       const data = { id: ulid(), ...config.toData(req.body), ...extraData };

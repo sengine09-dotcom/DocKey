@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `Customer` ADD COLUMN `Fax` VARCHAR(50) NULL,
+    ADD COLUMN `IdTerm` VARCHAR(50) NULL;
