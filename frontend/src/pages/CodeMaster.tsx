@@ -346,12 +346,14 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   }, []);
 
   const openCreateForm = () => {
+    setError('');
     setEditingId(null);
     setFormValues(config.initialValues);
     setIsFormOpen(true);
   };
 
   const openEditForm = (record: any) => {
+    setError('');
     const nextValues: Record<string, any> = { ...config.initialValues };
     config.fields.forEach((field: any) => {
       const rawValue = record[field.key];
@@ -366,6 +368,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     setIsFormOpen(false);
     setEditingId(null);
     setFormValues(config.initialValues);
+    setError('');
   };
 
   const handleChange = (key: string, value: string) => {
@@ -375,8 +378,20 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const handleSave = async () => {
     const missingRequired = config.fields.find((field: any) => field.required && !String(formValues[field.key] || '').trim());
     if (missingRequired) {
-      setError(`${missingRequired.label} is required`);
+      setError(`กรุณากรอก ${missingRequired.label}`);
       return;
+    }
+
+    // Client-side duplicate check (create only)
+    if (!editingId) {
+      const codeValue = String(formValues[config.idField] || '').trim().toLowerCase();
+      const isDuplicate = records.some(
+        (r) => String(r[config.idField] || '').trim().toLowerCase() === codeValue
+      );
+      if (isDuplicate) {
+        setError(`รหัส "${formValues[config.idField]}" มีอยู่ในระบบแล้ว กรุณาใช้รหัสอื่น`);
+        return;
+      }
     }
 
     try {
@@ -390,7 +405,16 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
       await loadRecords();
       closeForm();
     } catch (saveError: any) {
-      setError(saveError?.response?.data?.message || saveError.message || 'Failed to save code');
+      const serverMsg = saveError?.response?.data?.message || saveError.message || '';
+      // Detect server-side duplicate (P2002) and show in Thai
+      if (
+        serverMsg.toLowerCase().includes('already exists') ||
+        serverMsg.toLowerCase().includes('unique constraint')
+      ) {
+        setError(`รหัส "${formValues[config.idField]}" มีอยู่ในระบบแล้ว กรุณาใช้รหัสอื่น`);
+      } else {
+        setError(serverMsg || 'บันทึกข้อมูลไม่สำเร็จ');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -573,93 +597,126 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
           )}
 
           {isFormOpen && (
-            <div className={`mb-6 rounded-2xl border p-6 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} shadow-sm`}>
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Step 2</p>
-                  <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                    {editingId ? `Edit ${config.title}` : `Add ${config.title}`}
-                  </h2>
-                  <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Maintain code master information for document entry.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium ${darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeForm} />
+              <div className={`relative w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {config.fields.map((field: any) => (
-                  <label
-                    key={field.key}
-                    className={`${field.fullWidth ? 'md:col-span-2' : ''} flex flex-col gap-2 text-sm`}
+                {/* Header */}
+                <div className={`flex items-center justify-between gap-4 px-6 py-5 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <div>
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {config.icon} Code Master
+                    </p>
+                    <h2 className={`mt-1 text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {editingId ? `Edit ${config.title}` : `Add ${config.title}`}
+                    </h2>
+                    <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Maintain code master information for document entry.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeForm}
+                    className={`rounded-full w-9 h-9 flex items-center justify-center text-lg font-bold transition-colors ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                    aria-label="Close"
                   >
-                    <span className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                      {field.label}
-                    </span>
+                    ×
+                  </button>
+                </div>
 
-                    {field.type === 'textarea' ? (
-                      <textarea
-                        rows={3}
-                        value={formValues[field.key] ?? ''}
-                        onChange={(e) => handleChange(field.key, e.target.value)}
-                        className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-600 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
-                      />
-                    ) : field.type === 'select' ? (
-                      <select
-                        value={formValues[field.key] ?? ''}
-                        onChange={(e) => handleChange(field.key, e.target.value)}
-                        className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-600 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
+                {/* Body */}
+                <div className="px-6 py-5 overflow-y-auto flex-1">
+                  {error && (
+                    <div className={`mb-4 flex items-start gap-2 rounded-xl border px-4 py-3 text-sm font-medium ${darkMode ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-red-300 bg-red-50 text-red-700'}`}>
+                      <span className="mt-0.5 shrink-0">⚠️</span>
+                      <span>{error}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {config.fields.map((field: any) => (
+                      <label
+                        key={field.key}
+                        className={`${field.fullWidth ? 'md:col-span-2' : ''} flex flex-col gap-2 text-sm`}
                       >
-                        {field.loadOptionsFrom === 'paymentTerm' ? (
-                          isLoadingTerms ? (
-                            <option value="">Loading payment terms...</option>
-                          ) : (
-                            <>
-                              <option value="">— Select payment term —</option>
-                              {paymentTermOptions.map((option) => (
+                        <span className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                          {field.label}{field.required && <span className="ml-1 text-red-400">*</span>}
+                        </span>
+
+                        {field.type === 'textarea' ? (
+                          <textarea
+                            rows={3}
+                            value={formValues[field.key] ?? ''}
+                            onChange={(e) => handleChange(field.key, e.target.value)}
+                            className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-600 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
+                          />
+                        ) : field.type === 'select' ? (
+                          <select
+                            value={formValues[field.key] ?? ''}
+                            onChange={(e) => handleChange(field.key, e.target.value)}
+                            className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-600 bg-gray-900 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
+                          >
+                            {field.loadOptionsFrom === 'paymentTerm' ? (
+                              isLoadingTerms ? (
+                                <option value="">Loading payment terms...</option>
+                              ) : (
+                                <>
+                                  <option value="">— Select payment term —</option>
+                                  {paymentTermOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </>
+                              )
+                            ) : (
+                              (field.options || []).map((option: any) => (
                                 <option key={option.value} value={option.value}>
                                   {option.label}
                                 </option>
-                              ))}
-                            </>
-                          )
+                              ))
+                            )}
+                          </select>
                         ) : (
-                          (field.options || []).map((option: any) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))
+                          <input
+                            type={field.type || 'text'}
+                            step={field.step}
+                            value={formValues[field.key] ?? ''}
+                            disabled={Boolean(editingId && field.key === config.idField)}
+                            onChange={(e) => { handleChange(field.key, e.target.value); if (field.key === config.idField) setError(''); }}
+                            className={`rounded-lg border px-4 py-3 ${
+                              !editingId && field.key === config.idField && error.includes('รหัส')
+                                ? 'border-red-500 ring-1 ring-red-500 ' + (darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900')
+                                : darkMode
+                                ? 'border-gray-600 bg-gray-900 text-white disabled:bg-gray-800 disabled:text-gray-500'
+                                : 'border-gray-300 bg-white text-gray-900 disabled:bg-gray-100 disabled:text-gray-500'
+                            }`}
+                          />
                         )}
-                      </select>
-                    ) : (
-                      <input
-                        type={field.type || 'text'}
-                        step={field.step}
-                        value={formValues[field.key] ?? ''}
-                        disabled={Boolean(editingId && field.key === config.idField)}
-                        onChange={(e) => handleChange(field.key, e.target.value)}
-                        className={`rounded-lg border px-4 py-3 ${darkMode ? 'border-gray-600 bg-gray-900 text-white disabled:bg-gray-800 disabled:text-gray-500' : 'border-gray-300 bg-white text-gray-900 disabled:bg-gray-100 disabled:text-gray-500'}`}
-                      />
-                    )}
-                  </label>
-                ))}
-              </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="mt-6 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
-                >
-                  {isSaving ? 'Saving...' : 'Save Changes'}
-                </button>
+                {/* Footer */}
+                <div className={`flex items-center justify-end gap-3 px-6 py-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <button
+                    type="button"
+                    onClick={closeForm}
+                    disabled={isSaving}
+                    className={`rounded-lg px-5 py-2.5 text-sm font-medium transition-colors ${darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+                  >
+                    {isSaving ? 'Saving...' : editingId ? 'Save Changes' : 'Create'}
+                  </button>
+                </div>
+
               </div>
             </div>
           )}
