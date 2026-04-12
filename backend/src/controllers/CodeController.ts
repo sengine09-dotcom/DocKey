@@ -3,10 +3,6 @@ import { ulid } from 'ulid';
 import { prisma } from '../lib/prisma';
 import { resolveCompanyContext } from '../lib/companyContext';
 
-const parseDate = (value: any) => {
-  if (!value) return null;
-  return new Date(value);
-};
 
 const parseNumber = (value: any) => {
   if (value === '' || value == null) return null;
@@ -257,6 +253,20 @@ const isMissingCompanyTableError = (error: any) => {
   return message.includes('The table `Company` does not exist in the current database');
 };
 
+// Returns a user-friendly message for known Prisma errors, or null for unknown ones
+const prismaErrorMessage = (error: any): string | null => {
+  const code = error?.code;
+  if (code === 'P2002') {
+    // Unique constraint violation
+    return 'A record with this code already exists. Please use a different code.';
+  }
+  if (code === 'P2025') {
+    // Record not found (update/delete on non-existent row)
+    return 'Record not found.';
+  }
+  return null;
+};
+
 class CodeController {
   static async getAll(req: Request, res: Response) {
     try {
@@ -321,6 +331,10 @@ class CodeController {
           message: 'Company table is not initialized yet. Please run Prisma migration before saving Company Info.',
         });
       }
+      const knownMessage = prismaErrorMessage(error);
+      if (knownMessage) {
+        return res.status(400).json({ success: false, message: knownMessage });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   }
@@ -369,6 +383,10 @@ class CodeController {
           message: 'Company table is not initialized yet. Please run Prisma migration before updating Company Info.',
         });
       }
+      const knownMessage = prismaErrorMessage(error);
+      if (knownMessage) {
+        return res.status(400).json({ success: false, message: knownMessage });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   }
@@ -411,6 +429,10 @@ class CodeController {
           success: false,
           message: 'Company table is not initialized yet. Please run Prisma migration before deleting Company Info.',
         });
+      }
+      const knownMessage = prismaErrorMessage(error);
+      if (knownMessage) {
+        return res.status(400).json({ success: false, message: knownMessage });
       }
       res.status(500).json({ success: false, message: error.message });
     }

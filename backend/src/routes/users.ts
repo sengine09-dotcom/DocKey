@@ -68,7 +68,12 @@ const requireAdmin = async (req: AuthenticatedRequest, res: Response, next: Next
 };
 
 const countAdmins = async (companyId: string) =>
-  prisma.user.count({ where: { role: 'admin', companyId } });
+  prisma.user.count({
+    where: {
+      role: 'admin',
+      OR: [{ companyId }, { companyId: null }],
+    },
+  });
 
 router.use(requireAdmin);
 
@@ -80,7 +85,6 @@ router.get('/users', async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const users = await prisma.user.findMany({
-      where: { companyId },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -192,8 +196,10 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
     }
 
-    // Ensure the target user belongs to admin's company
-    const existingUser = await prisma.user.findFirst({ where: { id, companyId } });
+    // Ensure the target user belongs to admin's company (or is a legacy user with no company)
+    const existingUser = await prisma.user.findFirst({
+      where: { id, OR: [{ companyId }, { companyId: null }] },
+    });
     if (!existingUser) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -256,8 +262,10 @@ router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => 
       return res.status(400).json({ success: false, message: 'User id is required' });
     }
 
-    // Ensure the target user belongs to admin's company
-    const existingUser = await prisma.user.findFirst({ where: { id, companyId } });
+    // Ensure the target user belongs to admin's company (or is a legacy user with no company)
+    const existingUser = await prisma.user.findFirst({
+      where: { id, OR: [{ companyId }, { companyId: null }] },
+    });
     if (!existingUser) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
