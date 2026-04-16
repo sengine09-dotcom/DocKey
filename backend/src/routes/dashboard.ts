@@ -48,7 +48,7 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
     console.log('[DEBUG] Dashboard metrics API called');
 
     // Fetch all documents scoped by company
-    const [quotations, invoices, receipts, purchaseOrders] = await Promise.all([
+    const [quotations, invoices, receipts, depositReceipts, purchaseOrders] = await Promise.all([
       prisma.document.findMany({
         where: { companyId: ctx.companyId, documentType: 'QUOTATION' },
         include: {
@@ -71,6 +71,13 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
         }
       }),
       prisma.document.findMany({
+        where: { companyId: ctx.companyId, documentType: 'DEPOSIT_RECEIPT' },
+        include: {
+          depositReceiptDocument: true,
+          items: true
+        }
+      }),
+      prisma.document.findMany({
         where: { companyId: ctx.companyId, documentType: 'PURCHASE_ORDER' },
         include: {
           purchaseOrderDocument: true,
@@ -79,10 +86,11 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
       })
     ]);
 
-    const [quotationsWithCustomerNames, invoicesWithCustomerNames, receiptsWithCustomerNames, purchaseOrdersWithCustomerNames] = await Promise.all([
+    const [quotationsWithCustomerNames, invoicesWithCustomerNames, receiptsWithCustomerNames, depositReceiptsWithCustomerNames, purchaseOrdersWithCustomerNames] = await Promise.all([
       attachCustomerNames(quotations, ctx.companyId),
       attachCustomerNames(invoices, ctx.companyId),
       attachCustomerNames(receipts, ctx.companyId),
+      attachCustomerNames(depositReceipts, ctx.companyId),
       attachCustomerNames(purchaseOrders, ctx.companyId),
     ]);
 
@@ -90,6 +98,7 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
       quotations: quotationsWithCustomerNames.length,
       invoices: invoicesWithCustomerNames.length,
       receipts: receiptsWithCustomerNames.length,
+      depositReceipts: depositReceiptsWithCustomerNames.length,
       purchaseOrders: purchaseOrdersWithCustomerNames.length
     });
 
@@ -186,10 +195,11 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
 
     // 5. Document counts
     const documentCounts = {
-      total: quotationsWithCustomerNames.length + invoicesWithCustomerNames.length + receiptsWithCustomerNames.length + purchaseOrdersWithCustomerNames.length,
+      total: quotationsWithCustomerNames.length + invoicesWithCustomerNames.length + receiptsWithCustomerNames.length + depositReceiptsWithCustomerNames.length + purchaseOrdersWithCustomerNames.length,
       quotations: quotationsWithCustomerNames.length,
       invoices: invoicesWithCustomerNames.length,
       receipts: receiptsWithCustomerNames.length,
+      depositReceipts: depositReceiptsWithCustomerNames.length,
       purchaseOrders: purchaseOrdersWithCustomerNames.length
     };
 
@@ -211,6 +221,7 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
           quotations: quotationsWithCustomerNames,
           invoices: invoicesWithCustomerNames,
           receipts: receiptsWithCustomerNames,
+          depositReceipts: depositReceiptsWithCustomerNames,
           purchaseOrders: purchaseOrdersWithCustomerNames
         }
       }

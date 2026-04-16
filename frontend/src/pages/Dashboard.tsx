@@ -76,8 +76,20 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
     quotations: [],
     invoices: [],
     receipts: [],
+    depositReceipts: [],
     purchaseOrders: []
   };
+
+  // Build a map: quotation documentNumber => deposit receipt (if exists)
+  const depositReceiptByQuotationNumber = new Map(
+    (documentsData.depositReceipts || []).filter((dr: any) => {
+      const linkedQN = dr.depositReceiptDocument?.linkedQuotationNumber || dr.referenceNo || '';
+      return String(linkedQN).trim();
+    }).map((dr: any) => {
+      const linkedQN = String(dr.depositReceiptDocument?.linkedQuotationNumber || dr.referenceNo || '').trim();
+      return [linkedQN, dr];
+    })
+  ) as Map<string, any>;
 
   const linkedInvoiceNumbersFromQuotations = new Set(
     documentsData.quotations
@@ -398,12 +410,22 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                           <th className="px-6 py-3 text-left">Valid Until</th>
                           <th className="px-6 py-3 text-right">Total Amount</th>
                           <th className="px-6 py-3 text-right">กำไร</th>
+                          <th className="px-6 py-3 text-center">มัดจำ</th>
+                          <th className="px-6 py-3 text-right">Deposit Amount</th>
                           <th className="px-6 py-3 text-center">Status</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
                         {documentsData.quotations.slice(0, 10).map((quot: any, idx: number) => {
-                          const profit = Number(quot.totalSellingPrice || quot.total || quot.totalAmount || 0) - Number(quot.totalCost || 0);
+                          const quotTotal = Number(quot.totalSellingPrice || quot.total || quot.totalAmount || 0);
+                          const profit = quotTotal - Number(quot.totalCost || 0);
+                          const quotNumber = String(quot.documentNumber || '').trim();
+                          const depositReceipt = depositReceiptByQuotationNumber.get(quotNumber);
+                          const hasDeposit = Boolean(depositReceipt);
+                          const depositAmount = hasDeposit ? Number(depositReceipt.depositReceiptDocument?.paymentAmount || depositReceipt.totalSellingPrice || 0) : 0;
+                          const remaining = quotTotal - depositAmount;
+                          const isPaidFull = hasDeposit && remaining <= 0.01;
+                          const isPartial = hasDeposit && !isPaidFull;
                           return (
                             <tr key={quot.documentId || quot.id || quot.documentNumber || idx} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'} transition-colors`}>
                               <td className={`px-6 py-3 font-mono font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{quot.documentNumber || '-'}</td>
@@ -412,10 +434,41 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                                 {quot.quotationDocument?.validUntil ? new Date(quot.quotationDocument.validUntil).toLocaleDateString('en-GB') : '-'}
                               </td>
                               <td className={`px-6 py-3 text-right font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                                ฿{Number(quot.totalSellingPrice || quot.total || quot.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ฿{quotTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className={`px-6 py-3 text-right font-medium ${profit >= 0 ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-red-300' : 'text-red-700')}`}>
                                 ฿{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-6 py-3 text-center">
+                                {isPaidFull ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-600" title={`DR: ${depositReceipt.documentNumber || ''}`}>
+                                    ✅ จ่ายครบ
+                                  </span>
+                                ) : isPartial ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-600" title={`DR: ${depositReceipt.documentNumber || ''} | ค้าง ฿${remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}>
+                                    ⚠️ จ่ายบางส่วน
+                                  </span>
+                                ) : (
+                                  <span className={`inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full ${darkMode ? 'bg-gray-600/30 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>
+                                    — ยังไม่จ่าย
+                                  </span>
+                                )}
+                              </td>
+                              <td className={`px-6 py-3 text-right ${hasDeposit ? '' : ''}`}>
+                                {hasDeposit ? (
+                                  <div>
+                                    <span className={`font-medium ${isPaidFull ? (darkMode ? 'text-emerald-300' : 'text-emerald-700') : (darkMode ? 'text-amber-300' : 'text-amber-700')}`}>
+                                      ฿{depositAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                    {isPartial ? (
+                                      <div className={`text-[11px] mt-0.5 ${darkMode ? 'text-red-400' : 'text-red-500'}`}>
+                                        ค้าง ฿{remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <span className={`${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>-</span>
+                                )}
                               </td>
                               <td className="px-6 py-3 text-center">
                                 <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${

@@ -29,6 +29,7 @@ const pageConfigs: Record<string, any> = {
     columns: [
       { key: 'customerCode', label: 'Code' },
       { key: 'customerName', label: 'Customer Name' },
+      { key: 'idTerm', label: 'Payment Term' },
       { key: 'contactPerson', label: 'Contact Person' },
       { key: 'phone', label: 'Phone' },
       { key: 'used', label: 'Status', type: 'status' },
@@ -320,7 +321,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
         terms.map((t: any) => ({ value: t.termId, label: `${t.termId} - ${t.termName || t.shortName || t.termId}` }))
       );
     }).catch(() => {}).finally(() => setIsLoadingTerms(false));
-  }, []);
+  }, [currentPage]);
 
   // Fetch all code counts for summary cards
   useEffect(() => {

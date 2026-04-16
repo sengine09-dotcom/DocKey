@@ -9,6 +9,7 @@ import invoiceRoutes from './routes/invoices';
 import codeRoutes from './routes/codes';
 import userRoutes from './routes/users';
 import dashboardRoutes from './routes/dashboard';
+import uploadRoutes from './routes/upload';
 
 dotenv.config();
 
@@ -28,11 +29,15 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/upload', uploadRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', invoiceRoutes);
 app.use('/api', codeRoutes);
 app.use('/api', userRoutes);
 app.use('/api', dashboardRoutes);
+
+import path from 'path';
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {

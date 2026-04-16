@@ -179,7 +179,7 @@ const codeConfigs: Record<string, any> = {
     orderBy: { destinationCode: 'asc' },
     mapRecord: mapDestination,
     toData: (payload: any) => ({
-      destinationCode: parseString(payload.destinationCode),
+      destinationCode: parseString(payload.destinationCode || payload.destId),
       destination: parseString(payload.destination),
       location: parseString(payload.location),
       used: parseString(payload.used) || 'Y',

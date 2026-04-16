@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 import documentService from '../../services/documentService';
@@ -126,12 +126,41 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   const [user, setUser] = useState({
     name: 'User',
     email: 'No email',
-    avatar: '👤',
+    avatarUrl: null as string | null,
     role: 'User',
     companyId: null as string | null,
   });
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      // Upload to receive unique URL
+      const uploadRes = await axios.post('/api/upload/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const newAvatarUrl = uploadRes.data.url;
+
+      // Update backend DB
+      const updateRes = await axios.patch('/api/auth/me', { avatarUrl: newAvatarUrl });
+      
+      // Update local state instantly
+      setUser(prev => ({ ...prev, avatarUrl: updateRes.data.user.avatarUrl }));
+    } catch (error) {
+      console.error(error);
+      void showAppAlert({ title: 'Upload Failed', message: 'Failed to upload profile picture.', tone: 'error' });
+    }
+  };
   const [tokenExpiry, setTokenExpiry] = useState<TokenExpirySummary | null>(() => readLatestTokenExpiryCache());
   const [companyModalOpen, setCompanyModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [companyForm, setCompanyForm] = useState<Record<string, any>>(createEmptyCompanyForm());
   const [editingCompanyCode, setEditingCompanyCode] = useState<string | null>(null);
   const [isCompanyEditMode, setIsCompanyEditMode] = useState(false);
@@ -151,7 +180,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
           setUser({
             name: profile.name || 'User',
             email: profile.email || 'No email',
-            avatar: '👤',
+            avatarUrl: profile.avatarUrl || null,
             role: profile.role || 'User',
             companyId: profile.companyId ?? null,
           });
@@ -710,10 +739,10 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   : 'hover:bg-gray-100 text-gray-900'
               }`}
             >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center overflow-hidden text-lg font-bold ${
                 darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-900'
               }`}>
-                {user.avatar}
+                {user.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : '👤'}
               </div>
               <div className="text-left hidden sm:block">
                 <p className={`font-medium text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
@@ -746,7 +775,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   href="#profile"
                   onClick={(e) => {
                     e.preventDefault();
-                    void showAppAlert({ title: 'Coming Soon', message: 'Profile page is coming soon.', tone: 'info' });
+                    setShowUserMenu(false);
+                    setProfileModalOpen(true);
                   }}
                   className={`block px-4 py-2 text-sm transition-colors ${
                     darkMode
@@ -1047,6 +1077,129 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                         {isSavingCompany ? 'Saving...' : 'Save Changes'}
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {profileModalOpen ? (
+          <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/60 px-4 py-8 backdrop-blur-sm transition-all duration-300">
+            <div className="flex min-h-full items-center justify-center">
+              <div className={`relative w-full max-w-md overflow-hidden rounded-[2rem] border shadow-2xl transition-all ${darkMode ? 'border-gray-700 bg-gray-900 shadow-blue-900/20' : 'border-gray-200 bg-white shadow-blue-500/10'}`}>
+                
+                {/* Header Background */}
+                <div className="h-32 w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative overflow-hidden">
+                   <div className="absolute top-0 left-0 w-full h-full bg-white/10 [mask-image:linear-gradient(to_bottom,white,transparent)]" />
+                   {/* Decorative circles */}
+                   <div className="absolute -top-12 -right-12 w-40 h-40 bg-white/20 rounded-full blur-2xl transition-transform hover:scale-110 duration-700" />
+                   <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-black/20 rounded-full blur-xl" />
+
+                   <button
+                     type="button"
+                     onClick={() => setProfileModalOpen(false)}
+                     className="absolute top-4 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/20 text-white hover:bg-black/40 hover:rotate-90 transition-all duration-300 backdrop-blur-md"
+                     aria-label="Close Profile Modal"
+                   >
+                     ✕
+                   </button>
+                </div>
+
+                {/* Profile Content */}
+                <div className="px-8 pb-8">
+                  {/* Avatar section */}
+                  <div className="relative -mt-16 flex justify-center">
+                    <button 
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`group relative flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border-[6px] text-6xl shadow-xl transition-all duration-500 hover:scale-105 hover:shadow-2xl hover:border-blue-400 cursor-pointer ${darkMode ? 'border-gray-900 bg-gradient-to-br from-gray-800 to-gray-700 text-blue-200' : 'border-white bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600'}`}>
+                      {user.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : '👤'}
+                      <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-white text-sm font-bold mt-2">📷 Upload</span>
+                      </div>
+                    </button>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                  </div>
+
+                  {/* Info section */}
+                  <div className="mt-5 text-center space-y-1">
+                    <h2 className={`text-2xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {user.name}
+                    </h2>
+                    <p className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-blue-900/30 text-blue-300 border border-blue-800' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
+                      {user.role || 'User'}
+                    </p>
+                  </div>
+
+                  {/* Details grid */}
+                  <div className={`mt-8 rounded-3xl p-5 border transition-colors ${darkMode ? 'bg-gray-800/40 border-gray-700/50 hover:bg-gray-800/60' : 'bg-gray-50/80 border-gray-100 hover:bg-gray-50'}`}>
+                    <div className="space-y-5">
+                      <div className="flex items-center gap-4 group">
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br transition-transform group-hover:scale-110 duration-300 ${darkMode ? 'from-gray-700 to-gray-800 text-gray-300' : 'from-white to-gray-100 text-gray-600 shadow-sm'}`}>
+                          📧
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <p className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Email Address</p>
+                          <p className={`truncate text-sm font-medium mt-0.5 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{user.email}</p>
+                        </div>
+                      </div>
+
+                      <div className={`h-px w-full ${darkMode ? 'bg-gray-700/50' : 'bg-gray-200/50'}`}></div>
+
+                      <div className="flex items-center gap-4 group">
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br transition-transform group-hover:scale-110 duration-300 ${darkMode ? 'from-gray-700 to-gray-800 text-gray-300' : 'from-white to-gray-100 text-gray-600 shadow-sm'}`}>
+                          🏢
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <p className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Organization</p>
+                          <p className={`truncate text-sm font-medium mt-0.5 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                            {user.companyId || 'Independent User'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className={`h-px w-full ${darkMode ? 'bg-gray-700/50' : 'bg-gray-200/50'}`}></div>
+
+                       <div className="flex items-center gap-4 group">
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br transition-transform group-hover:scale-110 duration-300 ${darkMode ? 'from-gray-700 to-gray-800 text-gray-300' : 'from-white to-gray-100 text-gray-600 shadow-sm'}`}>
+                           🛡️
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <p className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>System Status</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
+                            <p className={`text-sm font-medium leading-none ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>Active</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex gap-3">
+                     <button
+                       type="button"
+                       onClick={() => {
+                          setProfileModalOpen(false);
+                          void showAppAlert({ title: 'Edit Profile Coming Soon', message: 'You will be able to edit your profile here.', tone: 'info' });
+                       }}
+                       className={`flex-1 rounded-2xl px-5 py-3.5 text-sm font-semibold transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 ${darkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-900/20' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20'}`}
+                     >
+                       Edit Profile
+                     </button>
+                     <button
+                       type="button"
+                       onClick={async () => {
+                         try {
+                           await axios.post('/api/auth/logout');
+                         } catch (_error) {
+                         }
+                         window.location.href = '/login';
+                       }}
+                       className={`rounded-2xl px-5 py-3.5 text-sm font-semibold border transition-all duration-300 hover:shadow-md ${darkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
+                     >
+                       Logout
+                     </button>
                   </div>
                 </div>
               </div>

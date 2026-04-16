@@ -31,6 +31,7 @@ model User {
   role      String   @default("user") @map("Role") @db.VarChar(50)
   companyId String?  @map("CompanyID") @db.VarChar(191)
   tokenId   String?  @map("TokenID") @db.VarChar(191)
+  avatarUrl String?  @map("AvatarUrl") @db.VarChar(500)
   createdAt DateTime @default(now()) @map("CreatedAt")
   updatedAt DateTime @updatedAt @map("UpdatedAt")
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull, onUpdate: Cascade)

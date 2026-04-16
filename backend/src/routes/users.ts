@@ -75,7 +75,7 @@ const countAdmins = async (companyId: string) =>
     },
   });
 
-router.use(requireAdmin);
+router.use('/users', requireAdmin);
 
 router.get('/users', async (req: AuthenticatedRequest, res: Response) => {
   try {

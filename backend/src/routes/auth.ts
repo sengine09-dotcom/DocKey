@@ -59,7 +59,7 @@ const findAuthenticatedUser = async (token: string) => {
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.id },
-    select: { id: true, email: true, name: true, role: true, companyId: true, tokenId: true },
+    select: { id: true, email: true, name: true, role: true, companyId: true, tokenId: true, avatarUrl: true },
   });
 
   return user;
@@ -334,7 +334,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId ?? null },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId ?? null, avatarUrl: user.avatarUrl ?? null },
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -379,7 +379,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId ?? null },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, companyId: user.companyId ?? null, avatarUrl: user.avatarUrl ?? null },
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -400,6 +400,44 @@ router.post('/logout', async (req: Request, res: Response) => {
 
   clearAuthCookie(res);
   res.json({ success: true, message: 'Logged out successfully' });
+});
+
+router.patch('/me', async (req: Request, res: Response) => {
+  try {
+    const activationState = await getDocKeyActivationState();
+    if (!activationState.activated) {
+      return res.status(403).json({ success: false, message: 'DocKey license is inactive', reason: activationState.reason });
+    }
+
+    const token = getTokenFromRequest(req);
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as AuthTokenPayload;
+
+    const { name, avatarUrl } = req.body;
+    
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (avatarUrl !== undefined) updateData.avatarUrl = String(avatarUrl);
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid data provided for update' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: decoded.id },
+      data: updateData,
+      select: { id: true, email: true, name: true, role: true, companyId: true, avatarUrl: true },
+    });
+
+    markUserHeartbeat(updatedUser.id);
+
+    return res.json({ success: true, user: updatedUser });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message || 'Update failed' });
+  }
 });
 
 router.post('/user-presence/heartbeat', async (req: Request, res: Response) => {
