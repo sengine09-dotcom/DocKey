@@ -47,7 +47,9 @@ const documentInclude = {
   invoiceDocument: true,
   receiptDocument: true,
   depositReceiptDocument: true,
-  purchaseOrderDocument: true,
+  purchaseOrderDocument: {
+    orderBy: { lineNo: 'asc' as const },
+  },
   workOrderDocument: true,
 };
 
@@ -133,7 +135,7 @@ const buildFallbackDocumentNumber = async (type: MainDocumentType, companyId: st
 
 const buildStatusColor = (status: string) => {
   const normalized = String(status || '').toLowerCase();
-  if (['paid', 'printed', 'received', 'completed', 'confirmed', 'approved', 'won', 'converted'].includes(normalized)) return 'green';
+  if (['paid', 'printed', 'received', 'completed', 'confirmed', 'approved', 'won', 'converted', 'ordered'].includes(normalized)) return 'green';
   if (['overdue', 'cancelled', 'rejected', 'expired', 'lost'].includes(normalized)) return 'red';
   if (['sent', 'open', 'scheduled', 'negotiating', 'follow up', 'waiting customer'].includes(normalized)) return 'blue';
   return 'yellow';
@@ -151,6 +153,21 @@ const buildInvoiceStatusOnline = (status: string | null | undefined) => {
   if (normalized === 'overdue') return 3;
   return 1;
 };
+
+const mapBreakdownItem = (item: any, productNameMap: Record<string, string> = {}) => ({
+  lineNo: item.lineNo,
+  productCode: item.productCode || '',
+  productName: productNameMap[String(item.productCode || '').trim()] || '',
+  quantity: toNumber(item.quantity).toFixed(2),
+  margin: '0.00',
+  cost: toNumber(item.cost).toFixed(2),
+  sellingPrice: toNumber(item.cost).toFixed(2),
+  totalCost: toNumber(item.totalCost).toFixed(2),
+  totalSellingPrice: toNumber(item.totalCost).toFixed(2),
+  unitID: item.unitId || 'x',
+  sourceQuotationId: item.sourceQuotationId || '',
+  sourceQuotationNumber: item.sourceQuotationNumber || '',
+});
 
 const mapDocumentItem = (item: any, productNameMap: Record<string, string> = {}) => ({
   lineNo: item.lineNo,
@@ -197,7 +214,10 @@ const buildCustomerNameMap = async (documents: any[], companyId: string) => {
 const buildProductNameMap = async (documents: any[], companyId: string) => {
   const productCodes = Array.from(new Set(
     documents
-      .flatMap((document) => Array.isArray(document?.items) ? document.items : [])
+      .flatMap((document) => [
+        ...(Array.isArray(document?.items) ? document.items : []),
+        ...(Array.isArray(document?.purchaseOrderDocument) ? document.purchaseOrderDocument : []),
+      ])
       .map((item) => String(item?.productCode || '').trim())
       .filter(Boolean)
   ));
@@ -307,11 +327,16 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
   }
 
   if (documentType === 'purchase_order') {
+    const poLines: any[] = Array.isArray(document.purchaseOrderDocument) ? document.purchaseOrderDocument : [];
+    const splitItems = poLines.map((line: any) => mapBreakdownItem(line, productNameMap));
+    const firstLine = poLines[0] || {};
     return {
       ...baseRecord,
-      vendorCode: document.purchaseOrderDocument?.vendorCode || '',
-      supplierName: document.purchaseOrderDocument?.supplierName || '',
-      deliveryDate: document.purchaseOrderDocument?.deliveryDate || null,
+      // baseRecord.items = aggregated DocumentItem (for view mode)
+      splitItems, // PurchaseOrderDocument split lines (for edit mode)
+      vendorCode: firstLine.vendorCode || '',
+      supplierName: firstLine.supplierName || '',
+      deliveryDate: firstLine.deliveryDate || null,
     };
   }
 
@@ -345,7 +370,26 @@ const fetchDocumentRecord = async (type: MainDocumentType, identifier: string, c
   }
   const customerNameMap = await buildCustomerNameMap([document], companyId);
   const productNameMap = await buildProductNameMap([document], companyId);
-  return mapDocumentRecord(document, customerNameMap, productNameMap);
+  const record = mapDocumentRecord(document, customerNameMap, productNameMap) as any;
+
+  if (type === 'quotation') {
+    const linkedPOLines = await prisma.purchaseOrderDocument.findMany({
+      where: { sourceQuotationId: document.id },
+      select: {
+        documentId: true,
+        document: { select: { id: true, documentNumber: true } },
+      },
+      distinct: ['documentId'],
+    });
+    record.linkedPurchaseOrders = linkedPOLines
+      .filter((line) => line.document)
+      .map((line) => ({
+        documentId: line.document!.id,
+        documentNumber: line.document!.documentNumber,
+      }));
+  }
+
+  return record;
 };
 
 const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: string, documentNumber: string) => {
@@ -424,25 +468,6 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         paymentType: parseString(header.paymentType),
         linkedQuotationId: parseString(header.linkedQuotationId),
         linkedQuotationNumber: parseString(header.linkedQuotationNumber),
-      },
-    });
-  }
-
-  if (type === 'purchase_order') {
-    return prisma.purchaseOrderDocument.upsert({
-      where: { id: documentId },
-      create: {
-        id: documentId,
-        documentNumber,
-        vendorCode: parseString(header.vendorCode),
-        supplierName: parseString(header.supplierName),
-        deliveryDate: parseDate(header.deliveryDate),
-      },
-      update: {
-        documentNumber,
-        vendorCode: parseString(header.vendorCode),
-        supplierName: parseString(header.supplierName),
-        deliveryDate: parseDate(header.deliveryDate),
       },
     });
   }
@@ -717,7 +742,96 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     });
   }
   
-  if (validItems.length > 0) {
+  if (type === 'purchase_order') {
+    // Save split lines (one per quotation source) to PurchaseOrderDocument
+    await prisma.purchaseOrderDocument.deleteMany({ where: { documentId } });
+
+    if (validItems.length > 0) {
+      const vendorCode = parseString(header.vendorCode);
+      const supplierName = parseString(header.supplierName);
+      const deliveryDate = parseDate(header.deliveryDate);
+
+      await prisma.purchaseOrderDocument.createMany({
+        data: validItems.map((item: any, index: number) => ({
+          id: ulid(),
+          documentId,
+          documentNumber,
+          lineNo: index + 1,
+          productCode: existingProductCodeSet.has(String(parseString(item.productCode) || ''))
+            ? parseString(item.productCode)
+            : null,
+          quantity: toNumber(item.quantity),
+          cost: parseNullableNumber(item.cost),
+          totalCost: parseNullableNumber(item.totalCost) ?? (toNumber(item.quantity) * toNumber(item.cost)),
+          unitId: parseString(item.unitId),
+          sourceQuotationId: parseString(item.sourceQuotationId),
+          sourceQuotationNumber: parseString(item.sourceQuotationNumber),
+          vendorCode,
+          supplierName,
+          deliveryDate,
+        })),
+      });
+
+      // Aggregate by productCode (weighted average cost) for DocumentItem
+      const grouped = new Map<string, { qty: number; costSum: number; unitId: string }>();
+      for (const item of validItems) {
+        const code = parseString(item.productCode) || '__nocode__';
+        const qty = toNumber(item.quantity);
+        const cost = toNumber(item.cost);
+        const entry = grouped.get(code);
+        if (entry) {
+          entry.qty += qty;
+          entry.costSum += cost * qty;
+        } else {
+          grouped.set(code, { qty, costSum: cost * qty, unitId: parseString(item.unitId) || '' });
+        }
+      }
+
+      await prisma.documentItem.createMany({
+        data: Array.from(grouped.entries()).map(([code, agg], index) => {
+          const avgCost = agg.qty > 0 ? agg.costSum / agg.qty : 0;
+          const resolvedCode = code === '__nocode__' ? null
+            : existingProductCodeSet.has(code) ? code : null;
+          return {
+            id: ulid(),
+            documentId,
+            documentNumber,
+            documentType: getPrismaDocumentType(type),
+            lineNo: index + 1,
+            productCode: resolvedCode,
+            cost: avgCost,
+            quantity: agg.qty,
+            margin: null,
+            sellingPrice: avgCost,
+            totalCost: agg.costSum,
+            totalSellingPrice: agg.costSum,
+            unitId: agg.unitId || null,
+          };
+        }),
+      });
+      console.log('[DEBUG] PO split lines and aggregated DocumentItems created');
+
+      // Update referenced quotations to 'Ordered'
+      const linkedQuotationIds = [
+        ...new Set(
+          validItems
+            .map((item: any) => parseString(item.sourceQuotationId))
+            .filter(Boolean) as string[]
+        ),
+      ];
+      if (linkedQuotationIds.length > 0) {
+        await prisma.document.updateMany({
+          where: {
+            companyId,
+            documentType: DOCUMENT_TYPE_MAP.quotation,
+            id: { in: linkedQuotationIds },
+          },
+          data: { status: 'Ordered' },
+        });
+        console.log('[DEBUG] Updated quotation(s) to Ordered:', linkedQuotationIds);
+      }
+    }
+  } else if (validItems.length > 0) {
     console.log('[DEBUG] Creating DocumentItems...');
     await prisma.documentItem.createMany({
       data: validItems.map((item: any, index: number) => ({
@@ -743,7 +857,9 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     console.log('[DEBUG] No valid items to save');
   }
 
-  await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber);
+  if (type !== 'purchase_order') {
+    await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber);
+  }
 
   if (type === 'invoice') {
     const linkedQuotationNumber = parseString(header.linkedQuotationNumber);

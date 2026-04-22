@@ -646,7 +646,7 @@ const normalizeText = (value: any) => String(value || '').trim().toLowerCase();
 
 const isQuotationCustomerConfirmed = (quotation: any) => {
   const status = normalizeText(quotation?.status);
-  return ['confirmed', 'approved', 'won', 'converted', 'link invoice'].includes(status);
+  return ['confirmed', 'approved', 'won', 'ordered', 'converted', 'link invoice'].includes(status);
 };
 
 const isGoodsReceivedFromPo = (purchaseOrder: any) => {
@@ -679,6 +679,12 @@ const buildQuotationSalesProgress = (
   const quotationNumber = String(quotation?.documentNumber || '').trim();
 
   const linkedPurchaseOrders = purchaseOrders.filter((purchaseOrder) => {
+    // Check splitItems for sourceQuotationId (new approach)
+    const splitItems: any[] = Array.isArray(purchaseOrder?.splitItems) ? purchaseOrder.splitItems : [];
+    if (quotationId && splitItems.some((item) => String(item?.sourceQuotationId || '').trim() === quotationId)) {
+      return true;
+    }
+    // Fallback: referenceNo matching for older POs
     const referenceNo = String(purchaseOrder?.referenceNo || '').trim();
     return quotationNumber && referenceNo === quotationNumber;
   });

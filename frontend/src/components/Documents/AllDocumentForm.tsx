@@ -46,6 +46,7 @@ const QUOTATION_STATUS_OPTIONS = [
   'Confirmed',
   'Approved',
   'Won',
+  'Ordered',
   'Rejected',
   'Lost',
   'Expired',
@@ -96,12 +97,14 @@ const createEmptyItem = () => (
     model: '',
     price: '',
     cost: '',
-    quantity: '',    
+    quantity: '',
     margin: '',
     sellingPrice: '',
     totalCost: '',
     totalSellingPrice: '',
     unitID: '',
+    sourceQuotationId: '',
+    sourceQuotationNumber: '',
   }
 );
 
@@ -174,6 +177,7 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   vendorCode: '',
   supplierName: '',
   deliveryDate: '',
+  productCode: '',
 });
 
 const getSubtypeFields = (documentType: MainDocumentType) => {
@@ -236,6 +240,7 @@ export default function AllDocumentForm({
   const [mode, setMode] = useState('create');
   const [header, setHeader] = useState(getEmptyHeader(documentType));
   const [items, setItems] = useState([createEmptyItem()]);
+  const [poSplitItems, setPoSplitItems] = useState<ReturnType<typeof createEmptyItem>[]>([]);
   const [customerCodes, setCustomerCodes] = useState<any[]>([]);
   const [destinationCodes, setDestinationCodes] = useState<any[]>([]);
   const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
@@ -373,21 +378,39 @@ export default function AllDocumentForm({
       vendorCode: initialData.vendorCode || '',
       supplierName: initialData.supplierName || '',
       deliveryDate: initialData.deliveryDate ? String(initialData.deliveryDate).slice(0, 10) : '',
+      productCode: initialData.productCode || '',
     });
 
-    if (Array.isArray(initialData.items) && initialData.items.length > 0) {
-      setItems(initialData.items.map((item: any) => ({
-        id: item.id || '',
-        productCode: item.productCode || '',
-        productName: item.productName || '',
-        quantity: item.quantity || '',
-        margin: item.margin || '',
-        cost: item.cost || '',
-        sellingPrice: item.sellingPrice || '',
-        totalCost: item.totalCost || '',
-        totalSellingPrice: item.totalSellingPrice || '',
-        unitID: item.unitID || '',
-      })));
+    const mapItem = (item: any) => ({
+      id: item.id || '',
+      productCode: item.productCode || '',
+      productName: item.productName || '',
+      quantity: item.quantity || '',
+      margin: item.margin || '',
+      cost: item.cost || '',
+      sellingPrice: item.sellingPrice || '',
+      totalCost: item.totalCost || '',
+      totalSellingPrice: item.totalSellingPrice || '',
+      unitID: item.unitID || '',
+      sourceQuotationId: item.sourceQuotationId || '',
+      sourceQuotationNumber: item.sourceQuotationNumber || '',
+    });
+
+    if (documentType === 'purchase_order') {
+      // splitItems = PurchaseOrderDocument split lines (for edit mode)
+      const splitLines = Array.isArray(initialData.splitItems) && initialData.splitItems.length > 0
+        ? initialData.splitItems.map(mapItem)
+        : [];
+      setPoSplitItems(splitLines);
+
+      // View mode shows aggregated DocumentItem; edit/create shows split lines
+      const editLines = splitLines.length > 0 ? splitLines : [createEmptyItem()];
+      const viewLines = Array.isArray(initialData.items) && initialData.items.length > 0
+        ? initialData.items.map(mapItem)
+        : editLines;
+      setItems((initialData.__mode || 'edit') === 'view' ? viewLines : editLines);
+    } else if (Array.isArray(initialData.items) && initialData.items.length > 0) {
+      setItems(initialData.items.map(mapItem));
     } else {
       setItems([createEmptyItem()]);
     }
@@ -520,9 +543,10 @@ export default function AllDocumentForm({
   const handleProductSelect = (product: any) => {
     if (isViewMode || selectedItemIndex === null) return;
 
+    const isQuotationSource = documentType === 'purchase_order' && normalizeText(product?.sourceType) === 'quotation';
+
     setItems((prev) => {
       const next = [...prev];
-      const isQuotationSource = documentType === 'purchase_order' && normalizeText(product?.sourceType) === 'quotation';
       const nextQuantity = isQuotationSource ? String(product.quantity ?? next[selectedItemIndex].quantity ?? '') : next[selectedItemIndex].quantity;
       const nextCost = product.cost == null || product.cost === '' ? '' : Number(product.cost).toFixed(2);
       const nextUnitPrice = isQuotationSource
@@ -539,6 +563,8 @@ export default function AllDocumentForm({
         sellingPrice: documentType === 'quotation'
           ? calculateQuotationSalePrice(nextCost, header.margin)
           : nextUnitPrice,
+        sourceQuotationId: isQuotationSource ? (product.sourceDocumentId || '') : '',
+        sourceQuotationNumber: isQuotationSource ? (product.sourceDocumentNumber || '') : '',
       };
       if (documentType === 'quotation') {
         next[selectedItemIndex].totalSellingPrice = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].sellingPrice);
@@ -1126,6 +1152,68 @@ export default function AllDocumentForm({
           {codeError ? <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-red-200 bg-red-50 text-red-700'}`}>{codeError}</div> : null}
 
           <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
+            {documentType === 'quotation' && isViewMode ? (() => {
+              const linkedPOs: { documentId: string; documentNumber: string }[] = initialData?.linkedPurchaseOrders || [];
+              const isOrdered = linkedPOs.length > 0 || normalizeText(header.status) === 'ordered';
+              const isConfirmed = ['confirmed','approved','won','ordered','converted','link invoice'].includes(normalizeText(header.status));
+              const isInvoiced = !!header.linkedInvoiceNumber;
+              const steps = [
+                {
+                  label: 'ใบเสนอราคา',
+                  sublabel: header.documentNumber,
+                  done: true,
+                },
+                {
+                  label: 'ลูกค้ายืนยัน',
+                  sublabel: isConfirmed ? header.status : null,
+                  done: isConfirmed,
+                },
+                {
+                  label: 'สั่งของแล้ว',
+                  sublabel: linkedPOs.length > 0 ? linkedPOs.map((po) => po.documentNumber).join(', ') : null,
+                  done: isOrdered,
+                },
+                {
+                  label: 'ออกใบแจ้งหนี้',
+                  sublabel: header.linkedInvoiceNumber || null,
+                  done: isInvoiced,
+                },
+              ];
+              return (
+                <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-emerald-500/20 bg-gray-900' : 'border-emerald-200 bg-white'} shadow-sm`}>
+                  <div className={`border-b px-5 py-3 ${darkMode ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-emerald-100 bg-emerald-50'}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${darkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>Sales Progress</p>
+                  </div>
+                  <div className="flex items-start px-6 py-5">
+                    {steps.map((step, index) => (
+                      <React.Fragment key={step.label}>
+                        <div className="flex min-w-[96px] flex-col items-center text-center">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors ${
+                            step.done
+                              ? 'border-emerald-500 bg-emerald-500 text-white'
+                              : darkMode ? 'border-gray-600 bg-gray-800 text-gray-500' : 'border-gray-300 bg-white text-gray-400'
+                          }`}>
+                            {step.done ? '✓' : index + 1}
+                          </div>
+                          <p className={`mt-2 text-xs font-semibold ${step.done ? (darkMode ? 'text-emerald-400' : 'text-emerald-700') : (darkMode ? 'text-gray-500' : 'text-gray-400')}`}>
+                            {step.label}
+                          </p>
+                          {step.sublabel ? (
+                            <p className={`mt-1 max-w-[88px] truncate text-[10px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} title={step.sublabel}>
+                              {step.sublabel}
+                            </p>
+                          ) : null}
+                        </div>
+                        {index < steps.length - 1 ? (
+                          <div className={`mt-5 h-0.5 flex-1 transition-colors ${step.done ? 'bg-emerald-500' : darkMode ? 'bg-gray-700' : 'bg-gray-200'}`} />
+                        ) : null}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              );
+            })() : null}
+
             {documentType === 'quotation' ? (
               <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/70 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50'}`}>
                 <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
@@ -1433,13 +1521,15 @@ export default function AllDocumentForm({
                 </div>
               </div>
               <div
-                className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide 
+                className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
                   ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`
                 }
                 style={{
-                  gridTemplateColumns: documentType === 'quotation' ?
-                    '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
-                    '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
+                  gridTemplateColumns: documentType === 'quotation'
+                    ? '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px'
+                    : documentType === 'purchase_order'
+                      ? '44px 100px minmax(200px,1.5fr) 90px 120px 120px 120px 130px'
+                      : '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
                 }}
               >
                 <div>Item</div>
@@ -1455,16 +1545,19 @@ export default function AllDocumentForm({
                 }
                 <div>{documentType === 'purchase_order' ? 'Cost Price' : 'Unit Price'}</div>
                 <div>{documentType === 'purchase_order' ? 'Total Cost Price' : 'Line Total'}</div>
+                {documentType === 'purchase_order' ? <div>Source QU</div> : null}
                 <div></div>
               </div>
               {items.map((item, index) => (
                 <div key={`document-item-${index}`}
-                  className={`grid items-start gap-1 px-4 py-3 
+                  className={`grid items-start gap-1 px-4 py-3
                   ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
                   style={{
-                    gridTemplateColumns: documentType === 'quotation' ?
-                      '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
-                      '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
+                    gridTemplateColumns: documentType === 'quotation'
+                      ? '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px'
+                      : documentType === 'purchase_order'
+                        ? '44px 100px minmax(200px,1.5fr) 90px 120px 120px 120px 130px'
+                        : '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
                   }}
                 >
                   <div className={`pt-2 text-sm font-semibold
@@ -1518,11 +1611,21 @@ export default function AllDocumentForm({
                   />
                   <input type="number" step="0.01"
                     readOnly={documentType === 'quotation'}
-                    className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm w-full 
+                    className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm w-full
                     ${documentType === 'quotation' ? 'bg-gray-100 text-gray-700' : 'bg-white text-black'}`}
                     value={item.totalSellingPrice}
                     onChange={(e) => handleItemChange(index, 'total', e.target.value)}
                   />
+                  {documentType === 'purchase_order' ? (
+                    <div className={`rounded-lg border px-2 py-2 text-xs truncate
+                      ${(item as any).sourceQuotationNumber
+                        ? (darkMode ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-amber-200 bg-amber-50 text-amber-700')
+                        : (darkMode ? 'border-gray-700 text-gray-500' : 'border-gray-200 text-gray-400')}`}
+                      title={(item as any).sourceQuotationNumber || '-'}
+                    >
+                      {(item as any).sourceQuotationNumber || '-'}
+                    </div>
+                  ) : null}
                   <div className="flex justify-center pt-2">
                     {items.length > 1 ?
                       <button type="button"
@@ -1558,7 +1661,13 @@ export default function AllDocumentForm({
             }
             {isViewMode ?
               <button
-                type="button" onClick={() => setMode('edit')}
+                type="button"
+                onClick={() => {
+                  if (documentType === 'purchase_order' && poSplitItems.length > 0) {
+                    setItems(poSplitItems);
+                  }
+                  setMode('edit');
+                }}
                 className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">
                 Enable Edit
               </button> :
