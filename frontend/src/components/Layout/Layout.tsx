@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { useLocation } from 'react-router-dom';
 import documentService from '../../services/documentService';
 import codeService from '../../services/codeService';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
@@ -93,7 +92,6 @@ const createEmptyCompanyForm = () => ({
 });
 
 export default function Layout({ children, darkMode, setDarkMode, onNavigate = () => {}, currentPage = 'dashboard', topBarCaption = '' }: any) {
-  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
       const saved = localStorage.getItem('doc-key-sidebar-open');
@@ -225,19 +223,6 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     };
   }, []);
 
-  const selectedDocumentTab = (() => {
-    const selectedType = String((location.state as any)?.selectedType || '').trim().toLowerCase().replace(/-/g, '_');
-    if (location.pathname === '/documents' && ['quotation', 'invoice', 'receipt', 'purchase_order', 'work_order'].includes(selectedType)) {
-      return selectedType;
-    }
-
-    if (currentPage === 'invoice-home' || currentPage === 'key-invoice') {
-      return 'invoice';
-    }
-
-    return 'quotation';
-  })();
-
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
     { id: 'documents', label: 'Documents', icon: '📄', href: '/documents', hasSubmenu: true },
@@ -248,11 +233,30 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   ];
 
   const documentSubmenu = [
-    { id: 'documents-quotation', label: 'Quotation', icon: '📝', href: '/documents', count: sidebarCounts.quotation, isActive: currentPage === 'documents' && selectedDocumentTab === 'quotation' },
-    { id: 'documents-invoice', label: 'Invoice', icon: '🧾', href: '/documents', count: sidebarCounts.invoice, isActive: currentPage === 'invoice-home' || currentPage === 'key-invoice' || (currentPage === 'documents' && selectedDocumentTab === 'invoice') },
-    { id: 'documents-receipt', label: 'Receipt', icon: '💵', href: '/documents', count: sidebarCounts.receipt, isActive: currentPage === 'documents' && selectedDocumentTab === 'receipt' },
-    { id: 'documents-purchase-order', label: 'PO', icon: '📦', href: '/documents', count: sidebarCounts.purchaseOrder, isActive: currentPage === 'documents' && selectedDocumentTab === 'purchase_order' },
-    { id: 'documents-work-order', label: 'Work Order', icon: '🛠️', href: '/documents', count: sidebarCounts.workOrder, isActive: currentPage === 'documents' && selectedDocumentTab === 'work_order' },
+    {
+      id: 'documents-sales',
+      label: 'ระบบขาย',
+      icon: '💼',
+      href: '/documents/sales',
+      count: sidebarCounts.quotation + sidebarCounts.invoice + sidebarCounts.receipt,
+      isActive: currentPage === 'documents-sales',
+    },
+    {
+      id: 'documents-purchase',
+      label: 'ระบบซื้อ',
+      icon: '📦',
+      href: '/documents/purchase',
+      count: sidebarCounts.purchaseOrder,
+      isActive: currentPage === 'documents-purchase',
+    },
+    {
+      id: 'documents-operations',
+      label: 'ระบบหลังบ้าน',
+      icon: '🛠️',
+      href: '/documents/operations',
+      count: sidebarCounts.workOrder,
+      isActive: currentPage === 'documents-operations',
+    },
   ];
 
   const codeSubmenu = [
@@ -266,6 +270,9 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   const isDocumentSectionActive =
     currentPage === 'documents' ||
+    currentPage === 'documents-sales' ||
+    currentPage === 'documents-purchase' ||
+    currentPage === 'documents-operations' ||
     currentPage === 'invoice-home' ||
     currentPage === 'key-invoice';
 
@@ -336,16 +343,12 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('documents');
     } else if (id === 'codes') {
       onNavigate('customer-code');
-    } else if (id === 'documents-quotation') {
-      onNavigate('documents', { selectedType: 'quotation' });
-    } else if (id === 'documents-invoice') {
-      onNavigate('documents', { selectedType: 'invoice' });
-    } else if (id === 'documents-receipt') {
-      onNavigate('documents', { selectedType: 'receipt' });
-    } else if (id === 'documents-purchase-order') {
-      onNavigate('documents', { selectedType: 'purchase_order' });
-    } else if (id === 'documents-work-order') {
-      onNavigate('documents', { selectedType: 'work_order' });
+    } else if (id === 'documents-sales') {
+      onNavigate('documents-sales');
+    } else if (id === 'documents-purchase') {
+      onNavigate('documents-purchase');
+    } else if (id === 'documents-operations') {
+      onNavigate('documents-operations');
     } else if (id === 'customer-code') {
       onNavigate('customer-code');
     } else if (id === 'product-code') {

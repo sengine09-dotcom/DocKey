@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout/Layout';
 import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
@@ -9,10 +9,28 @@ const usedOptions = [
   { value: 'N', label: 'Inactive' },
 ];
 
-const yesNoOptions = [
-  { value: 'Y', label: 'Yes' },
-  { value: 'N', label: 'No' },
-];
+// prefix → used to preview the next auto-code on the client side
+const AUTO_CODE_PREFIX: Record<string, { prefix: string; idField: string }> = {
+  customer:        { prefix: 'C-', idField: 'customerCode' },
+  product:         { prefix: 'P-', idField: 'productCode'  },
+  vendor:          { prefix: 'V-', idField: 'vendorCode'   },
+  destination:     { prefix: 'D-', idField: 'destId'       },
+  'payment-term':  { prefix: 'T-', idField: 'termId'       },
+};
+
+const getNextAutoCodePreview = (apiType: string, records: any[]): string => {
+  const info = AUTO_CODE_PREFIX[apiType];
+  if (!info) return '';
+  let maxNum = 0;
+  for (const r of records) {
+    const code = String(r[info.idField] || '');
+    if (code.startsWith(info.prefix)) {
+      const num = parseInt(code.slice(info.prefix.length), 10);
+      if (!Number.isNaN(num) && num > maxNum) maxNum = num;
+    }
+  }
+  return `${info.prefix}${String(maxNum + 1).padStart(4, '0')}`;
+};
 
 const pageConfigs: Record<string, any> = {
   'customer-code': {
@@ -34,7 +52,7 @@ const pageConfigs: Record<string, any> = {
       { key: 'used', label: 'Status', type: 'status' },
     ],
     fields: [
-      { key: 'customerCode', label: 'Customer Code', required: true },
+      { key: 'customerCode', label: 'Customer Code', autoCode: true },
       { key: 'customerName', label: 'Customer Name', required: true },
       { key: 'shortName', label: 'Branch / Short Name' },
       { key: 'address', label: 'Address', type: 'textarea', fullWidth: true },
@@ -68,7 +86,7 @@ const pageConfigs: Record<string, any> = {
       { key: 'brand', label: 'Brand' },
     ],
     fields: [
-      { key: 'productCode', label: 'Product Code', required: true },
+      { key: 'productCode', label: 'Product Code', autoCode: true },
       { key: 'productName', label: 'Product Name', required: true },
       { key: 'brand', label: 'Brand' },
       { key: 'category', label: 'Category' },
@@ -97,7 +115,7 @@ const pageConfigs: Record<string, any> = {
       { key: 'isActive', label: 'Status', type: 'booleanStatus' },
     ],
     fields: [
-      { key: 'vendorCode', label: 'Vendor Code', required: true },
+      { key: 'vendorCode', label: 'Vendor Code', autoCode: true },
       { key: 'name', label: 'Vendor Name', required: true },
       { key: 'contactName', label: 'Contact Name' },
       { key: 'phone', label: 'Phone' },
@@ -183,7 +201,7 @@ const pageConfigs: Record<string, any> = {
       { key: 'used', label: 'Status', type: 'status' },
     ],
     fields: [
-      { key: 'destId', label: 'Destination ID', required: true },
+      { key: 'destId', label: 'Destination Code', autoCode: true },
       { key: 'destination', label: 'Destination', required: true },
       { key: 'location', label: 'Location' },
       { key: 'used', label: 'Status', type: 'select', options: usedOptions },
@@ -211,7 +229,7 @@ const pageConfigs: Record<string, any> = {
       { key: 'used', label: 'Status', type: 'status' },
     ],
     fields: [
-      { key: 'termId', label: 'Term ID', required: true },
+      { key: 'termId', label: 'Payment Term Code', autoCode: true },
       { key: 'termName', label: 'Term Name' },
       { key: 'shortName', label: 'Short Name' },
       { key: 'days', label: 'Days' },
@@ -280,6 +298,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const [paymentTermOptions, setPaymentTermOptions] = useState<{ value: string; label: string }[]>([]);
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
   const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0 });
+  const [codeCheckStatus, setCodeCheckStatus] = useState<'available' | 'duplicate' | null>(null);
 
   const config = pageConfigs[currentPage] || pageConfigs['customer-code'];
 
@@ -348,12 +367,14 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const openCreateForm = () => {
     setError('');
     setEditingId(null);
+    setCodeCheckStatus(null);
     setFormValues(config.initialValues);
     setIsFormOpen(true);
   };
 
   const openEditForm = (record: any) => {
     setError('');
+    setCodeCheckStatus(null);
     const nextValues: Record<string, any> = { ...config.initialValues };
     config.fields.forEach((field: any) => {
       const rawValue = record[field.key];
@@ -367,6 +388,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const closeForm = () => {
     setIsFormOpen(false);
     setEditingId(null);
+    setCodeCheckStatus(null);
     setFormValues(config.initialValues);
     setError('');
   };
@@ -375,22 +397,40 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     setFormValues((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleCodeFieldChange = (key: string, value: string) => {
+    handleChange(key, value);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setCodeCheckStatus(null);
+      return;
+    }
+    const isDuplicate = records.some(
+      (r) => String(r[config.idField] || '').toLowerCase() === trimmed.toLowerCase()
+    );
+    setCodeCheckStatus(isDuplicate ? 'duplicate' : 'available');
+  };
+
   const handleSave = async () => {
-    const missingRequired = config.fields.find((field: any) => field.required && !String(formValues[field.key] || '').trim());
+    // Skip required check for autoCode fields (blank = auto-generate), check the rest
+    const missingRequired = config.fields.find(
+      (field: any) => field.required && !field.autoCode && !String(formValues[field.key] || '').trim()
+    );
     if (missingRequired) {
       setError(`กรุณากรอก ${missingRequired.label}`);
       return;
     }
 
-    // Client-side duplicate check (create only)
+    // Client-side duplicate check (create only, when user manually typed a code)
     if (!editingId) {
-      const codeValue = String(formValues[config.idField] || '').trim().toLowerCase();
-      const isDuplicate = records.some(
-        (r) => String(r[config.idField] || '').trim().toLowerCase() === codeValue
-      );
-      if (isDuplicate) {
-        setError(`รหัส "${formValues[config.idField]}" มีอยู่ในระบบแล้ว กรุณาใช้รหัสอื่น`);
-        return;
+      const codeValue = String(formValues[config.idField] || '').trim();
+      if (codeValue) {
+        const isDuplicate = records.some(
+          (r) => String(r[config.idField] || '').trim().toLowerCase() === codeValue.toLowerCase()
+        );
+        if (isDuplicate) {
+          setError(`รหัส "${codeValue}" มีอยู่ในระบบแล้ว กรุณาใช้รหัสอื่น`);
+          return;
+        }
       }
     }
 
@@ -676,6 +716,49 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                               ))
                             )}
                           </select>
+                        ) : field.autoCode && !editingId ? (
+                          /* Auto-code field in create mode */
+                          <div className="flex flex-col gap-1.5">
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={formValues[field.key] ?? ''}
+                                placeholder={`ว่างไว้ = สร้างอัตโนมัติ (${getNextAutoCodePreview(config.apiType, records)})`}
+                                onChange={(e) => { handleCodeFieldChange(field.key, e.target.value); setError(''); }}
+                                className={`w-full rounded-lg border px-4 py-3 pr-28 ${
+                                  codeCheckStatus === 'duplicate'
+                                    ? 'border-red-500 ring-1 ring-red-400 ' + (darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900')
+                                    : codeCheckStatus === 'available'
+                                    ? 'border-emerald-500 ring-1 ring-emerald-400 ' + (darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900')
+                                    : darkMode
+                                    ? 'border-gray-600 bg-gray-900 text-white'
+                                    : 'border-gray-300 bg-white text-gray-900'
+                                }`}
+                              />
+                              {/* Status badge inside input */}
+                              <span className={`absolute right-3 top-1/2 -translate-y-1/2 rounded-full px-2 py-0.5 text-xs font-semibold pointer-events-none ${
+                                codeCheckStatus === 'duplicate'
+                                  ? 'bg-red-100 text-red-700'
+                                  : codeCheckStatus === 'available'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : darkMode
+                                  ? 'bg-blue-900/50 text-blue-300'
+                                  : 'bg-blue-50 text-blue-600'
+                              }`}>
+                                {codeCheckStatus === 'duplicate' ? '✗ ซ้ำ'
+                                  : codeCheckStatus === 'available' ? '✓ ว่าง'
+                                  : '⚡ Auto'}
+                              </span>
+                            </div>
+                            {codeCheckStatus === 'duplicate' && (
+                              <p className="text-xs text-red-500">รหัสนี้มีอยู่ในระบบแล้ว กรุณาใช้รหัสอื่น</p>
+                            )}
+                            {!codeCheckStatus && (
+                              <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                เว้นว่างไว้เพื่อให้ระบบสร้างรหัสให้อัตโนมัติ หรือพิมพ์รหัสเองได้
+                              </p>
+                            )}
+                          </div>
                         ) : (
                           <input
                             type={field.type || 'text'}

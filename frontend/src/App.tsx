@@ -7,6 +7,10 @@ import InitAdmin from './pages/InitAdmin';
 import ActivationLocked from './pages/ActivationLocked';
 import Dashboard from './pages/Dashboard';
 import Documents from './pages/Documents';
+import DocumentsHub from './pages/documents/DocumentsHub';
+import SalesDocuments from './pages/documents/SalesDocuments';
+import PurchaseDocuments from './pages/documents/PurchaseDocuments';
+import OperationsDocuments from './pages/documents/OperationsDocuments';
 import InvoiceHome from './pages/InvoiceHome';
 import KeyInvoice from './pages/KeyInvoice';
 import CodeMaster from './pages/CodeMaster';
@@ -20,6 +24,9 @@ import RegisterCompany from './pages/RegisterCompany';
 const pageRouteMap: Record<string, string> = {
   dashboard: '/dashboard',
   documents: '/documents',
+  'documents-sales': '/documents/sales',
+  'documents-purchase': '/documents/purchase',
+  'documents-operations': '/documents/operations',
   'invoice-home': '/documents/invoice',
   'key-invoice': '/documents/invoice/detail',
   'company-info': '/admin/company-info',
@@ -95,7 +102,7 @@ function ActivationAwareRoutes() {
     return <div className="min-h-screen flex items-center justify-center">Checking system activation...</div>;
   }
 
-  if (!isActivated && location.pathname !== '/dockey/init/admin' && !publicPaths.includes(location.pathname)) {
+  if (!isActivated && location.pathname !== '/dockey/init/admin' && location.pathname !== '/init-admin' && !publicPaths.includes(location.pathname)) {
     return (
       <Routes>
         <Route path="*" element={<ActivationLocked reason={activationReason} token={activationToken} onRefresh={() => void loadActivationStatus()} isRefreshing={isCheckingActivation} />} />
@@ -111,6 +118,7 @@ function ActivationAwareRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/register-company" element={<RegisterCompany />} />
       <Route path="/dockey/init/admin" element={<InitAdmin />} />
+      <Route path="/init-admin" element={<InitAdmin />} />
 
       {/* Protected Routes */}
       <Route
@@ -119,6 +127,22 @@ function ActivationAwareRoutes() {
       />
       <Route
         path="/documents"
+        element={<RoutedPage component={DocumentsHub} currentPage="documents" />}
+      />
+      <Route
+        path="/documents/sales"
+        element={<RoutedPage component={SalesDocuments} currentPage="documents-sales" />}
+      />
+      <Route
+        path="/documents/purchase"
+        element={<RoutedPage component={PurchaseDocuments} currentPage="documents-purchase" />}
+      />
+      <Route
+        path="/documents/operations"
+        element={<RoutedPage component={OperationsDocuments} currentPage="documents-operations" />}
+      />
+      <Route
+        path="/documents/legacy"
         element={<RoutedPage component={Documents} currentPage="documents" useLocationState={true} />}
       />
       <Route

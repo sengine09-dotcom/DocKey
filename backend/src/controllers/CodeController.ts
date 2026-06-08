@@ -20,6 +20,33 @@ const parseString = (value: any) => {
   return text === '' ? null : text;
 };
 
+// Auto-code configuration: prefix, DB field name, and the payload key the frontend sends
+const AUTO_CODE_CONFIG: Record<string, { prefix: string; dbField: string; payloadKey: string }> = {
+  customer:       { prefix: 'C-', dbField: 'customerCode',    payloadKey: 'customerCode' },
+  product:        { prefix: 'P-', dbField: 'productCode',     payloadKey: 'productCode'  },
+  vendor:         { prefix: 'V-', dbField: 'vendorCode',      payloadKey: 'vendorCode'   },
+  destination:    { prefix: 'D-', dbField: 'destinationCode', payloadKey: 'destId'       },
+  'payment-term': { prefix: 'T-', dbField: 'termCode',        payloadKey: 'termId'       },
+};
+
+const generateNextCode = async (
+  model: any,
+  dbField: string,
+  prefix: string,
+  where: any = {},
+): Promise<string> => {
+  const rows = await model.findMany({ where, select: { [dbField]: true } });
+  let maxNum = 0;
+  for (const row of rows) {
+    const code = String(row[dbField] || '');
+    if (code.startsWith(prefix)) {
+      const num = parseInt(code.slice(prefix.length), 10);
+      if (!Number.isNaN(num) && num > maxNum) maxNum = num;
+    }
+  }
+  return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
+};
+
 const mapCustomer = (row: any) => ({
   customerCode: row.customerCode || '',
   customerName: row.customerName || '',
@@ -179,7 +206,7 @@ const codeConfigs: Record<string, any> = {
     orderBy: { destinationCode: 'asc' },
     mapRecord: mapDestination,
     toData: (payload: any) => ({
-      destinationCode: parseString(payload.destinationCode),
+      destinationCode: parseString(payload.destinationCode || payload.destId),
       destination: parseString(payload.destination),
       location: parseString(payload.location),
       used: parseString(payload.used) || 'Y',
@@ -310,13 +337,26 @@ class CodeController {
       }
 
       let extraData: any = {};
+      let companyWhere: any = {};
       if (COMPANY_SCOPED_TYPES.has(req.params.type)) {
         const ctx = await resolveCompanyContext(req);
         if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
         extraData = { company: { connect: { id: ctx.companyId } } };
+        companyWhere = { companyId: ctx.companyId };
       }
 
-      const data = { id: ulid(), ...config.toData(req.body), ...extraData };
+      // Auto-generate code if the user left the code field blank
+      let payload = req.body;
+      const autoCodeCfg = AUTO_CODE_CONFIG[req.params.type];
+      if (autoCodeCfg) {
+        const rawCode = parseString(payload[autoCodeCfg.payloadKey]) || parseString(payload[autoCodeCfg.dbField]);
+        if (!rawCode) {
+          const autoCode = await generateNextCode(config.model, autoCodeCfg.dbField, autoCodeCfg.prefix, companyWhere);
+          payload = { ...payload, [autoCodeCfg.payloadKey]: autoCode, [autoCodeCfg.dbField]: autoCode };
+        }
+      }
+
+      const data = { id: ulid(), ...config.toData(payload), ...extraData };
       const idValue = data[config.idField];
       if (!idValue && req.params.type !== 'company') {
         return res.status(400).json({ success: false, message: `${config.idField} is required` });
