@@ -59,6 +59,22 @@ const documentTypeConfigs: Record<MainDocumentType, any> = {
     accent: 'rose',
     createLabel: 'Create Work Order',
   },
+  delivery_order: {
+    icon: '🚚',
+    label: 'Delivery Order',
+    title: 'Delivery Order Documents',
+    description: 'Delivery orders — triggers stock deduction.',
+    accent: 'orange',
+    createLabel: 'Create DO',
+  },
+  customer_return: {
+    icon: '↩️',
+    label: 'Customer Return',
+    title: 'Customer Return Documents',
+    description: 'Customer return documents — triggers stock addition.',
+    accent: 'pink',
+    createLabel: 'Create Return',
+  },
 };
 
 const documentTypeGroups = [
@@ -108,6 +124,8 @@ const createEmptyCollections = () => ({
   deposit_receipt: [],
   purchase_order: [],
   work_order: [],
+  delivery_order: [],
+  customer_return: [],
 }) as Record<MainDocumentType, any[]>;
 
 const isMainDocumentType = (value: unknown): value is MainDocumentType => DOCUMENT_TYPES.includes(String(value || '').trim().toLowerCase().replace(/-/g, '_') as MainDocumentType);
@@ -882,6 +900,8 @@ const buildPreviewDocumentNumber = (type: MainDocumentType, records: any[]) => {
     deposit_receipt: 'DR',
     purchase_order: 'PO',
     work_order: 'WO',
+    delivery_order: 'DO',
+    customer_return: 'CR',
   };
 
   const yearPart = String(new Date().getFullYear()).slice(-2);

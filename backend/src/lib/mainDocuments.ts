@@ -1,5 +1,6 @@
 import { ulid } from 'ulid';
 import { prisma } from './prisma';
+import { recordStockMove } from './stockService';
 
 const DOCUMENT_TYPE_MAP = {
   quotation: 'QUOTATION',
@@ -8,6 +9,8 @@ const DOCUMENT_TYPE_MAP = {
   deposit_receipt: 'DEPOSIT_RECEIPT',
   purchase_order: 'PURCHASE_ORDER',
   work_order: 'WORK_ORDER',
+  delivery_order: 'DELIVERY_ORDER',
+  customer_return: 'CUSTOMER_RETURN',
 } as const;
 
 const PRISMA_TO_APP_DOCUMENT_TYPE = {
@@ -17,6 +20,8 @@ const PRISMA_TO_APP_DOCUMENT_TYPE = {
   DEPOSIT_RECEIPT: 'deposit_receipt',
   PURCHASE_ORDER: 'purchase_order',
   WORK_ORDER: 'work_order',
+  DELIVERY_ORDER: 'delivery_order',
+  CUSTOMER_RETURN: 'customer_return',
 } as const;
 
 const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
@@ -26,6 +31,8 @@ const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
   deposit_receipt: 'Received',
   purchase_order: 'Open',
   work_order: 'Open',
+  delivery_order: 'Draft',
+  customer_return: 'Draft',
 };
 
 const DOCUMENT_PREFIX: Record<MainDocumentType, string> = {
@@ -35,6 +42,8 @@ const DOCUMENT_PREFIX: Record<MainDocumentType, string> = {
   deposit_receipt: 'DR',
   purchase_order: 'PO',
   work_order: 'WO',
+  delivery_order: 'DO',
+  customer_return: 'CR',
 };
 
 type MainDocumentType = keyof typeof DOCUMENT_TYPE_MAP;
@@ -49,6 +58,8 @@ const documentInclude = {
   depositReceiptDocument: true,
   purchaseOrderDocument: true,
   workOrderDocument: true,
+  deliveryOrderDocument: true,
+  customerReturnDocument: true,
 };
 
 const toNumber = (value: any) => (value == null || value === '' ? 0 : Number(value));
@@ -312,13 +323,29 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
       vendorCode: document.purchaseOrderDocument?.vendorCode || '',
       supplierName: document.purchaseOrderDocument?.supplierName || '',
       deliveryDate: document.purchaseOrderDocument?.deliveryDate || null,
+      vendorQuotationNo: document.purchaseOrderDocument?.vendorQuotationNo || '',
+    };
+  }
+
+  if (documentType === 'work_order') {
+    return {
+      ...baseRecord,
+      scheduledDate: document.workOrderDocument?.scheduledDate || null,
+      assignedTo: document.workOrderDocument?.assignedTo || '',
+    };
+  }
+
+  if (documentType === 'delivery_order') {
+    return {
+      ...baseRecord,
+      quotationId: document.deliveryOrderDocument?.quotationId || '',
+      quotationNumber: document.deliveryOrderDocument?.quotationNumber || '',
     };
   }
 
   return {
     ...baseRecord,
-    scheduledDate: document.workOrderDocument?.scheduledDate || null,
-    assignedTo: document.workOrderDocument?.assignedTo || '',
+    refDocNumber: document.customerReturnDocument?.refDocNumber || '',
   };
 };
 
@@ -437,28 +464,62 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         vendorCode: parseString(header.vendorCode),
         supplierName: parseString(header.supplierName),
         deliveryDate: parseDate(header.deliveryDate),
+        vendorQuotationNo: parseString(header.vendorQuotationNo),
       },
       update: {
         documentNumber,
         vendorCode: parseString(header.vendorCode),
         supplierName: parseString(header.supplierName),
         deliveryDate: parseDate(header.deliveryDate),
+        vendorQuotationNo: parseString(header.vendorQuotationNo),
       },
     });
   }
 
-  return prisma.workOrderDocument.upsert({
+  if (type === 'work_order') {
+    return prisma.workOrderDocument.upsert({
+      where: { id: documentId },
+      create: {
+        id: documentId,
+        documentNumber,
+        scheduledDate: parseDate(header.scheduledDate),
+        assignedTo: parseString(header.assignedTo),
+      },
+      update: {
+        documentNumber,
+        scheduledDate: parseDate(header.scheduledDate),
+        assignedTo: parseString(header.assignedTo),
+      },
+    });
+  }
+
+  if (type === 'delivery_order') {
+    return prisma.deliveryOrderDocument.upsert({
+      where: { id: documentId },
+      create: {
+        id: documentId,
+        documentNumber,
+        quotationId: parseString(header.quotationId),
+        quotationNumber: parseString(header.quotationNumber),
+      },
+      update: {
+        documentNumber,
+        quotationId: parseString(header.quotationId),
+        quotationNumber: parseString(header.quotationNumber),
+      },
+    });
+  }
+
+  return prisma.customerReturnDocument.upsert({
     where: { id: documentId },
     create: {
       id: documentId,
       documentNumber,
-      scheduledDate: parseDate(header.scheduledDate),
-      assignedTo: parseString(header.assignedTo),
+      refDocNumber: parseString(header.refDocNumber),
     },
     update: {
       documentNumber,
-      scheduledDate: parseDate(header.scheduledDate),
-      assignedTo: parseString(header.assignedTo),
+      refDocNumber: parseString(header.refDocNumber),
     },
   });
 };
@@ -493,18 +554,12 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     throw new Error('Invalid document type');
   }
 
-  console.log('[DEBUG] saveDocumentByType called with type:', type);
-  console.log('[DEBUG] Payload structure:', JSON.stringify(payload, null, 2));
 
   const header = payload?.header || {};
   const items = Array.isArray(payload?.items) ? payload.items : [];
   const requestedDocumentId = parseString(header.documentId || header.id);
   const requestedDocumentNumber = parseString(header.documentNumber);
 
-  console.log('[DEBUG] Header:', JSON.stringify(header, null, 2));
-  console.log('[DEBUG] Items count:', items.length);
-  console.log('[DEBUG] Requested documentId:', requestedDocumentId);
-  console.log('[DEBUG] Requested documentNumber:', requestedDocumentNumber);
 
   const prismaType = getPrismaDocumentType(type);
   const existingLookupConditions = [
@@ -532,12 +587,9 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
   const status = parseString(header.status) || DOCUMENT_DEFAULT_STATUS[type];
 
   if (type === 'invoice') {
-    console.log('[DEBUG] Invoice validation logic triggered');
     const quotationReference = parseString(header.linkedQuotationNumber);
-    console.log('[DEBUG] Quotation reference:', quotationReference);
 
     if (quotationReference) {
-      console.log('[DEBUG] Checking for duplicate linked invoice...');
       const duplicateLinkedInvoice = await prisma.document.findFirst({
         where: {
           companyId,
@@ -550,7 +602,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         },
       });
 
-      console.log('[DEBUG] Duplicate linked invoice found:', !!duplicateLinkedInvoice);
 
       if (duplicateLinkedInvoice) {
         throw new Error(`Quotation ${quotationReference} is already linked to invoice ${duplicateLinkedInvoice.documentNumber}`);
@@ -688,12 +739,8 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     },
   });
 
-  console.log('[DEBUG] Incoming items for documentId:', documentId);
-  console.log('[DEBUG] Items count:', items.length);
-  console.log('[DEBUG] Items structure:', JSON.stringify(items, null, 2));
 
   const validItems = items.filter((item: any) => item?.productCode);
-  console.log('[DEBUG] Valid items after filtering:', validItems.length);
   const requestedProductCodes = Array.from(new Set(
     validItems
       .map((item: any) => parseString(item.productCode))
@@ -718,7 +765,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
   }
   
   if (validItems.length > 0) {
-    console.log('[DEBUG] Creating DocumentItems...');
     await prisma.documentItem.createMany({
       data: validItems.map((item: any, index: number) => ({
         id: ulid(),
@@ -738,16 +784,51 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         unitId: parseString(item.unitId),
       })),
     });
-    console.log('[DEBUG] DocumentItems created successfully');
   } else {
-    console.log('[DEBUG] No valid items to save');
   }
 
   await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber);
 
+  // Stock deduction on first save of DO; stock return on first save of CUSTOMER_RETURN
+  const isStockDoc = type === 'delivery_order' || type === 'customer_return';
+  if (isStockDoc && existing === null) {
+    const direction = type === 'delivery_order' ? 'OUT' : 'IN';
+    const stockItems = validItems
+      .map((item: any) => ({
+        productCode: String(parseString(item.productCode) || ''),
+        qty: toNumber(item.quantity),
+      }))
+      .filter((i) => i.productCode && i.qty > 0);
+
+    if (stockItems.length > 0) {
+      const productRows = await prisma.product.findMany({
+        where: { companyId, productCode: { in: stockItems.map((i) => i.productCode) } },
+        select: { id: true, productCode: true },
+      });
+      const productIdMap = new Map(productRows.map((p) => [p.productCode, p.id]));
+
+      const moveItems = stockItems
+        .map((i) => ({ ...i, productId: productIdMap.get(i.productCode) || '' }))
+        .filter((i) => i.productId);
+
+      if (moveItems.length > 0) {
+        await prisma.$transaction(async (tx) => {
+          await recordStockMove(tx, {
+            items: moveItems,
+            docNumber: documentNumber,
+            docType: type === 'delivery_order' ? 'DELIVERY_ORDER' : 'CUSTOMER_RETURN',
+            direction,
+            companyId,
+            docId: documentId,
+            userId: parseString(header.createdBy) ?? undefined,
+          });
+        });
+      }
+    }
+  }
+
   if (type === 'invoice') {
     const linkedQuotationNumber = parseString(header.linkedQuotationNumber);
-    console.log('[DEBUG] linkedQuotationNumber:', linkedQuotationNumber);
 
     if (linkedQuotationNumber) {
       // Find the quotation document first to get its ID
@@ -761,7 +842,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
       });
 
       // Update quotation status and link invoice data
-      const updateResult = await prisma.document.updateMany({
+      await prisma.document.updateMany({
         where: {
           companyId,
           documentType: DOCUMENT_TYPE_MAP.quotation,
@@ -771,7 +852,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
           status: 'Link Invoice',
         },
       });
-      console.log('[DEBUG] Update Quotation status result:', updateResult);
 
       // Update QuotationDocument with invoice linking data
       if (quotationDoc) {
@@ -782,20 +862,12 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
             linkedInvoiceNumber: documentNumber,
           } as any,
         });
-        console.log('[DEBUG] Updated QuotationDocument with invoice linking:', {
-          quotationId: quotationDoc.id,
-          invoiceId: documentId,
-          invoiceNumber: documentNumber
-        });
       }
-    } else {
-      console.log('[DEBUG] No linkedQuotationNumber provided, skip update Quotation status');
     }
   }
 
   if (type === 'receipt') {
     const linkedInvoiceNumber = parseString(header.linkedInvoiceNumber);
-    console.log('[DEBUG] linkedInvoiceNumber:', linkedInvoiceNumber);
 
     if (linkedInvoiceNumber) {
       // Find the invoice document first to get its ID
@@ -808,7 +880,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         select: { id: true }
       });
       // Update invoice status and link receipt data
-      const updateResult = await prisma.document.updateMany({
+      await prisma.document.updateMany({
         where: {
           companyId,
           documentType: DOCUMENT_TYPE_MAP.invoice,
@@ -818,7 +890,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
           status: 'Link Receipt',
         },
       });
-      console.log('[DEBUG] Update Invoice status result:', updateResult);
 
       if (invoiceDoc) {
         // Update InvoiceDocument with receipt linking data
@@ -829,22 +900,9 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
             linkedReceiptNumber: documentNumber,
           } as any,
         });
-        console.log('[DEBUG] Updated InvoiceDocument with receipt linking:', {
-          invoiceId: invoiceDoc.id,
-          receiptId: documentId,
-          receiptNumber: documentNumber
-        });
       }
-
-    } else {
-      console.log('[DEBUG] No linkedInvoiceNumber provided, skip update Invoice status');
     }
   }
-
-  const savedDocument = await prisma.document.findUnique({
-    where: { id: documentId },
-    include: documentInclude,
-  });
 
   return fetchDocumentRecord(type, documentId, companyId);
 };

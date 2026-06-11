@@ -437,15 +437,15 @@ export default function AdminInitTokenPage() {
                       const presence = getPresenceLabel(tokenRecord);
                       const expiryWarning = getExpiryDisplay(tokenRecord);
                       const statusLabel = tokenRecord.usedAt
-                        ? 'Used'
-                        : tokenRecord.isActive
                         ? 'Active'
+                        : tokenRecord.isActive
+                        ? 'Pending'
                         : 'Disabled';
 
                       const statusClass = tokenRecord.usedAt
-                        ? 'bg-amber-100 text-amber-700'
-                        : tokenRecord.isActive
                         ? 'bg-emerald-100 text-emerald-700'
+                        : tokenRecord.isActive
+                        ? 'bg-amber-100 text-amber-700'
                         : 'bg-slate-200 text-slate-700';
 
                       return (

@@ -15,6 +15,14 @@ enum DocumentType {
   DEPOSIT_RECEIPT
   PURCHASE_ORDER
   WORK_ORDER
+  DELIVERY_ORDER
+  CUSTOMER_RETURN
+}
+
+enum StockMoveType {
+  IN
+  OUT
+  INIT
 }
 
 enum PaymentType {
@@ -73,10 +81,11 @@ model Product {
   stockQty      Int      @default(0) @map("StockQty")
   minQty        Int      @default(0) @map("MinQty")
   maxQty        Int      @default(0) @map("MaxQty")
-  companyId     String   @map("CompanyID") @db.VarChar(191)
-  createdAt     DateTime @default(now()) @map("CreatedAt")
-  updatedAt     DateTime @updatedAt @map("UpdatedAt")
-  company       Company  @relation("ProductCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  companyId         String             @map("CompanyID") @db.VarChar(191)
+  createdAt         DateTime           @default(now()) @map("CreatedAt")
+  updatedAt         DateTime           @updatedAt @map("UpdatedAt")
+  company           Company            @relation("ProductCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  stockTransactions StockTransaction[]
 
   @@unique([companyId, productCode])
   @@index([companyId])
@@ -157,8 +166,11 @@ model Company {
   products     Product[]     @relation("ProductCompany")
   vendors      Vendor[]      @relation("VendorCompany")
   destinations Destination[] @relation("DestinationCompany")
-  paymentTerms      PaymentTerm[]      @relation("PaymentTermCompany")
-  systemActivations SystemActivation[]
+  paymentTerms          PaymentTerm[]          @relation("PaymentTermCompany")
+  systemActivations     SystemActivation[]
+  purchaseRequisitions  PurchaseRequisition[]  @relation("PRCompany")
+  goodsReceipts         GoodsReceipt[]         @relation("GRCompany")
+  stockTransactions     StockTransaction[]     @relation("StockTransactionCompany")
 
   @@index([companyCode])
 }
@@ -197,6 +209,8 @@ model Document {
   depositReceiptDocument DepositReceiptDocument?
   purchaseOrderDocument  PurchaseOrderDocument?
   workOrderDocument      WorkOrderDocument?
+  deliveryOrderDocument  DeliveryOrderDocument?
+  customerReturnDocument CustomerReturnDocument?
 
   @@unique([companyId, documentType, documentNumber])
   @@index([companyId, documentType, documentDate])
@@ -265,12 +279,13 @@ model DepositReceiptDocument {
 }
 
 model PurchaseOrderDocument {
-  id             String    @id @map("ID") @db.Char(26)
-  documentNumber String    @map("DocumentNumber") @db.Char(26)
-  vendorCode     String?   @map("VendorCode") @db.VarChar(50)
-  supplierName   String?   @map("SupplierName") @db.VarChar(255)
-  deliveryDate   DateTime? @map("DeliveryDate")
-  document       Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id                String    @id @map("ID") @db.Char(26)
+  documentNumber    String    @map("DocumentNumber") @db.Char(26)
+  vendorCode        String?   @map("VendorCode") @db.VarChar(50)
+  supplierName      String?   @map("SupplierName") @db.VarChar(255)
+  deliveryDate      DateTime? @map("DeliveryDate")
+  vendorQuotationNo String?   @map("VendorQuotationNo") @db.VarChar(100)
+  document          Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model WorkOrderDocument {
@@ -290,4 +305,123 @@ model SystemActivation {
   createdAt   DateTime @default(now()) @map("CreatedAt")
   updatedAt   DateTime @updatedAt @map("UpdatedAt")
   company     Company? @relation(fields: [companyId], references: [id])
+}
+
+model PurchaseRequisition {
+  id           String    @id @default(cuid()) @map("ID") @db.VarChar(191)
+  prNumber     String    @map("PRNumber") @db.VarChar(50)
+  title        String    @map("Title") @db.VarChar(255)
+  requestedBy  String?   @map("RequestedBy") @db.VarChar(255)
+  vendorCode   String?   @map("VendorCode") @db.VarChar(50)
+  requiredDate DateTime? @map("RequiredDate")
+  status       String    @default("DRAFT") @map("Status") @db.VarChar(30)
+  remark       String?   @map("Remark") @db.VarChar(500)
+  approvedBy   String?   @map("ApprovedBy") @db.VarChar(255)
+  approvedAt   DateTime? @map("ApprovedAt")
+  rejectedBy   String?   @map("RejectedBy") @db.VarChar(255)
+  rejectedAt   DateTime? @map("RejectedAt")
+  rejectReason String?   @map("RejectReason") @db.VarChar(500)
+  companyId    String    @map("CompanyID") @db.VarChar(191)
+  createdAt    DateTime  @default(now()) @map("CreatedAt")
+  updatedAt    DateTime  @updatedAt @map("UpdatedAt")
+  company      Company   @relation("PRCompany", fields: [companyId], references: [id])
+  items        PRItem[]
+
+  @@unique([companyId, prNumber])
+  @@index([companyId])
+  @@map("PurchaseRequisition")
+}
+
+model PRItem {
+  id             String              @id @default(cuid()) @map("ID") @db.VarChar(191)
+  prId           String              @map("PRID") @db.VarChar(191)
+  lineNo         Int                 @map("LineNo")
+  productCode    String?             @map("ProductCode") @db.VarChar(50)
+  description    String              @map("Description") @db.VarChar(255)
+  qty            Decimal             @default(0) @map("Qty") @db.Decimal(18, 2)
+  unit           String?             @map("Unit") @db.VarChar(50)
+  estimatedPrice Decimal             @default(0) @map("EstimatedPrice") @db.Decimal(19, 4)
+  remark         String?             @map("Remark") @db.VarChar(255)
+  convertedToPo  Boolean             @default(false) @map("ConvertedToPO")
+  poNumber       String?             @map("PONumber") @db.VarChar(50)
+  pr             PurchaseRequisition @relation(fields: [prId], references: [id], onDelete: Cascade)
+
+  @@index([prId])
+  @@map("PRItem")
+}
+
+model GoodsReceipt {
+  id          String    @id @default(cuid()) @map("ID") @db.VarChar(191)
+  grNumber    String    @map("GRNumber") @db.VarChar(50)
+  poId        String    @map("POID") @db.VarChar(26)
+  poNumber    String    @map("PONumber") @db.VarChar(50)
+  vendorCode  String?   @map("VendorCode") @db.VarChar(50)
+  receivedDate DateTime? @map("ReceivedDate")
+  status      String    @default("DRAFT") @map("Status") @db.VarChar(30)
+  remark      String?   @map("Remark") @db.VarChar(500)
+  receivedBy  String?   @map("ReceivedBy") @db.VarChar(255)
+  confirmedBy String?   @map("ConfirmedBy") @db.VarChar(255)
+  confirmedAt DateTime? @map("ConfirmedAt")
+  companyId   String    @map("CompanyID") @db.VarChar(191)
+  createdAt   DateTime  @default(now()) @map("CreatedAt")
+  updatedAt   DateTime  @updatedAt @map("UpdatedAt")
+  company     Company   @relation("GRCompany", fields: [companyId], references: [id])
+  items       GRItem[]
+
+  @@unique([companyId, grNumber])
+  @@index([companyId])
+  @@map("GoodsReceipt")
+}
+
+model GRItem {
+  id          String       @id @default(cuid()) @map("ID") @db.VarChar(191)
+  grId        String       @map("GRID") @db.VarChar(191)
+  lineNo      Int          @map("LineNo")
+  productCode String?      @map("ProductCode") @db.VarChar(50)
+  description String       @map("Description") @db.VarChar(255)
+  poQty       Decimal      @default(0) @map("POQty") @db.Decimal(18, 2)
+  receivedQty Decimal      @default(0) @map("ReceivedQty") @db.Decimal(18, 2)
+  unit        String?      @map("Unit") @db.VarChar(50)
+  unitPrice   Decimal      @default(0) @map("UnitPrice") @db.Decimal(19, 4)
+  remark      String?      @map("Remark") @db.VarChar(255)
+  gr          GoodsReceipt @relation(fields: [grId], references: [id], onDelete: Cascade)
+
+  @@index([grId])
+  @@map("GRItem")
+}
+
+model DeliveryOrderDocument {
+  id              String   @id @map("ID") @db.Char(26)
+  documentNumber  String   @map("DocumentNumber") @db.Char(26)
+  quotationId     String?  @map("QuotationId") @db.VarChar(26)
+  quotationNumber String?  @map("QuotationNumber") @db.VarChar(50)
+  document        Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model CustomerReturnDocument {
+  id             String   @id @map("ID") @db.Char(26)
+  documentNumber String   @map("DocumentNumber") @db.Char(26)
+  refDocNumber   String?  @map("RefDocNumber") @db.VarChar(50)
+  document       Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model StockTransaction {
+  id          String        @id @map("ID") @db.VarChar(26)
+  productId   String        @map("ProductID") @db.VarChar(26)
+  productCode String        @map("ProductCode") @db.VarChar(50)
+  companyId   String        @map("CompanyID") @db.VarChar(191)
+  docNumber   String        @map("DocNumber") @db.VarChar(50)
+  docType     String        @map("DocType") @db.VarChar(30)
+  docId       String?       @map("DocID") @db.VarChar(191)
+  type        StockMoveType @map("Type")
+  qtyChange   Decimal       @map("QtyChange") @db.Decimal(18, 2)
+  createdBy   String?       @map("CreatedBy") @db.VarChar(255)
+  createdAt   DateTime      @default(now()) @map("CreatedAt")
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  company     Company       @relation("StockTransactionCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId, productCode])
+  @@index([companyId, docType, docNumber])
+  @@index([productId])
+  @@map("StockTransaction")
 }

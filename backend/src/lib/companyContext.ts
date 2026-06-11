@@ -7,6 +7,7 @@ const TOKEN_COOKIE_NAME = 'auth_token';
 
 export type CompanyContext = {
   userId: string;
+  userName: string;
   companyId: string;
   role: string;
 };
@@ -34,13 +35,14 @@ export const resolveCompanyContext = async (req: Request): Promise<CompanyContex
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, role: true, companyId: true },
+      select: { id: true, name: true, role: true, companyId: true },
     });
 
     if (!user || !user.companyId) return null;
 
     return {
       userId: user.id,
+      userName: user.name,
       companyId: user.companyId,
       role: user.role,
     };

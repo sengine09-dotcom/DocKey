@@ -4,8 +4,8 @@ import path from 'path';
 import type { PrismaClient as PrismaClientType } from '@prisma/client';
 
 const prismaClientCandidates = [
-  path.resolve(__dirname, '../../../node_modules/.prisma/client'),
   path.resolve(__dirname, '../../node_modules/.prisma/client'),
+  path.resolve(__dirname, '../../../node_modules/.prisma/client'),
 ];
 
 const prismaClientModulePath = prismaClientCandidates.find((candidatePath) => fs.existsSync(candidatePath));

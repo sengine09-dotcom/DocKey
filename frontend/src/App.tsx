@@ -11,6 +11,7 @@ import DocumentsHub from './pages/documents/DocumentsHub';
 import SalesDocuments from './pages/documents/SalesDocuments';
 import PurchaseDocuments from './pages/documents/PurchaseDocuments';
 import OperationsDocuments from './pages/documents/OperationsDocuments';
+import StockInventory from './pages/inventory/StockInventory';
 import InvoiceHome from './pages/InvoiceHome';
 import KeyInvoice from './pages/KeyInvoice';
 import CodeMaster from './pages/CodeMaster';
@@ -27,6 +28,8 @@ const pageRouteMap: Record<string, string> = {
   'documents-sales': '/documents/sales',
   'documents-purchase': '/documents/purchase',
   'documents-operations': '/documents/operations',
+  'stock-inventory': '/inventory/stock',
+  'stocks': '/inventory/stock',
   'invoice-home': '/documents/invoice',
   'key-invoice': '/documents/invoice/detail',
   'company-info': '/admin/company-info',
@@ -142,6 +145,10 @@ function ActivationAwareRoutes() {
         element={<RoutedPage component={OperationsDocuments} currentPage="documents-operations" />}
       />
       <Route
+        path="/inventory/stock"
+        element={<RoutedPage component={StockInventory} currentPage="stock-inventory" />}
+      />
+      <Route
         path="/documents/legacy"
         element={<RoutedPage component={Documents} currentPage="documents" useLocationState={true} />}
       />
@@ -202,7 +209,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [accessDenied, setAccessDenied] = useState(false);
 
   const childElement = children as React.ReactElement<any>;
   const requiresAdmin = Boolean(childElement?.props?.requireAdmin);
@@ -217,13 +223,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setIsAuthenticated(true);
           setIsAdmin(role === 'admin');
-          setAccessDenied(requiresAdmin && role !== 'admin');
         }
       } catch (_error) {
         if (mounted) {
           setIsAuthenticated(false);
           setIsAdmin(false);
-          setAccessDenied(false);
         }
       } finally {
         if (mounted) {

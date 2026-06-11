@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ProductSelectionModal from '../ProductSelectionModal';
+import VendorPickerModal from '../VendorPickerModal';
 import documentService, { MainDocumentType } from '../../services/documentService';
 import codeService from '../../services/codeService';
+import purchaseService from '../../services/purchaseService';
 import { printDocumentContent } from '../../utils/printDocument';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 
@@ -16,6 +18,8 @@ const DOCUMENT_TYPE_LABELS: Record<MainDocumentType, string> = {
   deposit_receipt: 'Deposit Receipt',
   purchase_order: 'Purchase Order',
   work_order: 'Work Order',
+  delivery_order: 'Delivery Order',
+  customer_return: 'Customer Return',
 };
 
 const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
@@ -25,6 +29,8 @@ const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
   deposit_receipt: 'Received',
   purchase_order: 'Open',
   work_order: 'Open',
+  delivery_order: 'Draft',
+  customer_return: 'Draft',
 };
 
 const DOCUMENT_NUMBER_PREFIX: Record<MainDocumentType, string> = {
@@ -34,6 +40,8 @@ const DOCUMENT_NUMBER_PREFIX: Record<MainDocumentType, string> = {
   deposit_receipt: 'DR',
   purchase_order: 'PO',
   work_order: 'WO',
+  delivery_order: 'DO',
+  customer_return: 'CR',
 };
 
 const QUOTATION_MARGIN_PRESETS = ['5%', '10%', '15%', '20%', '25%', '30%', '35%', '40%', '50%'];
@@ -59,6 +67,18 @@ const PURCHASE_ORDER_STATUS_OPTIONS = [
   'Partially Received',
   'Completed',
   'Cancelled',
+];
+const DELIVERY_ORDER_STATUS_OPTIONS = [
+  'Draft',
+  'Dispatched',
+  'Delivered',
+  'Cancelled',
+];
+const CUSTOMER_RETURN_STATUS_OPTIONS = [
+  'Draft',
+  'Received',
+  'Processed',
+  'Rejected',
 ];
 const DEPOSIT_RECEIPT_PAYMENT_TYPE_OPTIONS = [
   { value: 'partial', label: 'จ่ายบางส่วน' },
@@ -174,6 +194,12 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   vendorCode: '',
   supplierName: '',
   deliveryDate: '',
+  vendorQuotationNo: '',
+  quotationNumber: '',
+  quotationId: '',
+  refDocNumber: '',
+  scheduledDate: '',
+  assignedTo: '',
 });
 
 const getSubtypeFields = (documentType: MainDocumentType) => {
@@ -211,6 +237,19 @@ const getSubtypeFields = (documentType: MainDocumentType) => {
       { key: 'vendorCode', label: 'Vendor Code', type: 'text' },
       { key: 'supplierName', label: 'Supplier Name', type: 'text' },
       { key: 'deliveryDate', label: 'Delivery Date', type: 'date' },
+      { key: 'vendorQuotationNo', label: 'เลขที่ Quotation (Vendor)', type: 'text' },
+    ];
+  }
+
+  if (documentType === 'delivery_order') {
+    return [
+      { key: 'quotationNumber', label: 'Quotation Number', type: 'text' },
+    ];
+  }
+
+  if (documentType === 'customer_return') {
+    return [
+      { key: 'refDocNumber', label: 'Reference Doc Number', type: 'text' },
     ];
   }
 
@@ -242,17 +281,20 @@ export default function AllDocumentForm({
   const [vendorCodes, setVendorCodes] = useState<any[]>([]);
   const [productCodes, setProductCodes] = useState<any[]>([]);
   const [confirmedQuotationItems, setConfirmedQuotationItems] = useState<any[]>([]);
+  const [approvedPRItems, setApprovedPRItems] = useState<any[]>([]);
+  const [pendingPrConversions, setPendingPrConversions] = useState<Map<string, string[]>>(new Map());
   const [companyInfo, setCompanyInfo] = useState<any | null>(null);
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
+  const [vendorModalOpen, setVendorModalOpen] = useState(false);
 
   useEffect(() => {
     const loadCodeOptions = async () => {
       setIsLoadingCodes(true);
       try {
-        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse, companyResponse, quotationResponse] = await Promise.all([
+        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse, companyResponse, quotationResponse, prResponse] = await Promise.all([
           codeService.getAll('customer'),
           codeService.getAll('destination'),
           codeService.getAll('payment-term'),
@@ -260,6 +302,7 @@ export default function AllDocumentForm({
           codeService.getAll('product'),
           codeService.getAll('company'),
           documentService.getAll('quotation'),
+          documentType === 'purchase_order' ? purchaseService.pr.getAll() : Promise.resolve(null),
         ]);
         setCustomerCodes(customerResponse.data.data || []);
         setDestinationCodes(destinationResponse.data.data || []);
@@ -286,9 +329,27 @@ export default function AllDocumentForm({
               sourceCustomer: quotation?.customerName || quotation?.customer || '',
             }))),
         );
+        setApprovedPRItems(
+          (prResponse?.data?.data || [])
+            .filter((pr: any) => pr?.status === 'APPROVED' && Array.isArray(pr?.items) && pr.items.length > 0)
+            .flatMap((pr: any) => pr.items
+              .filter((item: any) => !item?.convertedToPo)
+              .map((item: any) => ({
+                prItemId: item?.id || '',
+                productCode: item?.productCode || '',
+                productName: item?.description || item?.productCode || '',
+                cost: item?.estimatedPrice != null ? String(item.estimatedPrice) : '',
+                sellingPrice: item?.estimatedPrice != null ? String(item.estimatedPrice) : '',
+                quantity: item?.qty != null ? String(item.qty) : '',
+                unit: item?.unit || '',
+                sourceType: 'pr',
+                sourceLabel: `PR: ${pr.prNumber}`,
+                sourceDocumentNumber: pr.prNumber || '',
+                sourceDocumentId: pr.id || '',
+              })),
+            ),
+        );
         setCodeError(null);
-
-        console.log('Product codes xxx:', productResponse.data.data);
 
       } catch (_error) {
         setCodeError('Failed to load code lists');
@@ -322,6 +383,7 @@ export default function AllDocumentForm({
     }
 
     return [
+      ...approvedPRItems,
       ...confirmedQuotationItems,
       ...productCodes.map((product) => ({
         ...product,
@@ -329,7 +391,7 @@ export default function AllDocumentForm({
         sourceLabel: 'Product Master',
       })),
     ];
-  }, [confirmedQuotationItems, documentType, productCodes]);
+  }, [approvedPRItems, confirmedQuotationItems, documentType, productCodes]);
 
   useEffect(() => {
     if (!initialData) {
@@ -373,6 +435,12 @@ export default function AllDocumentForm({
       vendorCode: initialData.vendorCode || '',
       supplierName: initialData.supplierName || '',
       deliveryDate: initialData.deliveryDate ? String(initialData.deliveryDate).slice(0, 10) : '',
+      vendorQuotationNo: initialData.vendorQuotationNo || '',
+      quotationNumber: initialData.quotationNumber || '',
+      quotationId: initialData.quotationId || '',
+      refDocNumber: initialData.refDocNumber || '',
+      scheduledDate: initialData.scheduledDate ? String(initialData.scheduledDate).slice(0, 10) : '',
+      assignedTo: initialData.assignedTo || '',
     });
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
@@ -520,17 +588,38 @@ export default function AllDocumentForm({
   const handleProductSelect = (product: any) => {
     if (isViewMode || selectedItemIndex === null) return;
 
+    const srcType = normalizeText(product?.sourceType);
+    const isPRSource = documentType === 'purchase_order' && srcType === 'pr';
+
+    if (isPRSource && product.sourceDocumentId && product.prItemId) {
+      setPendingPrConversions((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(String(product.sourceDocumentId)) || [];
+        if (!existing.includes(String(product.prItemId))) {
+          next.set(String(product.sourceDocumentId), [...existing, String(product.prItemId)]);
+        }
+        return next;
+      });
+    }
+
     setItems((prev) => {
       const next = [...prev];
       const isQuotationSource = documentType === 'purchase_order' && normalizeText(product?.sourceType) === 'quotation';
-      const nextQuantity = isQuotationSource ? String(product.quantity ?? next[selectedItemIndex].quantity ?? '') : next[selectedItemIndex].quantity;
+      const isDocumentSource = isPRSource || isQuotationSource;
+
+      const nextQuantity = isDocumentSource
+        ? String(product.quantity ?? next[selectedItemIndex].quantity ?? '')
+        : next[selectedItemIndex].quantity;
+
       const nextCost = product.cost == null || product.cost === '' ? '' : Number(product.cost).toFixed(2);
-      const nextUnitPrice = isQuotationSource
+
+      const nextUnitPrice = isDocumentSource
         ? (product.cost == null || product.cost === '' ? '' : Number(product.cost).toFixed(2))
         : next[selectedItemIndex].sellingPrice;
+
       next[selectedItemIndex] = {
         ...next[selectedItemIndex],
-        id: product.id,
+        id: product.id || next[selectedItemIndex].id,
         productCode: product.productCode || '',
         productName: product.productName || '',
         quantity: nextQuantity,
@@ -540,9 +629,10 @@ export default function AllDocumentForm({
           ? calculateQuotationSalePrice(nextCost, header.margin)
           : nextUnitPrice,
       };
+
       if (documentType === 'quotation') {
         next[selectedItemIndex].totalSellingPrice = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].sellingPrice);
-      } else if (documentType === 'purchase_order' && isQuotationSource) {
+      } else if (documentType === 'purchase_order' && isDocumentSource) {
         next[selectedItemIndex].totalCost = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].cost);
         next[selectedItemIndex].totalSellingPrice = calculateLineTotal(next[selectedItemIndex].quantity, next[selectedItemIndex].sellingPrice);
       }
@@ -1084,6 +1174,19 @@ export default function AllDocumentForm({
     try {
       const response = await documentService.save(documentType, payload);
       const savedRecord = response?.data?.data || payload.header;
+
+      if (documentType === 'purchase_order' && pendingPrConversions.size > 0) {
+        const savedPoNumber = savedRecord.documentNumber || '';
+        if (savedPoNumber) {
+          await Promise.allSettled(
+            [...pendingPrConversions.entries()].map(([prId, itemIds]) =>
+              purchaseService.pr.markItemsConverted(prId, { itemIds, poNumber: savedPoNumber })
+            )
+          );
+        }
+        setPendingPrConversions(new Map());
+      }
+
       await showAppAlert({ title: 'Saved', message: `${typeLabel} saved successfully.`, tone: 'success' });
       setHeader((prev) => ({
         ...prev,
@@ -1104,15 +1207,25 @@ export default function AllDocumentForm({
         <div className={`rounded-t-2xl border-b px-6 py-4 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${documentType === 'quotation' ? (darkMode ? 'text-blue-300' : 'text-blue-700') : (darkMode ? 'text-gray-400' : 'text-gray-500')}`}>
-                {documentType === 'quotation' ? 'Sales Quotation' : 'All Document Form'}
+              <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${
+                documentType === 'quotation' ? (darkMode ? 'text-blue-300' : 'text-blue-700')
+                : documentType === 'purchase_order' ? (darkMode ? 'text-orange-300' : 'text-orange-600')
+                : (darkMode ? 'text-gray-400' : 'text-gray-500')
+              }`}>
+                {documentType === 'quotation' ? 'Sales Quotation'
+                  : documentType === 'purchase_order' ? 'Purchase Order'
+                  : 'All Document Form'}
               </p>
               <h3 className={`mt-1 text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                {documentType === 'quotation' ? 'Quotation Details' : `${typeLabel} Details`}
+                {documentType === 'quotation' ? 'Quotation Details'
+                  : documentType === 'purchase_order' ? (mode === 'edit' ? `แก้ไข ${header.documentNumber || ''}` : 'สร้างใบสั่งซื้อ')
+                  : `${typeLabel} Details`}
               </h3>
               <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                 {documentType === 'quotation'
                   ? 'เอกสารเสนอราคาแบบมืออาชีพสำหรับตรวจสอบรายละเอียดลูกค้า ราคา และเงื่อนไขการขาย'
+                  : documentType === 'purchase_order'
+                  ? 'กรอกรายละเอียดให้ครบก่อนบันทึกและส่งใบสั่งซื้อให้ Supplier'
                   : 'จัดการข้อมูลเอกสารรวมโดยแยกประเภทด้วย DocumentType'}
               </p>
             </div>
@@ -1127,7 +1240,7 @@ export default function AllDocumentForm({
 
           <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
             {documentType === 'quotation' ? (
-              <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/70 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50'}`}>
+              <div className={`overflow-hidden rounded-2xl border mb-6 ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/70 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50'}`}>
                 <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
                     <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>Quotation Overview</p>
@@ -1160,6 +1273,46 @@ export default function AllDocumentForm({
                     <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-blue-100 bg-white/80'}`}>
                       <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Grand Total</p>
                       <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatDisplayAmount(total)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : documentType === 'purchase_order' ? (
+              <div className={`overflow-hidden rounded-2xl border mb-6 ${darkMode ? 'border-orange-500/30 bg-gradient-to-r from-slate-900 via-orange-950/40 to-slate-900' : 'border-orange-200 bg-gradient-to-r from-orange-50 via-white to-amber-50'}`}>
+                <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${darkMode ? 'text-orange-300' : 'text-orange-700'}`}>PO Overview</p>
+                    <div>
+                      <h4 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>PURCHASE ORDER</h4>
+                      <p className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>กรอกรายละเอียดให้ครบก่อนบันทึกและส่งใบสั่งซื้อให้ Supplier</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-white/10 text-white' : 'bg-white text-orange-700 border border-orange-200'}`}>
+                        {mode === 'edit' ? `Doc: ${header.documentNumber || ''}` : 'New PO — Auto Number'}
+                      </span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-gray-500/15 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                        Status: {header.status || 'Open'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 lg:min-w-[280px]">
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-orange-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-orange-200' : 'text-orange-700'}`}>Vendor</p>
+                      <p className={`mt-2 text-sm font-semibold truncate ${darkMode ? 'text-white' : 'text-gray-900'}`}>{partyDisplay || '-'}</p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-orange-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-orange-200' : 'text-orange-700'}`}>Delivery Date</p>
+                      <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {header.deliveryDate ? new Date(header.deliveryDate).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+                      </p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-orange-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-orange-200' : 'text-orange-700'}`}>รายการ</p>
+                      <p className={`mt-2 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{items.length} รายการ</p>
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-orange-500/30 bg-orange-950/40' : 'border-orange-200 bg-orange-50'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-orange-300' : 'text-orange-700'}`}>Grand Total</p>
+                      <p className={`mt-2 text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatDisplayAmount(total)}</p>
                     </div>
                   </div>
                 </div>
@@ -1212,14 +1365,24 @@ export default function AllDocumentForm({
                         value={partyDisplay}
                       />
                     ) : (
-                      <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
-                        value={header.vendorCode} onChange={(e) => handleHeaderChange('vendorCode', e.target.value)}>
-                        <option value="">{isLoadingCodes ? 'Loading vendors...' : 'Select vendor code'}</option>
-                        {vendorCodes.map((vendor) =>
-                          <option key={vendor.vendorCode}
-                            value={vendor.vendorCode}>{vendor.vendorCode} - {vendor.name || vendor.vendorCode || 'Unnamed'}
-                          </option>)}
-                      </select>
+                      <div className="flex gap-2">
+                        <div className="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 min-h-[38px] flex items-center">
+                          {header.vendorCode ? (
+                            <span>
+                              <span className="font-semibold text-blue-700">{header.vendorCode}</span>
+                              {' — '}
+                              <span>{vendorCodes.find(v => v.vendorCode === header.vendorCode)?.name || header.vendorCode}</span>
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">{isLoadingCodes ? 'Loading vendors...' : 'Select vendor code'}</span>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => setVendorModalOpen(true)}
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition"
+                          title="เลือก Vendor">
+                          ...
+                        </button>
+                      </div>
                     )
                   ) : isViewMode ? (
                     <input
@@ -1257,6 +1420,26 @@ export default function AllDocumentForm({
                     >
                       {PURCHASE_ORDER_STATUS_OPTIONS.map((statusOption) => (
                         <option key={statusOption} value={statusOption}>{statusOption}</option>
+                      ))}
+                    </select>
+                  ) : documentType === 'delivery_order' ? (
+                    <select
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={header.status}
+                      onChange={(e) => handleHeaderChange('status', e.target.value)}
+                    >
+                      {DELIVERY_ORDER_STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  ) : documentType === 'customer_return' ? (
+                    <select
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={header.status}
+                      onChange={(e) => handleHeaderChange('status', e.target.value)}
+                    >
+                      {CUSTOMER_RETURN_STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
                   ) : (
@@ -1322,7 +1505,9 @@ export default function AllDocumentForm({
                 ) : null}
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {subtypeFields.map((field) => (
+              {subtypeFields
+                .filter((field) => !(field.key === 'supplierName' && documentType === 'purchase_order'))
+                .map((field) => (
                 <label key={field.key} className="space-y-2">
                   <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     {field.label}
@@ -1357,16 +1542,17 @@ export default function AllDocumentForm({
                       ))}
                     </select>
                   ) : field.key === 'vendorCode' && documentType === 'purchase_order' ? (
-                    <select
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
-                      value={(header as any)[field.key]}
-                      onChange={(e) => handleHeaderChange(field.key, e.target.value)}
-                    >
-                      <option value="">{isLoadingCodes ? 'Loading vendors...' : 'Select vendor code'}</option>
-                      {vendorCodes.map((vendor) => (
-                        <option key={vendor.vendorCode} value={vendor.vendorCode}>{vendor.vendorCode} - {vendor.name || 'Unnamed Vendor'}</option>
-                      ))}
-                    </select>
+                    <div className="pt-1">
+                      {header.vendorCode ? (
+                        <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                          <span className={`${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{header.vendorCode}</span>
+                          {'   '}
+                          {vendorCodes.find(v => v.vendorCode === header.vendorCode)?.name || ''}
+                        </p>
+                      ) : (
+                        <p className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>ยังไม่ได้เลือก Vendor</p>
+                      )}
+                    </div>
                   ) : (
                     <input
                       type={field.type}
@@ -1604,6 +1790,16 @@ export default function AllDocumentForm({
         }}
         darkMode={darkMode}
         isLoading={isLoadingCodes}
+      />
+
+      <VendorPickerModal
+        isOpen={vendorModalOpen}
+        vendors={vendorCodes}
+        selectedCode={header.vendorCode || ''}
+        onSelect={(v) => handleHeaderChange('vendorCode', v.vendorCode)}
+        onClear={() => handleHeaderChange('vendorCode', '')}
+        onClose={() => setVendorModalOpen(false)}
+        darkMode={darkMode}
       />
     </>
   );

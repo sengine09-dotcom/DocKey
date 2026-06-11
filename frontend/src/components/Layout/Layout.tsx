@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import documentService from '../../services/documentService';
 import codeService from '../../services/codeService';
-import { showAppAlert, showAppConfirm } from '../../services/dialogService';
+import { showAppAlert } from '../../services/dialogService';
 import { formatDate } from '../../utils/date';
 
 const TOKEN_EXPIRY_CACHE_PREFIX = 'doc-key-token-expiry-v3';
@@ -224,12 +224,13 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   }, []);
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/' },
-    { id: 'documents', label: 'Documents', icon: '📄', href: '/documents', hasSubmenu: true },
-    { id: 'codes', label: 'Codes', icon: '🗂️', href: '/codes', hasSubmenu: true },
-    { id: 'reports', label: 'Reports', icon: '📈', href: '/reports' },
-    { id: 'upload', label: 'Upload', icon: '⬆️', href: '/upload' },
-    { id: 'settings', label: 'Settings', icon: '⚙️', href: '/settings' },
+    { id: 'dashboard', label: 'Dashboard', shortLabel: 'Dash', icon: '📊', href: '/' },
+    { id: 'documents', label: 'Documents', shortLabel: 'Docs', icon: '📄', href: '/documents', hasSubmenu: true },
+    { id: 'stocks', label: 'Stocks', shortLabel: 'Stocks', icon: '🏬', href: '/inventory/stock' },
+    { id: 'codes', label: 'Codes', shortLabel: 'Codes', icon: '🗂️', href: '/codes', hasSubmenu: true },
+    { id: 'reports', label: 'Reports', shortLabel: 'Report', icon: '📈', href: '/reports' },
+    { id: 'upload', label: 'Upload', shortLabel: 'Upload', icon: '⬆️', href: '/upload' },
+    { id: 'settings', label: 'Settings', shortLabel: 'Config', icon: '⚙️', href: '/settings' },
   ];
 
   const documentSubmenu = [
@@ -275,6 +276,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     currentPage === 'documents-operations' ||
     currentPage === 'invoice-home' ||
     currentPage === 'key-invoice';
+
+  const isStockSectionActive = currentPage === 'stock-inventory';
 
   const isCodeSectionActive =
     currentPage === 'codes' ||
@@ -349,6 +352,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('documents-purchase');
     } else if (id === 'documents-operations') {
       onNavigate('documents-operations');
+    } else if (id === 'stocks' || id === 'stock-inventory') {
+      onNavigate('stock-inventory');
     } else if (id === 'customer-code') {
       onNavigate('customer-code');
     } else if (id === 'product-code') {
@@ -567,14 +572,19 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                   e.preventDefault();
                   handleMenuClick(item.id);
                 }}
-                className={`flex items-center gap-4 px-4 py-3 rounded-lg transition-all duration-200 group ${getMenuItemClasses(currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive))}`}
+                className={`${sidebarOpen ? 'flex items-center gap-4 px-4 py-3' : 'flex flex-col items-center justify-center py-3 px-1'} rounded-lg transition-all duration-200 group w-full ${getMenuItemClasses(currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'stocks' && isStockSectionActive) || (item.id === 'codes' && isCodeSectionActive))}`}
                 title={!sidebarOpen ? item.label : ''}
               >
-                <span className="text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
+                <span className={`${sidebarOpen ? 'text-2xl flex-shrink-0' : 'text-xl'} group-hover:scale-110 transition-transform`}>
                   {item.icon}
                 </span>
                 {sidebarOpen && (
                   <span className="font-medium whitespace-nowrap text-sm">{item.label}</span>
+                )}
+                {!sidebarOpen && (
+                  <span className="text-[9px] font-semibold mt-0.5 leading-tight text-center truncate w-full opacity-80">
+                    {item.shortLabel}
+                  </span>
                 )}
                 {sidebarOpen && (
                   <div className="ml-auto flex items-center gap-1.5">
@@ -613,7 +623,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                       </button>
                     )}
                     {/* Active page indicator bar */}
-                    {(currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'codes' && isCodeSectionActive)) && (
+                    {(currentPage === item.id || (item.id === 'documents' && isDocumentSectionActive) || (item.id === 'stocks' && isStockSectionActive) || (item.id === 'codes' && isCodeSectionActive)) && (
                       <div className="w-1 h-6 bg-white rounded-full"></div>
                     )}
                   </div>
@@ -643,11 +653,14 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
               darkMode
                 ? 'bg-gray-700 hover:bg-gray-600 text-yellow-400'
                 : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
-            }`}
+            } ${!sidebarOpen ? 'flex-col' : ''}`}
             title={darkMode ? 'Light Mode' : 'Dark Mode'}
           >
             <span className="text-lg">{darkMode ? '☀️' : '🌙'}</span>
-            {sidebarOpen && <span className="text-xs">Theme</span>}
+            {sidebarOpen
+              ? <span className="text-xs">Theme</span>
+              : <span className="text-[9px] font-semibold opacity-80">{darkMode ? 'Light' : 'Dark'}</span>
+            }
           </button>
 
           {/* Collapse Button */}
@@ -657,11 +670,14 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
               darkMode
                 ? 'bg-gray-700 hover:bg-gray-600 text-white hover:shadow-lg'
                 : 'bg-gray-200 hover:bg-gray-300 text-gray-900 hover:shadow-lg'
-            }`}
+            } ${!sidebarOpen ? 'flex-col' : ''}`}
             title={sidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
           >
             <span className="text-lg">{sidebarOpen ? '◀️' : '▶️'}</span>
-            {sidebarOpen && <span className="text-xs">Collapse</span>}
+            {sidebarOpen
+              ? <span className="text-xs">Collapse</span>
+              : <span className="text-[9px] font-semibold opacity-80">Menu</span>
+            }
           </button>
         </div>
       </div>
@@ -683,6 +699,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                 if (!label && currentPage === 'destination-code') label = '📍 Destination Codes';
                 if (!label && currentPage === 'payment-term-code') label = '💳 Payment Term Codes';
                 if (!label && currentPage === 'end-user-code') label = '👤 End User Codes';
+                if (!label && currentPage === 'stock-inventory') label = '🏬 คลังสินค้า';
                 if (!label && currentPage === 'user-management') label = '👥 User Management';
                 if (!label && currentPage === 'token-status') label = '🪪 Token Status';
                 return label || 'Dashboard';

@@ -10,6 +10,26 @@ import { markUserDisconnected, markUserHeartbeat } from '../lib/userPresence';
 
 const router = express.Router();
 
+// Cache vendor runtime status for 5 minutes to avoid spamming a down vendor server
+const VENDOR_CACHE_TTL_MS = 5 * 60 * 1000;
+let vendorStatusCache: { result: { active: boolean; reason?: string } | null; error: boolean; cachedAt: number } | null = null;
+
+const getCachedVendorStatus = async (token: string) => {
+  const now = Date.now();
+  if (vendorStatusCache && now - vendorStatusCache.cachedAt < VENDOR_CACHE_TTL_MS) {
+    if (vendorStatusCache.error) throw new Error('vendor-unreachable (cached)');
+    return vendorStatusCache.result!;
+  }
+  try {
+    const result = await getVendorRuntimeTokenStatus(token);
+    vendorStatusCache = { result, error: false, cachedAt: now };
+    return result;
+  } catch (err) {
+    vendorStatusCache = { result: null, error: true, cachedAt: now };
+    throw err;
+  }
+};
+
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-dockey-2026';
 const TOKEN_COOKIE_NAME = 'auth_token';
 type AuthTokenPayload = { id: string; cid?: string | null };
@@ -247,19 +267,21 @@ const getDocKeyActivationState = async () => {
   }
 
   try {
-    const vendorStatus = await getVendorRuntimeTokenStatus(localActivation.adminToken);
+    const vendorStatus = await getCachedVendorStatus(localActivation.adminToken);
     if (!vendorStatus.active) {
       return { activated: false, reason: vendorStatus.reason || 'vendor-token-inactive', token: localActivation.adminToken };
     }
-  } catch (vendorStatusError) {
-    console.warn('Vendor runtime status unavailable, allowing customer access with local activation only.', vendorStatusError);
+  } catch {
+    // Vendor server unreachable — fall back to local activation silently (logged once per cache window)
+    if (!vendorStatusCache || vendorStatusCache.cachedAt === Date.now()) {
+      console.warn('[DocKey] Vendor runtime unreachable — local activation mode active.');
+    }
     return { activated: true, reason: null, token: localActivation.adminToken };
   }
 
   try {
     await sendVendorRuntimeHeartbeat(localActivation.adminToken);
-  } catch (_heartbeatError) {
-    console.warn('Vendor heartbeat unavailable, keeping customer access active until vendor returns.');
+  } catch {
     return { activated: true, reason: null, token: localActivation.adminToken };
   }
 

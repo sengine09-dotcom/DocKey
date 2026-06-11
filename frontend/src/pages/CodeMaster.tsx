@@ -110,6 +110,7 @@ const pageConfigs: Record<string, any> = {
     columns: [
       { key: 'vendorCode', label: 'Code' },
       { key: 'name', label: 'Vendor Name' },
+      { key: 'note', label: 'Note / สินค้าที่ขาย', type: 'truncate' },
       { key: 'contactName', label: 'Contact' },
       { key: 'phone', label: 'Phone' },
       { key: 'isActive', label: 'Status', type: 'booleanStatus' },
@@ -870,6 +871,15 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isActive ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700') : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700')}`}>
                             {isActive ? 'Active' : 'Inactive'}
                           </span>
+                        </div>
+                      );
+                    }
+
+                    if (column.type === 'truncate') {
+                      const text = value ? String(value) : '';
+                      return (
+                        <div key={column.key} className={`truncate max-w-xs ${darkMode ? 'text-gray-300' : 'text-gray-700'}`} title={text}>
+                          {text || <span className={darkMode ? 'text-gray-600' : 'text-gray-400'}>-</span>}
                         </div>
                       );
                     }

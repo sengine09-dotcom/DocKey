@@ -1,6 +1,6 @@
 import documentService, { MainDocumentType } from '../../services/documentService';
 
-export const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'deposit_receipt', 'purchase_order', 'work_order'];
+export const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'deposit_receipt', 'purchase_order', 'work_order', 'delivery_order', 'customer_return'];
 
 export const QUOTATION_STATUS_OPTIONS = ['All', 'Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Confirmed', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
 
@@ -17,6 +17,8 @@ export const documentTypeConfigs: Record<MainDocumentType, { icon: string; label
   receipt:         { icon: '💵', label: 'Receipt',         labelTh: 'ใบเสร็จรับเงิน', accent: 'amber',  createLabel: 'สร้างใบเสร็จ' },
   purchase_order:  { icon: '📦', label: 'Purchase Order',  labelTh: 'ใบสั่งซื้อ',    accent: 'violet', createLabel: 'สร้างใบสั่งซื้อ' },
   work_order:      { icon: '🛠️', label: 'Work Order',      labelTh: 'ใบสั่งงาน',     accent: 'rose',   createLabel: 'สร้างใบสั่งงาน' },
+  delivery_order:  { icon: '🚚', label: 'Delivery Order',  labelTh: 'ใบส่งสินค้า',   accent: 'orange', createLabel: 'สร้างใบส่งสินค้า' },
+  customer_return: { icon: '↩️', label: 'Customer Return', labelTh: 'ใบคืนสินค้า',   accent: 'pink',   createLabel: 'สร้างใบคืนสินค้า' },
 };
 
 export const accentClasses: Record<string, { tab: string; activeTab: string; btn: string; badge: string }> = {
@@ -29,7 +31,7 @@ export const accentClasses: Record<string, { tab: string; activeTab: string; btn
 };
 
 export const createEmptyCollections = (): DocumentsByType => ({
-  quotation: [], invoice: [], receipt: [], deposit_receipt: [], purchase_order: [], work_order: [],
+  quotation: [], invoice: [], receipt: [], deposit_receipt: [], purchase_order: [], work_order: [], delivery_order: [], customer_return: [],
 });
 
 export const getRecordKey = (record: any) => record?.id || record?.documentId || record?.documentNumber;
