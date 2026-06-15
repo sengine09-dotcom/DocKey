@@ -4,6 +4,7 @@ import documentService from '../services/documentService';
 import dashboardService from '../services/dashboardService';
 import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
+import { getQuotationStatusStyle } from './documents/documentShared';
 
 export default function Dashboard({ onNavigate = () => {} }: any) {
   const [documents, setDocuments] = useState<any[]>([]);
@@ -418,12 +419,8 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                                 ฿{profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                               <td className="px-6 py-3 text-center">
-                                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                                  quot.status === 'Won' || quot.status === 'Converted' ? 'bg-green-500/20 text-green-600' :
-                                  quot.status === 'Lost' || quot.status === 'Rejected' ? 'bg-red-500/20 text-red-600' :
-                                  quot.status === 'Sent' || quot.status === 'Negotiating' ? 'bg-blue-500/20 text-blue-600' :
-                                  'bg-gray-500/20 text-gray-600'
-                                }`}>
+                                <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full"
+                                  style={getQuotationStatusStyle(quot.status || 'Draft')}>
                                   {quot.status || 'Draft'}
                                 </span>
                               </td>

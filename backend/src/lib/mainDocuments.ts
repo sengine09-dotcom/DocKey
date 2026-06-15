@@ -146,7 +146,8 @@ const buildStatusColor = (status: string) => {
   const normalized = String(status || '').toLowerCase();
   if (['paid', 'printed', 'received', 'completed', 'confirmed', 'approved', 'won', 'converted'].includes(normalized)) return 'green';
   if (['overdue', 'cancelled', 'rejected', 'expired', 'lost'].includes(normalized)) return 'red';
-  if (['sent', 'open', 'scheduled', 'negotiating', 'follow up', 'waiting customer'].includes(normalized)) return 'blue';
+  if (['sent', 'open', 'scheduled'].includes(normalized)) return 'blue';
+  if (['pending approval'].includes(normalized)) return 'amber';
   return 'yellow';
 };
 
@@ -166,6 +167,7 @@ const buildInvoiceStatusOnline = (status: string | null | undefined) => {
 const mapDocumentItem = (item: any, productNameMap: Record<string, string> = {}) => ({
   lineNo: item.lineNo,
   productCode: item.productCode || '',
+  vendorCode: item.vendorCode || '',
   productName: item.product?.productName || productNameMap[String(item.productCode || '').trim()] || '',
   quantity: toNumber(item.quantity).toFixed(2),
   margin: toNumber(item.margin).toFixed(2),
@@ -524,16 +526,47 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
   });
 };
 
-export const listDocumentsByType = async (typeInput: string, companyId: string) => {
+interface ListOptions {
+  limit?: number;
+  search?: string;
+  customer?: string;
+  vendorCode?: string;
+}
+
+export const listDocumentsByType = async (typeInput: string, companyId: string, options: ListOptions = {}) => {
   const type = parseDocumentType(typeInput);
   if (!type) {
     throw new Error('Invalid document type');
   }
 
+  const { limit, search, customer, vendorCode } = options;
+
+  const where: any = { companyId, documentType: getPrismaDocumentType(type) };
+
+  if (customer) {
+    where.customerId = customer;
+  }
+
+  if (vendorCode) {
+    where.items = { some: { vendorCode } };
+  }
+
+  if (search) {
+    const likeSearch = { contains: search };
+    where.OR = [
+      { documentNumber: likeSearch },
+      { title: likeSearch },
+      { referenceNo: likeSearch },
+      { remark: likeSearch },
+      { customerId: likeSearch },
+    ];
+  }
+
   const documents = await prisma.document.findMany({
-    where: { companyId, documentType: getPrismaDocumentType(type) },
+    where,
     include: documentInclude,
     orderBy: [{ documentDate: 'desc' }, { updatedAt: 'desc' }],
+    ...(limit ? { take: limit } : {}),
   });
   const customerNameMap = await buildCustomerNameMap(documents, companyId);
   const productNameMap = await buildProductNameMap(documents, companyId);
@@ -775,6 +808,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         productCode: existingProductCodeSet.has(String(parseString(item.productCode) || ''))
           ? parseString(item.productCode)
           : null,
+        vendorCode: type === 'quotation' ? parseString(item.vendorCode) : null,
         cost: parseNullableNumber(item.cost),
         quantity: toNumber(item.quantity),
         margin: parseNullableNumber(item.margin),

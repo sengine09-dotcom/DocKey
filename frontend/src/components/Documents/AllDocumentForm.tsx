@@ -6,6 +6,7 @@ import codeService from '../../services/codeService';
 import purchaseService from '../../services/purchaseService';
 import { printDocumentContent } from '../../utils/printDocument';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
+import { getQuotationStatusStyle } from '../../pages/documents/documentShared';
 
 const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
 
@@ -47,17 +48,10 @@ const DOCUMENT_NUMBER_PREFIX: Record<MainDocumentType, string> = {
 const QUOTATION_MARGIN_PRESETS = ['5%', '10%', '15%', '20%', '25%', '30%', '35%', '40%', '50%'];
 const QUOTATION_STATUS_OPTIONS = [
   'Draft',
-  'Sent',
-  'Waiting Customer',
-  'Follow Up',
-  'Negotiating',
-  'Confirmed',
+  'Pending Approval',
   'Approved',
-  'Won',
-  'Rejected',
-  'Lost',
-  'Expired',
-  'Converted'
+  'Sent',
+  'Confirmed',
 ];
 const PURCHASE_ORDER_STATUS_OPTIONS = [
   'Open',
@@ -116,12 +110,13 @@ const createEmptyItem = () => (
     model: '',
     price: '',
     cost: '',
-    quantity: '',    
+    quantity: '',
     margin: '',
     sellingPrice: '',
     totalCost: '',
     totalSellingPrice: '',
     unitID: '',
+    vendorCode: '',
   }
 );
 
@@ -265,12 +260,20 @@ export default function AllDocumentForm({
   initialData = null,
   documentType,
   suggestedDocumentNumber,
+  preloadedCustomers,
+  preloadedVendors,
+  preloadedPaymentTerms,
+  preloadedQuotations,
 }: {
   darkMode: boolean;
   onNavigate?: (page: string, state?: unknown) => void;
   initialData?: any;
   documentType: MainDocumentType;
   suggestedDocumentNumber?: string;
+  preloadedCustomers?: any[];
+  preloadedVendors?: any[];
+  preloadedPaymentTerms?: any[];
+  preloadedQuotations?: any[];
 }) {
   const [mode, setMode] = useState('create');
   const [header, setHeader] = useState(getEmptyHeader(documentType));
@@ -290,45 +293,62 @@ export default function AllDocumentForm({
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
 
+  const buildConfirmedQuotationItems = (quotations: any[]) =>
+    quotations
+      .filter((q: any) => normalizeText(q?.status) === 'confirmed' && Array.isArray(q?.items) && q.items.length > 0)
+      .flatMap((q: any, qi: number) => q.items.map((item: any, ii: number) => ({
+        id: item?.id || `${q?.documentId || q?.id || qi}-${ii}`,
+        productCode: item?.productCode || '',
+        productName: item?.productName || '',
+        cost: item?.cost ?? '',
+        sellingPrice: item?.sellingPrice ?? '',
+        quantity: item?.quantity ?? '',
+        totalCost: item?.totalCost ?? '',
+        totalSellingPrice: item?.totalSellingPrice ?? '',
+        sourceType: 'quotation',
+        sourceLabel: q?.documentNumber ? `Quotation ${q.documentNumber}` : 'Confirmed Quotation',
+        sourceDocumentNumber: q?.documentNumber || '',
+        sourceDocumentId: q?.documentId || q?.id || '',
+        sourceCustomer: q?.customerName || q?.customer || '',
+      })));
+
   useEffect(() => {
+    if (preloadedCustomers?.length) setCustomerCodes(preloadedCustomers);
+    if (preloadedVendors?.length) setVendorCodes(preloadedVendors);
+    if (preloadedPaymentTerms?.length) setPaymentTermCodes(preloadedPaymentTerms);
+    if (preloadedQuotations?.length) setConfirmedQuotationItems(buildConfirmedQuotationItems(preloadedQuotations));
+
     const loadCodeOptions = async () => {
       setIsLoadingCodes(true);
       try {
-        const [customerResponse, destinationResponse, paymentTermResponse, vendorResponse, productResponse, companyResponse, quotationResponse, prResponse] = await Promise.all([
-          codeService.getAll('customer'),
+        const needsQuotation = documentType === 'purchase_order' && !preloadedQuotations;
+        const [
+          customerResponse,
+          destinationResponse,
+          paymentTermResponse,
+          vendorResponse,
+          productResponse,
+          companyResponse,
+          quotationResponse,
+          prResponse,
+        ] = await Promise.all([
+          preloadedCustomers?.length ? Promise.resolve(null) : codeService.getAll('customer'),
           codeService.getAll('destination'),
-          codeService.getAll('payment-term'),
-          codeService.getAll('vendor'),
+          preloadedPaymentTerms?.length ? Promise.resolve(null) : codeService.getAll('payment-term'),
+          preloadedVendors?.length ? Promise.resolve(null) : codeService.getAll('vendor'),
           codeService.getAll('product'),
           codeService.getAll('company'),
-          documentService.getAll('quotation'),
+          needsQuotation ? documentService.getAll('quotation') : Promise.resolve(null),
           documentType === 'purchase_order' ? purchaseService.pr.getAll() : Promise.resolve(null),
         ]);
-        setCustomerCodes(customerResponse.data.data || []);
+
+        if (customerResponse) setCustomerCodes(customerResponse.data.data || []);
         setDestinationCodes(destinationResponse.data.data || []);
-        setPaymentTermCodes(paymentTermResponse.data.data || []);
-        setVendorCodes(vendorResponse.data.data || []);
+        if (paymentTermResponse) setPaymentTermCodes(paymentTermResponse.data.data || []);
+        if (vendorResponse) setVendorCodes(vendorResponse.data.data || []);
         setProductCodes(productResponse.data.data || []);
-        setCompanyInfo((companyResponse.data.data || []).find((company: any) => company?.isActive !== false) || companyResponse.data.data?.[0] || null);
-        setConfirmedQuotationItems(
-          (quotationResponse.data.data || [])
-            .filter((quotation: any) => normalizeText(quotation?.status) === 'confirmed' && Array.isArray(quotation?.items) && quotation.items.length > 0)
-            .flatMap((quotation: any, quotationIndex: number) => quotation.items.map((item: any, itemIndex: number) => ({
-              id: item?.id || `${quotation?.documentId || quotation?.id || quotationIndex}-${itemIndex}`,
-              productCode: item?.productCode || '',
-              productName: item?.productName || '',
-              cost: item?.cost ?? '',
-              sellingPrice: item?.sellingPrice ?? '',
-              quantity: item?.quantity ?? '',
-              totalCost: item?.totalCost ?? '',
-              totalSellingPrice: item?.totalSellingPrice ?? '',
-              sourceType: 'quotation',
-              sourceLabel: quotation?.documentNumber ? `Quotation ${quotation.documentNumber}` : 'Confirmed Quotation',
-              sourceDocumentNumber: quotation?.documentNumber || '',
-              sourceDocumentId: quotation?.documentId || quotation?.id || '',
-              sourceCustomer: quotation?.customerName || quotation?.customer || '',
-            }))),
-        );
+        setCompanyInfo((companyResponse.data.data || []).find((c: any) => c?.isActive !== false) || companyResponse.data.data?.[0] || null);
+        if (quotationResponse) setConfirmedQuotationItems(buildConfirmedQuotationItems(quotationResponse.data.data || []));
         setApprovedPRItems(
           (prResponse?.data?.data || [])
             .filter((pr: any) => pr?.status === 'APPROVED' && Array.isArray(pr?.items) && pr.items.length > 0)
@@ -350,7 +370,6 @@ export default function AllDocumentForm({
             ),
         );
         setCodeError(null);
-
       } catch (_error) {
         setCodeError('Failed to load code lists');
       } finally {
@@ -359,6 +378,7 @@ export default function AllDocumentForm({
     };
 
     void loadCodeOptions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -455,6 +475,7 @@ export default function AllDocumentForm({
         totalCost: item.totalCost || '',
         totalSellingPrice: item.totalSellingPrice || '',
         unitID: item.unitID || '',
+        vendorCode: item.vendorCode || '',
       })));
     } else {
       setItems([createEmptyItem()]);
@@ -462,6 +483,11 @@ export default function AllDocumentForm({
   }, [documentType, initialData, suggestedDocumentNumber]);
 
   const isViewMode = mode === 'view';
+  const isPendingApproval = documentType === 'quotation' && header.status === 'Pending Approval';
+  const isApprovedStatus  = documentType === 'quotation' && header.status === 'Approved';
+  const isSentStatus      = documentType === 'quotation' && header.status === 'Sent';
+  const isConfirmedStatus = documentType === 'quotation' && header.status === 'Confirmed';
+  const isItemLocked      = isApprovedStatus || isSentStatus || isConfirmedStatus;
   const typeLabel = DOCUMENT_TYPE_LABELS[documentType];
   const subtypeFields = useMemo(() => getSubtypeFields(documentType), [documentType]);
   const taxRate = Number(header.taxRate || 0);
@@ -473,12 +499,35 @@ export default function AllDocumentForm({
   const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const printItems = items.filter((item) => item.productCode || item.productName || item.quantity || item.cost || item.totalCost);
 
+  const getVendorsForItem = (productCode: string) => {
+    const product = productCodes.find((p) =>
+      String(p.productCode || p.productId || p.id || '').trim() === String(productCode || '').trim()
+    );
+    if (!product) return vendorCodes;
+    const cat = String(product.category || product.type || '').trim();
+    const brand = String(product.brand || product.marking || '').trim();
+    if (!cat && !brand) return vendorCodes;
+    const filtered = vendorCodes.filter((v) => {
+      const vCats: string[] = Array.isArray(v.categories) ? v.categories : [];
+      const vBrands: string[] = Array.isArray(v.brands) ? v.brands : [];
+      return (cat && vCats.includes(cat)) || (brand && vBrands.includes(brand));
+    });
+    return filtered.length > 0 ? filtered : vendorCodes;
+  };
+
   const customerDisplay = (() => {
     const customerCode = String(header.customer || '').trim();
     if (!customerCode) return '';
     const selectedCustomer = customerCodes.find((customer) => customer.customerCode === customerCode);
     if (!selectedCustomer) return customerCode;
     return selectedCustomer.customerName || selectedCustomer.shortName || selectedCustomer.customerCode || customerCode;
+  })();
+
+  const customerAddress = (() => {
+    const customerCode = String(header.customer || '').trim();
+    if (!customerCode) return '';
+    const selectedCustomer = customerCodes.find((customer) => customer.customerCode === customerCode);
+    return selectedCustomer?.address || '';
   })();
 
   const vendorDisplay = (() => {
@@ -549,6 +598,21 @@ export default function AllDocumentForm({
 
       return { ...prev, [field]: value };
     });
+
+    if (documentType === 'quotation' && field === 'margin' && !isItemLocked) {
+      setItems((prev) =>
+        prev.map((item) => {
+          if (!item.cost && !item.sellingPrice) return item;
+          const newSellingPrice = calculateQuotationSalePrice(item.cost, value);
+          return {
+            ...item,
+            margin: value,
+            sellingPrice: newSellingPrice,
+            totalSellingPrice: calculateLineTotal(item.quantity, newSellingPrice),
+          };
+        }),
+      );
+    }
   };
 
   useEffect(() => {
@@ -565,14 +629,40 @@ export default function AllDocumentForm({
     }));
   }, [documentType, header.paymentAmount, header.paymentType, isViewMode, total]);
 
+  const handleRoundSellingPrice = (index: number, direction: 'up' | 'down') => {
+    if (isViewMode || isItemLocked) return;
+    setItems((prev) => {
+      const next = [...prev];
+      const item = { ...next[index] };
+      const raw = parseNumberInput(item.sellingPrice);
+      if (!raw) return prev;
+      const isInteger = Number.isInteger(raw);
+      const newSalePrice = direction === 'up'
+        ? (isInteger ? raw + 1 : Math.ceil(raw))
+        : (isInteger ? Math.max(0, raw - 1) : Math.floor(raw));
+      const newSalePriceStr = String(newSalePrice);
+      next[index] = {
+        ...item,
+        sellingPrice: newSalePriceStr,
+        totalSellingPrice: calculateLineTotal(item.quantity, newSalePriceStr) || String(newSalePrice),
+      };
+      return next;
+    });
+  };
+
   const handleItemChange = (index: number, field: string, value: string) => {
     if (isViewMode) return;
     setItems((prev) => {
       const next = [...prev];
       const updated = { ...next[index], [field]: value };
       if (documentType === 'quotation') {
-        if (field === 'cost' || field === 'quantity' || field === 'margin') {
-          updated.sellingPrice = calculateQuotationSalePrice(updated.cost, updated.margin);
+        if (field === 'cost' || field === 'margin') {
+          if (!isItemLocked) {
+            updated.sellingPrice = calculateQuotationSalePrice(updated.cost, updated.margin);
+          }
+          updated.totalCost = calculateLineTotal(updated.quantity, updated.cost);
+          updated.totalSellingPrice = calculateLineTotal(updated.quantity, updated.sellingPrice);
+        } else if (field === 'quantity' || field === 'sellingPrice') {
           updated.totalCost = calculateLineTotal(updated.quantity, updated.cost);
           updated.totalSellingPrice = calculateLineTotal(updated.quantity, updated.sellingPrice);
         }
@@ -975,8 +1065,8 @@ export default function AllDocumentForm({
                     <div class="quotation-docbox-value">${escapeHtml(header.documentNumber || '-')}</div>
                     <div class="quotation-docbox-label">Date</div>
                     <div class="quotation-docbox-value">${escapeHtml(formatPrintDate(header.documentDate))}</div>
-                    <div class="quotation-docbox-label">Status</div>
-                    <div class="quotation-docbox-value">${escapeHtml(header.status || '-')}</div>
+                    <div class="quotation-docbox-label">Valid Until</div>
+                    <div class="quotation-docbox-value">${escapeHtml((header as any).dueDate ? formatPrintDate((header as any).dueDate) : '-')}</div>
                     <div class="quotation-docbox-label">Reference</div>
                     <div class="quotation-docbox-value">${escapeHtml(header.referenceNo || '-')}</div>
                   </div>
@@ -1008,8 +1098,10 @@ export default function AllDocumentForm({
                 <div class="quotation-card-head">Commercial Terms</div>
                 <div class="quotation-card-body">
                   <div class="quotation-info-grid">
-                    <div class="quotation-info-label">Payment</div>
-                    <div class="quotation-info-value">${escapeHtml(paymentTermDisplay || header.paymentMethod || '-')}</div>
+                    <div class="quotation-info-label">Payment Term</div>
+                    <div class="quotation-info-value">${escapeHtml(paymentTermDisplay || '-')}</div>
+                    <div class="quotation-info-label">Payment Method</div>
+                    <div class="quotation-info-value">${escapeHtml(header.paymentMethod || '-')}</div>
                     <div class="quotation-info-label">Tax Rate</div>
                     <div class="quotation-info-value">${escapeHtml(`${Number(taxRate || 0).toFixed(2)}%`)}</div>
                     <div class="quotation-info-label">Total Qty</div>
@@ -1201,6 +1293,25 @@ export default function AllDocumentForm({
     }
   };
 
+  const handleDeleteDocument = async () => {
+    const docId = header.id || (initialData as any)?.documentId;
+    if (!docId) return;
+    const confirmed = await showAppConfirm({
+      title: 'ลบเอกสาร',
+      message: `ยืนยันการลบเอกสาร ${header.documentNumber || typeLabel}? การดำเนินการนี้ไม่สามารถกู้คืนได้`,
+      confirmText: 'ลบ',
+      cancelText: 'ยกเลิก',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await documentService.delete(documentType, docId);
+      onNavigate('documents', { selectedType: documentType });
+    } catch (error: any) {
+      await showAppAlert({ title: 'ลบไม่สำเร็จ', message: error?.response?.data?.message || `ไม่สามารถลบเอกสารนี้ได้`, tone: 'danger' });
+    }
+  };
+
   return (
     <>
       <div className={`rounded-2xl border shadow-sm ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
@@ -1238,6 +1349,21 @@ export default function AllDocumentForm({
         <div className="space-y-6 px-6 py-6">
           {codeError ? <div className={`rounded-xl border px-4 py-3 text-sm ${darkMode ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-red-200 bg-red-50 text-red-700'}`}>{codeError}</div> : null}
 
+          {isPendingApproval && !isViewMode && (
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+              <span className="text-lg">🔐</span>
+              <div>
+                <strong>รอการอนุมัติ (Pending Approval)</strong>
+                <span className="ml-2">— กำหนด Margin%, ปัดราคาให้สวยงาม แล้วเปลี่ยนสถานะเป็น <strong>Approved</strong></span>
+              </div>
+            </div>
+          )}
+          {isApprovedStatus && !isViewMode && (
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              <span className="text-lg">✅</span>
+              <span><strong>Approved</strong> — ราคาขายถูกล็อกแล้ว สามารถเปลี่ยนสถานะเป็น <strong>Sent</strong> เพื่อส่งให้ลูกค้าได้</span>
+            </div>
+          )}
           <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
             {documentType === 'quotation' ? (
               <div className={`overflow-hidden rounded-2xl border mb-6 ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/70 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50'}`}>
@@ -1252,7 +1378,7 @@ export default function AllDocumentForm({
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-white/10 text-white' : 'bg-white text-blue-700 border border-blue-200'}`}>
                         Document No: {header.documentNumber || suggestedDocumentNumber || buildDefaultDocumentNumber(documentType)}
                       </span>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>
+                      <span className="rounded-full px-3 py-1 text-xs font-semibold" style={getQuotationStatusStyle(header.status || 'Draft')}>
                         Current Status: {header.status || 'Draft'}
                       </span>
                     </div>
@@ -1319,6 +1445,52 @@ export default function AllDocumentForm({
               </div>
             ) : null}
 
+            {isViewMode && documentType === 'quotation' ? (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                    <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Document Info</p>
+                    <dl className="space-y-3">
+                      {[
+                        { label: 'Date',         value: formatPrintDate(header.documentDate) || '-' },
+                        { label: 'Payment Term', value: paymentTermDisplay || '-' },
+                        { label: 'Tax Rate',     value: `${header.taxRate || '0'}%` },
+                        { label: 'Margin',       value: `${(header as any).margin || '0'}%` },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex items-center justify-between text-sm">
+                          <dt className={`${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{label}</dt>
+                          <dd className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</dd>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between text-sm">
+                        <dt className={`${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Status</dt>
+                        <dd><span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={getQuotationStatusStyle(header.status || 'Draft')}>{header.status || 'Draft'}</span></dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                    <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Customer</p>
+                    <dl className="space-y-3">
+                      {[
+                        { label: 'Customer', value: customerDisplay || '-' },
+                        { label: 'Address',  value: customerAddress || '-' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex items-start justify-between gap-4 text-sm">
+                          <dt className={`shrink-0 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{label}</dt>
+                          <dd className={`text-right font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                </div>
+                {header.remark && (
+                  <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                    <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Remark / Notes</p>
+                    <p className={`whitespace-pre-wrap text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{header.remark}</p>
+                  </div>
+                )}
+              </div>
+            ) : (<>
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
                 <div className="mb-4">
@@ -1518,7 +1690,8 @@ export default function AllDocumentForm({
                         type="text"
                         inputMode="decimal"
                         list="quotation-margin-options"
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                        readOnly={isItemLocked}
+                        className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
                         value={(header as any)[field.key]}
                         onChange={(e) => handleHeaderChange(field.key, sanitizeDecimalInput(e.target.value))}
                         placeholder="Select or type margin"
@@ -1579,6 +1752,7 @@ export default function AllDocumentForm({
                   value={header.remark} onChange={(e) => handleHeaderChange('remark', e.target.value)} />
               </label>
             </div>
+            </>)}
 
             <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} shadow-sm`}>
@@ -1588,10 +1762,14 @@ export default function AllDocumentForm({
              
               <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} shadow-sm`}>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {documentType === 'quotation' ? 'Margin (%)' : documentType === 'purchase_order' ? 'Total Cost Price' : 'Subtotal'}</p>
-                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                  {documentType === 'quotation' ? `${parseNumberInput(header.margin).toFixed(2)}%` : formatDisplayAmount(totalSellingPrice)}
+                  {documentType === 'quotation' ? 'ยอดขายรวม (ก่อน VAT)' : documentType === 'purchase_order' ? 'Total Cost Price' : 'Subtotal'}
                 </p>
+                <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  ฿{formatDisplayAmount(totalSellingPrice)}
+                </p>
+                {documentType === 'quotation' ? (
+                  <p className={`mt-0.5 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Margin {parseNumberInput(header.margin).toFixed(1)}%</p>
+                ) : null}
               </div>
               <div className={`rounded-2xl border px-4 py-4 ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'} shadow-sm`}>
                 <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Vat</p>
@@ -1618,164 +1796,342 @@ export default function AllDocumentForm({
                   {printItems.length || items.length} item(s)
                 </div>
               </div>
-              <div
-                className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide 
-                  ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`
-                }
-                style={{
-                  gridTemplateColumns: documentType === 'quotation' ?
-                    '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
-                    '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
-                }}
-              >
-                <div>Item</div>
-                <div>Code</div>
-                <div>Description</div>
-                <div>Qty</div>
-                {documentType === 'quotation' ?
-                  <>
-                    <div>Margin (%)</div>
-                    <div>Unit Cost</div>
-                  </>
-                  : null
-                }
-                <div>{documentType === 'purchase_order' ? 'Cost Price' : 'Unit Price'}</div>
-                <div>{documentType === 'purchase_order' ? 'Total Cost Price' : 'Line Total'}</div>
-                <div></div>
-              </div>
-              {items.map((item, index) => (
-                <div key={`document-item-${index}`}
-                  className={`grid items-start gap-1 px-4 py-3 
-                  ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
-                  style={{
-                    gridTemplateColumns: documentType === 'quotation' ?
-                      '44px 100px minmax(240px,1.8fr) 90px 120px 120px 130px 100px' :
-                      '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
-                  }}
-                >
-                  <div className={`pt-2 text-sm font-semibold
-                    ${darkMode ? 'text-white' : 'text-gray-900'}`}>{index + 1}
+              {isViewMode && documentType === 'purchase_order' ? (
+                <>
+                  {/* View-mode read-only table for Purchase Order */}
+                  <div
+                    className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
+                      ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 130px 140px' }}
+                  >
+                    <div>#</div>
+                    <div>Code</div>
+                    <div>Description</div>
+                    <div className="text-right">Qty</div>
+                    <div className="text-right">ราคาทุน/หน่วย</div>
+                    <div className="text-right">รวมทุน</div>
                   </div>
-                  {isViewMode ? (
-                    <input
-                      readOnly
-                      className="rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600"
-                      value={item.productCode || ''}
-                    />
-                  ) : (
-                    <button type="button"
-                      onClick={() => { setSelectedItemIndex(index); setProductModalOpen(true); }}
-                      className={`rounded-lg border px-3 py-2 text-left text-xs font-medium 
-                  ${darkMode ? 'border-blue-500/40 bg-blue-500/10 text-blue-200' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                      {item.productCode || 'Select...'}
-                    </button>
-                  )}
-                  <input className={`rounded-lg border border-gray-300 px-3 py-2 text-sm ${isViewMode ? 'bg-gray-100 text-gray-600' : 'bg-white text-black'}`}
-                    readOnly={isViewMode}
-                    value={isViewMode ? getProductDisplayName(item.productCode, item.productName) : item.productName}
-                    placeholder="Description"
-                    onChange={(e) => handleItemChange(index, 'productName', e.target.value)}
-                  />
-                  <input type="number"
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-right text-sm text-black"
-                    value={item.quantity}
-                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                  />
-                  {documentType === 'quotation' ?
-                    <>
-                      <input type="number" step="0.01"
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-right text-sm text-black"
-                        value={item.margin}
-                        onChange={(e) => handleItemChange(index, 'margin', e.target.value)}
-                      />
-                      <input type="number" step="0.01"
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-right text-sm text-black"
-                        value={item.cost}
-                        onChange={(e) => handleItemChange(index, 'cost', e.target.value)}
-                      />
-                    </>
-                    : null}
-                  <input type="number" step="0.01"
-                    readOnly={documentType === 'quotation'}
-                    className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm 
-                    ${documentType === 'quotation' ? 'bg-gray-100 text-gray-700' : 'bg-white text-black'}`}
-                    value={item.sellingPrice}
-                    onChange={(e) => handleItemChange(index, 'sellingPrice', e.target.value)}
-                  />
-                  <input type="number" step="0.01"
-                    readOnly={documentType === 'quotation'}
-                    className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm w-full 
-                    ${documentType === 'quotation' ? 'bg-gray-100 text-gray-700' : 'bg-white text-black'}`}
-                    value={item.totalSellingPrice}
-                    onChange={(e) => handleItemChange(index, 'total', e.target.value)}
-                  />
-                  <div className="flex justify-center pt-2">
-                    {items.length > 1 ?
+                  {printItems.map((item: any, index: number) => (
+                    <div key={`po-view-item-${index}`}
+                      className={`grid items-center gap-1 px-4 py-3
+                        ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
+                      style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 130px 140px' }}
+                    >
+                      <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
+                      <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {getProductDisplayName(item.productCode, item.productName) || '-'}
+                      </div>
+                      <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-right text-sm font-medium ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>
+                        {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
+                      </div>
+                      <div className={`text-right text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        ฿{formatDisplayAmount(parseFloat(item.totalSellingPrice) || parseFloat(item.totalCost) || 0)}
+                      </div>
+                    </div>
+                  ))}
+                  <div className={`grid items-center gap-1 border-t px-4 py-3
+                    ${darkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-50'}`}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 130px 140px' }}
+                  >
+                    <div></div><div></div><div></div><div></div>
+                    <div className={`text-right text-xs font-semibold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      ทุนรวม (ก่อน VAT)
+                    </div>
+                    <div className={`text-right text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      ฿{formatDisplayAmount(totalCost || totalSellingPrice)}
+                    </div>
+                  </div>
+                </>
+              ) : isViewMode && documentType === 'quotation' ? (
+                <>
+                  {/* View-mode read-only table for Quotation */}
+                  <div
+                    className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
+                      ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                    style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 120px 120px 130px 1fr' }}
+                  >
+                    <div>#</div>
+                    <div>Code</div>
+                    <div>Description</div>
+                    <div className="text-right">Qty</div>
+                    <div className="text-right">ราคาทุน</div>
+                    <div className="text-right">ราคาขาย</div>
+                    <div className="text-right">Line Total</div>
+                    <div className="pl-2">Vendor</div>
+                  </div>
+                  {printItems.map((item: any, index: number) => (
+                    <div key={`view-item-${index}`}
+                      className={`grid items-center gap-1 px-4 py-3
+                        ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
+                      style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 120px 120px 130px 1fr' }}
+                    >
+                      <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
+                      <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {getProductDisplayName(item.productCode, item.productName) || '-'}
+                      </div>
+                      <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-right text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {formatDisplayAmount(parseFloat(item.cost) || 0)}
+                      </div>
+                      <div className={`text-right text-sm font-medium ${darkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                        {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
+                      </div>
+                      <div className={`text-right text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        ฿{formatDisplayAmount(parseFloat(item.totalSellingPrice) || 0)}
+                      </div>
+                      <div className={`pl-2 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {item.vendorCode
+                          ? (vendorCodes.find((v: any) => v.vendorCode === item.vendorCode)?.name || item.vendorCode)
+                          : '-'}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Subtotal footer row */}
+                  <div className={`grid items-center gap-1 border-t px-4 py-3
+                    ${darkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-50'}`}
+                    style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 120px 120px 130px 1fr' }}
+                  >
+                    <div></div><div></div><div></div><div></div>
+                    <div className={`text-right text-xs font-semibold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      ทุนรวม: ฿{formatDisplayAmount(totalCost)}
+                    </div>
+                    <div></div>
+                    <div className={`text-right text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                      ยอดขาย: ฿{formatDisplayAmount(totalSellingPrice)}
+                    </div>
+                    <div></div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Edit/Create mode grid */}
+                  <div
+                    className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
+                      ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                    style={{
+                      gridTemplateColumns: documentType === 'quotation' ?
+                        '44px 100px minmax(180px,1.2fr) 90px 100px 110px 120px 52px 100px 160px 44px' :
+                        '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
+                    }}
+                  >
+                    <div>Item</div>
+                    <div>Code</div>
+                    <div>Description</div>
+                    <div>Qty</div>
+                    {documentType === 'quotation' ?
+                      <>
+                        <div>Margin (%)</div>
+                        <div>Cost Price</div>
+                      </>
+                      : null
+                    }
+                    <div>{documentType === 'quotation' ? 'Sale Price' : documentType === 'purchase_order' ? 'Cost Price' : 'Unit Price'}</div>
+                    {documentType === 'quotation' ? <div className="text-center">ปัด</div> : null}
+                    <div>{documentType === 'quotation' ? 'Total' : documentType === 'purchase_order' ? 'Total Cost' : 'Line Total'}</div>
+                    {documentType === 'quotation' ? <div>Vendor</div> : null}
+                    <div></div>
+                  </div>
+                  {items.map((item, index) => (
+                    <div key={`document-item-${index}`}
+                      className={`grid items-start gap-1 px-4 py-3
+                      ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
+                      style={{
+                        gridTemplateColumns: documentType === 'quotation' ?
+                          '44px 100px minmax(180px,1.2fr) 90px 100px 110px 120px 52px 100px 160px 44px' :
+                          '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
+                      }}
+                    >
+                      <div className={`pt-2 text-sm font-semibold
+                        ${darkMode ? 'text-white' : 'text-gray-900'}`}>{index + 1}
+                      </div>
                       <button type="button"
-                        onClick={() => removeItemRow(index)}
-                        className="rounded-md px-2 py-1 text-lg leading-none text-red-500 hover:bg-red-50">×
-                      </button> : null}
+                        disabled={isItemLocked}
+                        onClick={() => { setSelectedItemIndex(index); setProductModalOpen(true); }}
+                        className={`rounded-lg border px-3 py-2 text-left text-xs font-medium disabled:opacity-50
+                      ${darkMode ? 'border-blue-500/40 bg-blue-500/10 text-blue-200' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
+                        {item.productCode || 'Select...'}
+                      </button>
+                      <input
+                        readOnly={isItemLocked}
+                        className={`rounded-lg border border-gray-300 px-3 py-2 text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
+                        value={item.productName}
+                        placeholder="Description"
+                        onChange={(e) => handleItemChange(index, 'productName', e.target.value)}
+                      />
+                      <input type="number"
+                        readOnly={isItemLocked}
+                        className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
+                        value={item.quantity}
+                        onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                      />
+                      {documentType === 'quotation' ?
+                        <>
+                          <input type="number" step="0.01"
+                            readOnly={isItemLocked}
+                            className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
+                            value={item.margin}
+                            onChange={(e) => handleItemChange(index, 'margin', e.target.value)}
+                          />
+                          <input type="number" step="0.01"
+                            readOnly={isItemLocked}
+                            className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
+                            value={item.cost}
+                            onChange={(e) => handleItemChange(index, 'cost', e.target.value)}
+                          />
+                        </>
+                        : null}
+                      <input type="number" step="0.01"
+                        readOnly={isItemLocked}
+                        className={`rounded-lg border border-gray-300 px-3 py-2 text-right text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
+                        value={item.sellingPrice}
+                        onChange={(e) => handleItemChange(index, 'sellingPrice', e.target.value)}
+                      />
+                      {documentType === 'quotation' ? (
+                        <div className="flex flex-col gap-0.5 items-center justify-center">
+                          <button type="button" title="ปัดขึ้น"
+                            disabled={isViewMode || isItemLocked}
+                            onClick={() => handleRoundSellingPrice(index, 'up')}
+                            className="w-9 rounded border border-blue-300 bg-blue-50 py-0.5 text-center text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-40">
+                            ▲
+                          </button>
+                          <button type="button" title="ปัดลง"
+                            disabled={isViewMode || isItemLocked}
+                            onClick={() => handleRoundSellingPrice(index, 'down')}
+                            className="w-9 rounded border border-amber-300 bg-amber-50 py-0.5 text-center text-xs font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-40">
+                            ▼
+                          </button>
+                        </div>
+                      ) : null}
+                      <input type="number" step="0.01"
+                        readOnly
+                        className="rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-right text-sm w-full text-gray-700"
+                        value={item.totalSellingPrice}
+                        onChange={undefined}
+                      />
+                      {documentType === 'quotation' ? (
+                        <select
+                          className={`rounded-lg border border-gray-300 px-2 py-2 text-xs w-full ${isPendingApproval || isItemLocked ? 'bg-gray-100 text-gray-600' : 'bg-white text-black'}`}
+                          value={item.vendorCode || ''}
+                          disabled={isPendingApproval || isItemLocked}
+                          onChange={(e) => handleItemChange(index, 'vendorCode', e.target.value)}
+                        >
+                          <option value="">— เลือก Vendor —</option>
+                          {getVendorsForItem(item.productCode).map((v: any) => (
+                            <option key={v.vendorCode} value={v.vendorCode}>{v.name || v.vendorCode}</option>
+                          ))}
+                        </select>
+                      ) : null}
+                      <div className="flex justify-center pt-2">
+                        {items.length > 1 && !isItemLocked ?
+                          <button type="button"
+                            onClick={() => removeItemRow(index)}
+                            className="rounded-md px-2 py-1 text-lg leading-none text-red-500 hover:bg-red-50">×
+                          </button> : null}
+                      </div>
+                    </div>
+                  ))}
+                  <div className={`flex items-center justify-between border-t px-4 py-3
+                    ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                    {!isItemLocked && (
+                      <button type="button"
+                        onClick={addItemRow}
+                        className="rounded-lg border border-dashed border-purple-500 px-3 py-2 text-xs font-semibold text-purple-600 hover:bg-purple-50">
+                        + Add Item
+                      </button>
+                    )}
+                    <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Items: {printItems.length || items.length}
+                    </div>
                   </div>
-                </div>
-              ))}
-              <div className={`flex items-center justify-between border-t px-4 py-3 
-                ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                <button type="button"
-                  onClick={addItemRow}
-                  className="rounded-lg border border-dashed border-purple-500 px-3 py-2 text-xs font-semibold text-purple-600 hover:bg-purple-50">
-                  + Add Item
-                </button>
-                <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Items: {printItems.length || items.length}
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </fieldset>
 
-          <div className="flex flex-wrap justify-end gap-3 border-t border-gray-200 pt-4">
-            {!isViewMode ?
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">
+            {/* View Mode: Back */}
+            {isViewMode ? (
+              <button
+                type="button"
+                onClick={() => goBackToDocuments()}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+            ) : <div />}
+            <div className="flex flex-wrap gap-3">
+            {/* Edit Mode: Save + Cancel */}
+            {!isViewMode && (
               <button
                 type="button"
                 onClick={() => void handleSave()}
                 className="rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
                 Save {typeLabel}
-              </button> :
-              null
-            }
-            {isViewMode ?
+              </button>
+            )}
+            {/* View Mode: แก้ไข */}
+            {isViewMode && (
               <button
-                type="button" onClick={() => setMode('edit')}
+                type="button"
+                onClick={() => setMode('edit')}
                 className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">
-                Enable Edit
-              </button> :
-              null
-            }
-            {isViewMode ?
+                แก้ไข
+              </button>
+            )}
+            {/* Print PDF: View Mode ทุกประเภท + Quotation Edit Mode */}
+            {(isViewMode || documentType === 'quotation') && (
               <button
                 type="button"
                 onClick={() => void handlePrint()}
-                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
-                Print
-              </button> :
-              null
-            }
-            <button
-              type="button"
-              onClick={async () => {
-                const confirmed = await showAppConfirm({
-                  title: 'Cancel Changes',
-                  message: 'Any unsaved changes will be lost. Do you want to continue?',
-                  confirmText: 'Yes, Cancel',
-                  cancelText: 'No',
-                  tone: 'warning',
-                });
-                if (confirmed) {
-                  goBackToDocuments();
-                }
-              }}
-              className="rounded-lg bg-gray-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700">
-              Cancel
-            </button>
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print PDF
+              </button>
+            )}
+            {/* Convert to SO */}
+            {isViewMode && isConfirmedStatus && (
+              <button
+                type="button"
+                onClick={() => onNavigate('so', { fromQuotation: { ...header, items } })}
+                className="rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
+                Convert to SO →
+              </button>
+            )}
+            {/* View Mode: ลบ */}
+            {isViewMode && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteDocument()}
+                className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700">
+                ลบ
+              </button>
+            )}
+            {/* Edit Mode: Cancel */}
+            {!isViewMode && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const confirmed = await showAppConfirm({
+                    title: 'Cancel Changes',
+                    message: 'Any unsaved changes will be lost. Do you want to continue?',
+                    confirmText: 'Yes, Cancel',
+                    cancelText: 'No',
+                    tone: 'warning',
+                  });
+                  if (confirmed) goBackToDocuments();
+                }}
+                className="rounded-lg bg-gray-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700">
+                Cancel
+              </button>
+            )}
+            </div>
           </div>
         </div>
       </div>

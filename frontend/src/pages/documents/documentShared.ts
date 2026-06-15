@@ -1,8 +1,21 @@
-import documentService, { MainDocumentType } from '../../services/documentService';
+import documentService, { MainDocumentType, DocumentListParams } from '../../services/documentService';
 
 export const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'deposit_receipt', 'purchase_order', 'work_order', 'delivery_order', 'customer_return'];
 
-export const QUOTATION_STATUS_OPTIONS = ['All', 'Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Confirmed', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
+export const QUOTATION_STATUS_OPTIONS = ['All', 'Draft', 'Pending Approval', 'Approved', 'Sent', 'Confirmed'];
+
+export const QUOTATION_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  'Draft':            { bg: 'rgba(108,117,125,0.15)', text: '#495057' },
+  'Pending Approval': { bg: 'rgba(253,126,20,0.15)',  text: '#B94B00' },
+  'Approved':         { bg: 'rgba(13,110,253,0.15)',  text: '#0A58CA' },
+  'Sent':             { bg: 'rgba(111,66,193,0.15)',  text: '#59359A' },
+  'Confirmed':        { bg: 'rgba(25,135,84,0.15)',   text: '#0F5132' },
+};
+
+export const getQuotationStatusStyle = (status: string): { backgroundColor: string; color: string } => {
+  const c = QUOTATION_STATUS_COLORS[status] ?? QUOTATION_STATUS_COLORS['Draft'];
+  return { backgroundColor: c.bg, color: c.text };
+};
 
 export const SALES_TYPES: MainDocumentType[] = ['quotation', 'deposit_receipt', 'invoice', 'receipt'];
 export const PURCHASE_TYPES: MainDocumentType[] = ['purchase_order'];
@@ -62,6 +75,16 @@ export const getRecordVendorLabel = (record: any) => {
   const code = String(record?.vendorCode || '').trim();
   const name = String(record?.supplierName || '').trim();
   return code && name ? `${code} - ${name}` : code || name || '-';
+};
+
+export const DEFAULT_DOC_LIMIT = 50;
+
+export const loadTabDocuments = async (
+  type: MainDocumentType,
+  params: DocumentListParams = {},
+): Promise<any[]> => {
+  const res = await documentService.getAll(type, { limit: DEFAULT_DOC_LIMIT, ...params });
+  return res?.data?.data || [];
 };
 
 export const loadAllDocuments = async (): Promise<DocumentsByType> => {

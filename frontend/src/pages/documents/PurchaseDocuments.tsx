@@ -6,9 +6,11 @@ import AllDocumentForm from '../../components/Documents/AllDocumentForm';
 import useThemePreference from '../../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import documentService, { MainDocumentType } from '../../services/documentService';
+import soService from '../../services/soService';
 import codeService from '../../services/codeService';
 import PRTab from './PRTab';
 import GRTab from './GRTab';
+import SOToPOModal from '../../components/SOToPOModal';
 import {
   createEmptyCollections, DocumentsByType,
   getRecordKey, formatDate, formatCurrency, replaceRecord, loadAllDocuments, getRecordVendorLabel,
@@ -36,9 +38,10 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [isLoading, setIsLoading] = useState(true);
+  const [soToPOOpen, setSoToPOOpen] = useState(false);
+  const [pendingSOConversion, setPendingSOConversion] = useState<{ soId: string; itemIds: string[] } | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
-
 
   useEffect(() => {
     void axios.get('/api/auth/me').then((res) => {
@@ -134,7 +137,14 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
         setDocs((prev) => ({ ...prev, [PO_TYPE]: replaceRecord(prev[PO_TYPE], s.savedRecord) }));
         setSelectedRecord(s.savedRecord);
         void loadAllDocuments().then(setDocs);
+        if (pendingSOConversion) {
+          void soService.markItemsConverted(pendingSOConversion.soId, {
+            itemIds: pendingSOConversion.itemIds,
+            prNumber: s.savedRecord.documentNumber || '',
+          });
+        }
       }
+      setPendingSOConversion(null);
       setEditorState(null);
       return;
     }
@@ -227,6 +237,7 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
               onEdit={handlePoEdit}
               onDelete={handlePoDelete}
               onCreate={handlePoCreate}
+              onCreateFromSO={() => setSoToPOOpen(true)}
               onCloseSelected={() => setSelectedRecord(null)}
               onEditorNavigate={handleEditorNavigate}
               renderStatus={renderPoStatus}
@@ -237,6 +248,21 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
 
         </div>
       </div>
+
+      <SOToPOModal
+        isOpen={soToPOOpen}
+        darkMode={darkMode}
+        vendorCodes={vendorCodes}
+        onClose={() => setSoToPOOpen(false)}
+        onCreatePO={(draft) => {
+          const { _sourceSOId, _sourceSOItemIds, ...cleanDraft } = draft;
+          setSoToPOOpen(false);
+          setPendingSOConversion(_sourceSOId ? { soId: _sourceSOId, itemIds: _sourceSOItemIds || [] } : null);
+          setActiveTab('po');
+          setSelectedRecord(null);
+          setEditorState({ type: PO_TYPE, initialData: cleanDraft });
+        }}
+      />
     </Layout>
   );
 }
@@ -245,7 +271,7 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
 function PoTab({
   darkMode, textMuted, isLoading, records, allCount, search, setSearch,
   statusFilter, setStatusFilter, selectedRecord, editorState, editorRef,
-  onView, onEdit, onDelete, onCreate, onCloseSelected,
+  onView, onEdit, onDelete, onCreate, onCreateFromSO, onCloseSelected,
   onEditorNavigate, renderStatus, getVendorDisplay,
 }: any) {
   const sectionCard = `rounded-2xl border p-5 shadow-sm ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'}`;
@@ -273,6 +299,10 @@ function PoTab({
               {PO_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s === 'All' ? 'ทุกสถานะ' : s}</option>)}
             </select>
           </div>
+          <button type="button" onClick={onCreateFromSO}
+            className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition whitespace-nowrap">
+            📋 ออก PO จาก ใบสั่งขาย
+          </button>
           <button type="button" onClick={onCreate}
             className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 transition whitespace-nowrap">
             + สร้างใบสั่งซื้อ
@@ -469,9 +499,8 @@ function PoTab({
                         <th className="px-5 py-3 text-left">รหัสสินค้า</th>
                         <th className="px-5 py-3 text-left">รายละเอียด</th>
                         <th className="px-5 py-3 text-right">จำนวน</th>
-                        <th className="px-5 py-3 text-left">หน่วย</th>
-                        <th className="px-5 py-3 text-right">ราคา/หน่วย</th>
-                        <th className="px-5 py-3 text-right">รวม</th>
+                        <th className="px-5 py-3 text-right">ราคาทุน/หน่วย</th>
+                        <th className="px-5 py-3 text-right">รวมทุน</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
@@ -479,21 +508,41 @@ function PoTab({
                         <tr key={item.id || idx} className={`transition-colors ${darkMode ? 'hover:bg-gray-700/30' : 'hover:bg-gray-50'}`}>
                           <td className={`px-5 py-3 ${textMuted}`}>{idx + 1}</td>
                           <td className={`px-5 py-3 ${textMuted}`}>{item.productCode || '-'}</td>
-                          <td className={`px-5 py-3 font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.description || item.productName || '-'}</td>
-                          <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>{Number(item.qty || item.quantity || 0).toLocaleString()}</td>
-                          <td className={`px-5 py-3 ${textMuted}`}>{item.unit || '-'}</td>
-                          <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatCurrency(Number(item.unitPrice || item.price || 0))}</td>
-                          <td className={`px-5 py-3 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatCurrency(Number(item.total || item.amount || 0))}</td>
+                          <td className={`px-5 py-3 font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.productName || item.description || '-'}</td>
+                          <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>{Number(item.quantity || item.qty || 0).toLocaleString()}</td>
+                          <td className={`px-5 py-3 text-right ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>฿{formatCurrency(Number(item.sellingPrice || item.cost || 0))}</td>
+                          <td className={`px-5 py-3 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatCurrency(Number(item.totalSellingPrice || item.totalCost || 0))}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr className={`font-bold ${darkMode ? 'bg-gray-700/30 text-white' : 'bg-orange-50 text-gray-900'}`}>
-                        <td colSpan={6} className="px-5 py-3 text-right text-sm">รวมทั้งหมด</td>
-                        <td className={`px-5 py-3 text-right text-sm ${darkMode ? '' : 'text-orange-700'}`}>
-                          ฿{formatCurrency(selectedRecord.total)}
-                        </td>
-                      </tr>
+                      {(() => {
+                        const subtotal = (selectedRecord.items as any[]).reduce(
+                          (sum: number, it: any) => sum + Number(it.totalSellingPrice || it.totalCost || 0), 0
+                        );
+                        const taxAmt = Number(selectedRecord.tax || 0);
+                        const grand = Number(selectedRecord.total || 0);
+                        return (
+                          <>
+                            <tr className={`${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                              <td colSpan={5} className="px-5 py-2 text-right text-xs">ยอดก่อน VAT</td>
+                              <td className="px-5 py-2 text-right text-xs">฿{formatCurrency(subtotal)}</td>
+                            </tr>
+                            {taxAmt > 0 && (
+                              <tr className={`${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                                <td colSpan={5} className="px-5 py-2 text-right text-xs">VAT ({selectedRecord.taxRate ?? 7}%)</td>
+                                <td className="px-5 py-2 text-right text-xs">฿{formatCurrency(taxAmt)}</td>
+                              </tr>
+                            )}
+                            <tr className={`font-bold border-t ${darkMode ? 'bg-gray-700/30 text-white border-gray-600' : 'bg-orange-50 text-gray-900 border-gray-200'}`}>
+                              <td colSpan={5} className="px-5 py-3 text-right text-sm">มูลค่ารวม (รวม VAT)</td>
+                              <td className={`px-5 py-3 text-right text-sm ${darkMode ? '' : 'text-orange-700'}`}>
+                                ฿{formatCurrency(grand)}
+                              </td>
+                            </tr>
+                          </>
+                        );
+                      })()}
                     </tfoot>
                   </table>
                 </div>

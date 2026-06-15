@@ -6,9 +6,10 @@ import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../services/dialogService';
 import { printDocumentContent } from '../utils/printDocument';
+import { getQuotationStatusStyle } from './documents/documentShared';
 
 const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'receipt', 'deposit_receipt', 'purchase_order', 'work_order'];
-const QUOTATION_STATUS_FILTER_OPTIONS = ['All', 'Draft', 'Sent', 'Waiting Customer', 'Follow Up', 'Negotiating', 'Confirmed', 'Approved', 'Won', 'Rejected', 'Lost', 'Expired', 'Converted'];
+const QUOTATION_STATUS_FILTER_OPTIONS = ['All', 'Draft', 'Pending Approval', 'Approved', 'Sent', 'Confirmed'];
 
 const documentTypeConfigs: Record<MainDocumentType, any> = {
   quotation: {
@@ -1526,6 +1527,9 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
 
   const renderStatus = (record: any) => {
     const status = record?.status || 'Draft';
+    if (selectedType === 'quotation') {
+      return <span className="rounded-full px-3 py-1 text-xs font-semibold" style={getQuotationStatusStyle(status)}>{status}</span>;
+    }
     const tone = record?.color === 'green'
       ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700')
       : record?.color === 'red'
@@ -1533,7 +1537,6 @@ export default function Documents({ onNavigate = () => { }, currentPage = 'docum
         : record?.color === 'blue'
           ? (darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700')
           : (darkMode ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-700');
-
     return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tone}`}>{status}</span>;
   };
 

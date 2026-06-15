@@ -132,6 +132,8 @@ model Vendor {
   accountName  String?     @map("AccountName") @db.VarChar(255)
   isActive     Boolean     @default(true) @map("IsActive")
   note         String?     @map("Note") @db.Text
+  categories   String?     @map("Categories") @db.Text
+  brands       String?     @map("Brands") @db.Text
   companyId    String      @map("CompanyID") @db.VarChar(191)
   createdAt    DateTime    @default(now()) @map("CreatedAt")
   updatedAt    DateTime    @updatedAt @map("UpdatedAt")
@@ -171,6 +173,7 @@ model Company {
   purchaseRequisitions  PurchaseRequisition[]  @relation("PRCompany")
   goodsReceipts         GoodsReceipt[]         @relation("GRCompany")
   stockTransactions     StockTransaction[]     @relation("StockTransactionCompany")
+  saleOrders            SaleOrder[]            @relation("SOCompany")
 
   @@index([companyCode])
 }
@@ -223,6 +226,7 @@ model DocumentItem {
   documentType      DocumentType @map("DocumentType")
   lineNo            Int          @map("LineNo")
   productCode       String?      @map("ProductCode") @db.VarChar(50)
+  vendorCode        String?      @map("VendorCode") @db.VarChar(50)
   cost              Decimal?     @map("Cost") @db.Decimal(19, 4)
   quantity          Decimal?     @map("Quantity") @db.Decimal(19, 4)
   margin            Decimal?     @map("Margin") @db.Decimal(19, 4)
@@ -403,6 +407,49 @@ model CustomerReturnDocument {
   documentNumber String   @map("DocumentNumber") @db.Char(26)
   refDocNumber   String?  @map("RefDocNumber") @db.VarChar(50)
   document       Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+model SaleOrder {
+  id           String    @id @default(cuid()) @map("ID") @db.VarChar(191)
+  soNumber     String    @map("SONumber") @db.VarChar(50)
+  customerCode String?   @map("CustomerCode") @db.VarChar(50)
+  customerName String    @map("CustomerName") @db.VarChar(255)
+  salesPerson  String?   @map("SalesPerson") @db.VarChar(255)
+  soDate       DateTime  @default(now()) @map("SODate")
+  requiredDate DateTime? @map("RequiredDate")
+  status       String    @default("DRAFT") @map("Status") @db.VarChar(30)
+  paymentTerm  String?   @map("PaymentTerm") @db.VarChar(50)
+  remark       String?   @map("Remark") @db.VarChar(500)
+  companyId    String    @map("CompanyID") @db.VarChar(191)
+  createdAt    DateTime  @default(now()) @map("CreatedAt")
+  updatedAt    DateTime  @updatedAt @map("UpdatedAt")
+  company      Company   @relation("SOCompany", fields: [companyId], references: [id])
+  items        SOItem[]
+
+  @@unique([companyId, soNumber])
+  @@index([companyId])
+  @@map("SaleOrder")
+}
+
+model SOItem {
+  id           String    @id @default(cuid()) @map("ID") @db.VarChar(191)
+  soId         String    @map("SOID") @db.VarChar(191)
+  lineNo       Int       @map("LineNo")
+  productCode  String?   @map("ProductCode") @db.VarChar(50)
+  description  String    @map("Description") @db.VarChar(255)
+  qty          Decimal   @default(0) @map("Qty") @db.Decimal(18, 2)
+  unit         String?   @map("Unit") @db.VarChar(50)
+  unitPrice    Decimal   @default(0) @map("UnitPrice") @db.Decimal(19, 4)
+  discount     Decimal   @default(0) @map("Discount") @db.Decimal(5, 2)
+  amount       Decimal   @default(0) @map("Amount") @db.Decimal(19, 4)
+  deliveredQty Decimal   @default(0) @map("DeliveredQty") @db.Decimal(18, 2)
+  convertedToPr Boolean  @default(false) @map("ConvertedToPR")
+  prNumber     String?   @map("PRNumber") @db.VarChar(50)
+  remark       String?   @map("Remark") @db.VarChar(255)
+  so           SaleOrder @relation(fields: [soId], references: [id], onDelete: Cascade)
+
+  @@index([soId])
+  @@map("SOItem")
 }
 
 model StockTransaction {

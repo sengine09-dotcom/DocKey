@@ -118,7 +118,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     }
   });
   const [sidebarCounts, setSidebarCounts] = useState({
-    quotation: 0, invoice: 0, receipt: 0, purchaseOrder: 0, workOrder: 0,
+    quotation: 0, depositReceipt: 0, invoice: 0, receipt: 0, so: 0,
+    pr: 0, purchaseOrder: 0, gr: 0, workOrder: 0,
     customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0,
   });
   const [user, setUser] = useState({
@@ -239,7 +240,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       label: 'ระบบขาย',
       icon: '💼',
       href: '/documents/sales',
-      count: sidebarCounts.quotation + sidebarCounts.invoice + sidebarCounts.receipt,
+      count: sidebarCounts.so + sidebarCounts.quotation + sidebarCounts.depositReceipt + sidebarCounts.invoice + sidebarCounts.receipt,
       isActive: currentPage === 'documents-sales',
     },
     {
@@ -247,7 +248,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       label: 'ระบบซื้อ',
       icon: '📦',
       href: '/documents/purchase',
-      count: sidebarCounts.purchaseOrder,
+      count: sidebarCounts.pr + sidebarCounts.purchaseOrder + sidebarCounts.gr,
       isActive: currentPage === 'documents-purchase',
     },
     {
@@ -298,11 +299,15 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   useEffect(() => {
     const fetchCounts = async () => {
-      const [quotation, invoice, receipt, purchaseOrder, workOrder, cust, prod, vendor, company, dest, term, endUser] = await Promise.allSettled([
+      const [quotation, depositReceipt, invoice, receipt, so, pr, purchaseOrder, gr, workOrder, cust, prod, vendor, company, dest, term, endUser] = await Promise.allSettled([
         documentService.getAll('quotation'),
+        documentService.getAll('deposit_receipt'),
         documentService.getAll('invoice'),
         documentService.getAll('receipt'),
+        axios.get('/api/so'),
+        axios.get('/api/purchase/pr'),
         documentService.getAll('purchase_order'),
+        axios.get('/api/purchase/gr'),
         documentService.getAll('work_order'),
         codeService.getAll('customer'),
         codeService.getAll('product'),
@@ -313,18 +318,22 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         codeService.getAll('end-user'),
       ]);
       setSidebarCounts({
-        quotation:   quotation.status === 'fulfilled' ? (quotation.value?.data?.data?.length ?? 0) : 0,
-        invoice:     invoice.status === 'fulfilled' ? (invoice.value?.data?.data?.length ?? 0) : 0,
-        receipt:     receipt.status === 'fulfilled' ? (receipt.value?.data?.data?.length ?? 0) : 0,
+        quotation:     quotation.status === 'fulfilled' ? (quotation.value?.data?.data?.length ?? 0) : 0,
+        depositReceipt: depositReceipt.status === 'fulfilled' ? (depositReceipt.value?.data?.data?.length ?? 0) : 0,
+        invoice:       invoice.status === 'fulfilled' ? (invoice.value?.data?.data?.length ?? 0) : 0,
+        receipt:       receipt.status === 'fulfilled' ? (receipt.value?.data?.data?.length ?? 0) : 0,
+        so:            so.status === 'fulfilled' ? (so.value?.data?.data?.length ?? 0) : 0,
+        pr:            pr.status === 'fulfilled' ? (pr.value?.data?.data?.length ?? 0) : 0,
         purchaseOrder: purchaseOrder.status === 'fulfilled' ? (purchaseOrder.value?.data?.data?.length ?? 0) : 0,
-        workOrder:   workOrder.status === 'fulfilled' ? (workOrder.value?.data?.data?.length ?? 0) : 0,
-        customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
-        product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
-        vendor:      vendor.status === 'fulfilled' ? (vendor.value?.data?.data?.length ?? 0) : 0,
-        company:     company.status === 'fulfilled' ? (company.value?.data?.data?.length ?? 0) : 0,
-        destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
-        paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
-        endUser:     endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
+        gr:            gr.status === 'fulfilled' ? (gr.value?.data?.data?.length ?? 0) : 0,
+        workOrder:     workOrder.status === 'fulfilled' ? (workOrder.value?.data?.data?.length ?? 0) : 0,
+        customer:      cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
+        product:       prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
+        vendor:        vendor.status === 'fulfilled' ? (vendor.value?.data?.data?.length ?? 0) : 0,
+        company:       company.status === 'fulfilled' ? (company.value?.data?.data?.length ?? 0) : 0,
+        destination:   dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
+        paymentTerm:   term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
+        endUser:       endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
       });
     };
     fetchCounts();
@@ -593,7 +602,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
                         isDocumentSectionActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                       }`}>
-                        {sidebarCounts.quotation + sidebarCounts.invoice + sidebarCounts.receipt + sidebarCounts.purchaseOrder + sidebarCounts.workOrder}
+                        {sidebarCounts.so + sidebarCounts.quotation + sidebarCounts.depositReceipt + sidebarCounts.invoice + sidebarCounts.receipt + sidebarCounts.pr + sidebarCounts.purchaseOrder + sidebarCounts.gr + sidebarCounts.workOrder}
                       </span>
                     )}
                     {/* Count badge for Codes */}

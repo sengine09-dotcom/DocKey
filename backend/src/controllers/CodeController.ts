@@ -100,6 +100,11 @@ const mapPaymentTerm = (row: any) => ({
   used: row.used || 'Y',
 });
 
+const parseJsonArray = (value: any): string[] => {
+  if (!value) return [];
+  try { return JSON.parse(value); } catch { return []; }
+};
+
 const mapVendor = (row: any) => ({
   vendorCode: row.vendorCode || '',
   name: row.name || '',
@@ -115,6 +120,8 @@ const mapVendor = (row: any) => ({
   accountName: row.accountName || '',
   isActive: row.isActive !== false,
   note: row.note || '',
+  categories: parseJsonArray(row.categories),
+  brands: parseJsonArray(row.brands),
 });
 
 const mapCompany = (row: any) => ({
@@ -246,6 +253,8 @@ const codeConfigs: Record<string, any> = {
       accountName: parseString(payload.accountName),
       isActive: payload.isActive == null ? true : String(payload.isActive).trim().toLowerCase() !== 'false',
       note: parseString(payload.note),
+      categories: Array.isArray(payload.categories) ? JSON.stringify(payload.categories) : null,
+      brands: Array.isArray(payload.brands) ? JSON.stringify(payload.brands) : null,
     }),
   },
   company: {
@@ -474,6 +483,35 @@ class CodeController {
       if (knownMessage) {
         return res.status(400).json({ success: false, message: knownMessage });
       }
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getProductOptions(req: Request, res: Response) {
+    try {
+      const { companyId } = await resolveCompanyContext(req);
+      const [catRows, brandRows] = await Promise.all([
+        prisma.product.findMany({
+          where: { companyId, category: { not: '' } },
+          distinct: ['category'],
+          select: { category: true },
+          orderBy: { category: 'asc' },
+        }),
+        prisma.product.findMany({
+          where: { companyId, brand: { not: '' } },
+          distinct: ['brand'],
+          select: { brand: true },
+          orderBy: { brand: 'asc' },
+        }),
+      ]);
+      return res.json({
+        success: true,
+        data: {
+          categories: catRows.map((r) => r.category).filter(Boolean),
+          brands: brandRows.map((r) => r.brand).filter(Boolean),
+        },
+      });
+    } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
     }
   }

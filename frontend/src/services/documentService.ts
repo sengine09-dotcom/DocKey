@@ -6,9 +6,16 @@ export type MainDocumentType = 'quotation' | 'invoice' | 'receipt' | 'deposit_re
 
 const normalizeDocumentType = (type: string) => String(type || '').trim().toLowerCase().replace(/-/g, '_');
 
+export interface DocumentListParams {
+  limit?: number;
+  search?: string;
+  customer?: string;
+  vendorCode?: string;
+}
+
 const documentService = {
-  getAll: (type: MainDocumentType | string) =>
-    axios.get(`${API_BASE_URL}/documents/${encodeURIComponent(normalizeDocumentType(type))}`),
+  getAll: (type: MainDocumentType | string, params?: DocumentListParams) =>
+    axios.get(`${API_BASE_URL}/documents/${encodeURIComponent(normalizeDocumentType(type))}`, { params }),
   getById: (type: MainDocumentType | string, id: string) =>
     axios.get(`${API_BASE_URL}/documents/${encodeURIComponent(normalizeDocumentType(type))}/${encodeURIComponent(id)}`),
   save: (type: MainDocumentType | string, payload: any) =>

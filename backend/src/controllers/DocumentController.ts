@@ -12,7 +12,13 @@ class DocumentController {
       if (!isMainDocumentType(type)) {
         return res.status(400).json({ success: false, message: 'Invalid document type' });
       }
-      const data = await listDocumentsByType(type, ctx.companyId);
+
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+      const search = req.query.search ? String(req.query.search).trim() : undefined;
+      const customer = req.query.customer ? String(req.query.customer).trim() : undefined;
+      const vendorCode = req.query.vendorCode ? String(req.query.vendorCode).trim() : undefined;
+
+      const data = await listDocumentsByType(type, ctx.companyId, { limit, search, customer, vendorCode });
       return res.json({ success: true, data });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.message });

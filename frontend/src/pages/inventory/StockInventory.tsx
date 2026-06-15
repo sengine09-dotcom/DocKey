@@ -61,16 +61,19 @@ export default function StockInventory({ onNavigate = () => {}, currentPage = 's
   );
 
   const filteredTx = transactions.filter((t) =>
-    !searchCode || t.productCode.toLowerCase().includes(searchCode.toLowerCase())
+    !searchCode ||
+    t.productCode.toLowerCase().includes(searchCode.toLowerCase()) ||
+    t.productName?.toLowerCase().includes(searchCode.toLowerCase())
   );
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
-    return (
-      d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' }) +
-      ' ' +
-      d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-    );
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yy = String(d.getFullYear()).slice(-2);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${dd}-${mm}-${yy} ${hh}:${min}`;
   };
 
   const stockColor = (item: StockSummaryItem) => {
@@ -114,7 +117,7 @@ export default function StockInventory({ onNavigate = () => {}, currentPage = 's
         <div className="mb-4 max-w-sm">
           <input
             className={inputCls}
-            placeholder={activeTab === 'summary' ? 'ค้นหารหัส / ชื่อสินค้า...' : 'ค้นหารหัสสินค้า...'}
+            placeholder="ค้นหารหัส / ชื่อสินค้า..."
             value={searchCode}
             onChange={(e) => setSearchCode(e.target.value)}
           />
@@ -129,8 +132,7 @@ export default function StockInventory({ onNavigate = () => {}, currentPage = 's
               <table className="w-full">
                 <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-50'}>
                   <tr>
-                    <th className={thCls}>รหัสสินค้า</th>
-                    <th className={thCls}>ชื่อสินค้า</th>
+                    <th className={thCls}>รหัสสินค้า / ชื่อสินค้า</th>
                     <th className={thCls}>หมวดหมู่</th>
                     <th className={thCls}>ยี่ห้อ</th>
                     <th className={`${thCls} text-right`}>สต็อก</th>
@@ -144,8 +146,10 @@ export default function StockInventory({ onNavigate = () => {}, currentPage = 's
                     <tr><td colSpan={8} className={`${tdCls} text-center py-10`}>ไม่มีข้อมูล</td></tr>
                   ) : filteredSummary.map((p) => (
                     <tr key={p.id} className={darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
-                      <td className={`${tdCls} font-mono`}>{p.productCode}</td>
-                      <td className={tdCls}>{p.productName}</td>
+                      <td className={tdCls}>
+                        <span className="font-mono">{p.productCode}</span>
+                        {p.productName && <span className={`ml-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{p.productName}</span>}
+                      </td>
                       <td className={tdCls}>{p.category}</td>
                       <td className={tdCls}>{p.brand}</td>
                       <td className={`${tdCls} text-right font-bold ${stockColor(p)}`}>{p.stockQty.toLocaleString()}</td>
@@ -176,7 +180,7 @@ export default function StockInventory({ onNavigate = () => {}, currentPage = 's
                 <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-50'}>
                   <tr>
                     <th className={thCls}>วันที่</th>
-                    <th className={thCls}>รหัสสินค้า</th>
+                    <th className={thCls}>รหัสสินค้า / ชื่อสินค้า</th>
                     <th className={thCls}>เอกสาร</th>
                     <th className={thCls}>ประเภทเอกสาร</th>
                     <th className={thCls}>ประเภท</th>
@@ -190,7 +194,10 @@ export default function StockInventory({ onNavigate = () => {}, currentPage = 's
                   ) : filteredTx.map((t) => (
                     <tr key={t.id} className={darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
                       <td className={`${tdCls} whitespace-nowrap`}>{formatDate(t.createdAt)}</td>
-                      <td className={`${tdCls} font-mono`}>{t.productCode}</td>
+                      <td className={tdCls}>
+                        <span className="font-mono">{t.productCode}</span>
+                        {t.productName && <span className={`ml-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{t.productName}</span>}
+                      </td>
                       <td className={`${tdCls} font-mono`}>{t.docNumber}</td>
                       <td className={tdCls}>{DOC_TYPE_LABEL[t.docType] || t.docType}</td>
                       <td className={tdCls}>

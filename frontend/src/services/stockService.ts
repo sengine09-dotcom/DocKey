@@ -19,6 +19,7 @@ export interface StockTransaction {
   id: string;
   productId: string;
   productCode: string;
+  productName: string;
   companyId: string;
   docNumber: string;
   docType: string;

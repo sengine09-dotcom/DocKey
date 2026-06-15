@@ -58,8 +58,20 @@ const StockController = {
       users.forEach((u) => userNameMap.set(u.id, u.name));
     }
 
+    // Resolve productCode → productName
+    const productCodes = [...new Set(rows.map((r) => r.productCode).filter(Boolean))];
+    const productNameMap = new Map<string, string>();
+    if (productCodes.length > 0) {
+      const products = await prisma.product.findMany({
+        where: { companyId: ctx.companyId, productCode: { in: productCodes } },
+        select: { productCode: true, productName: true },
+      });
+      products.forEach((p) => productNameMap.set(p.productCode, p.productName));
+    }
+
     const data = rows.map((r) => ({
       ...r,
+      productName: productNameMap.get(r.productCode) || '',
       createdBy: (r.createdBy && userNameMap.has(r.createdBy))
         ? userNameMap.get(r.createdBy)!
         : r.createdBy,

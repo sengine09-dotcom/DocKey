@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
 import Layout from '../components/Layout/Layout';
 import codeService from '../services/codeService';
 import useThemePreference from '../hooks/useThemePreference';
@@ -110,7 +111,8 @@ const pageConfigs: Record<string, any> = {
     columns: [
       { key: 'vendorCode', label: 'Code' },
       { key: 'name', label: 'Vendor Name' },
-      { key: 'note', label: 'Note / สินค้าที่ขาย', type: 'truncate' },
+      { key: 'categories', label: 'Category', type: 'tags' },
+      { key: 'brands', label: 'Brand', type: 'tags' },
       { key: 'contactName', label: 'Contact' },
       { key: 'phone', label: 'Phone' },
       { key: 'isActive', label: 'Status', type: 'booleanStatus' },
@@ -135,11 +137,13 @@ const pageConfigs: Record<string, any> = {
         { value: 'true', label: 'Active' },
         { value: 'false', label: 'Inactive' },
       ] },
+      { key: 'categories', label: 'Category (สินค้าประเภท)', type: 'tags', optionsKey: 'categories', fullWidth: true },
+      { key: 'brands', label: 'Brand (ยี่ห้อสินค้า)', type: 'tags', optionsKey: 'brands', fullWidth: true },
       { key: 'address', label: 'Address', type: 'textarea', fullWidth: true },
       { key: 'note', label: 'Note', type: 'textarea', fullWidth: true },
     ],
     initialValues: {
-      vendorCode: '', name: '', contactName: '', phone: '', email: '', address: '', taxId: '', paymentType: 'CASH', paymentTerm: 0, bankName: '', bankAccount: '', accountName: '', isActive: 'true', note: '',
+      vendorCode: '', name: '', contactName: '', phone: '', email: '', address: '', taxId: '', paymentType: 'CASH', paymentTerm: 0, bankName: '', bankAccount: '', accountName: '', isActive: 'true', note: '', categories: [], brands: [],
     },
   },
   'company-info': {
@@ -300,6 +304,9 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
   const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0 });
   const [codeCheckStatus, setCodeCheckStatus] = useState<'available' | 'duplicate' | null>(null);
+  const [productOptions, setProductOptions] = useState<{ categories: string[]; brands: string[] }>({ categories: [], brands: [] });
+  const [openTagDropdown, setOpenTagDropdown] = useState<string | null>(null);
+  const tagDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const config = pageConfigs[currentPage] || pageConfigs['customer-code'];
 
@@ -342,6 +349,13 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     }).catch(() => {}).finally(() => setIsLoadingTerms(false));
   }, []);
 
+  // Fetch distinct product categories & brands for vendor tag inputs
+  useEffect(() => {
+    axios.get('/api/codes/product-options').then((res) => {
+      if (res.data?.data) setProductOptions(res.data.data);
+    }).catch(() => {});
+  }, []);
+
   // Fetch all code counts for summary cards
   useEffect(() => {
     Promise.allSettled([
@@ -379,7 +393,13 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     const nextValues: Record<string, any> = { ...config.initialValues };
     config.fields.forEach((field: any) => {
       const rawValue = record[field.key];
-      nextValues[field.key] = field.type === 'date' ? toDateInputValue(rawValue) : rawValue ?? '';
+      if (field.type === 'tags') {
+        nextValues[field.key] = Array.isArray(rawValue) ? rawValue : [];
+      } else if (field.type === 'date') {
+        nextValues[field.key] = toDateInputValue(rawValue);
+      } else {
+        nextValues[field.key] = rawValue ?? '';
+      }
     });
     setEditingId(record[config.idField]);
     setFormValues(nextValues);
@@ -396,6 +416,14 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
 
   const handleChange = (key: string, value: string) => {
     setFormValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleTagToggle = (key: string, tag: string) => {
+    setFormValues((prev) => {
+      const current: string[] = Array.isArray(prev[key]) ? prev[key] : [];
+      const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag];
+      return { ...prev, [key]: next };
+    });
   };
 
   const handleCodeFieldChange = (key: string, value: string) => {
@@ -717,6 +745,36 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                               ))
                             )}
                           </select>
+                        ) : field.type === 'tags' ? (
+                          <div ref={tagDropdownRef} className="flex flex-col gap-2">
+                            {/* Selected tags */}
+                            <div className="flex flex-wrap gap-2 min-h-[2.5rem]">
+                              {(Array.isArray(formValues[field.key]) ? formValues[field.key] : []).map((tag: string) => (
+                                <span key={tag} className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                                  #{tag}
+                                  <button type="button" onClick={() => handleTagToggle(field.key, tag)}
+                                    className="ml-0.5 hover:text-red-400 transition-colors font-bold">×</button>
+                                </span>
+                              ))}
+                              {(Array.isArray(formValues[field.key]) ? formValues[field.key] : []).length === 0 && (
+                                <span className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>ยังไม่ได้เลือก — คลิกด้านล่างเพื่อเพิ่ม</span>
+                              )}
+                            </div>
+                            {/* Available options */}
+                            <div className="flex flex-wrap gap-1.5">
+                              {(productOptions[field.optionsKey as 'categories' | 'brands'] || [])
+                                .filter((opt: string) => !(Array.isArray(formValues[field.key]) ? formValues[field.key] : []).includes(opt))
+                                .map((opt: string) => (
+                                  <button key={opt} type="button" onClick={() => { handleTagToggle(field.key, opt); setOpenTagDropdown(null); }}
+                                    className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${darkMode ? 'border-gray-600 bg-gray-700/60 text-gray-300 hover:border-blue-400 hover:bg-blue-500/20 hover:text-blue-300' : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700'}`}>
+                                    + {opt}
+                                  </button>
+                                ))}
+                              {(productOptions[field.optionsKey as 'categories' | 'brands'] || []).length === 0 && (
+                                <span className={`text-xs italic ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>ยังไม่มีข้อมูลสินค้าในระบบ</span>
+                              )}
+                            </div>
+                          </div>
                         ) : field.autoCode && !editingId ? (
                           /* Auto-code field in create mode */
                           <div className="flex flex-col gap-1.5">
@@ -871,6 +929,19 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isActive ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700') : (darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700')}`}>
                             {isActive ? 'Active' : 'Inactive'}
                           </span>
+                        </div>
+                      );
+                    }
+
+                    if (column.type === 'tags') {
+                      const tags: string[] = Array.isArray(value) ? value : [];
+                      return (
+                        <div key={column.key} className="flex flex-wrap gap-1">
+                          {tags.length === 0
+                            ? <span className={darkMode ? 'text-gray-600' : 'text-gray-400'}>-</span>
+                            : tags.map((t) => (
+                              <span key={t} className={`rounded-full px-2 py-0.5 text-xs font-medium ${darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>#{t}</span>
+                            ))}
                         </div>
                       );
                     }

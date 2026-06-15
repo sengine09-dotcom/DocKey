@@ -1,0 +1,49 @@
+-- CreateTable SaleOrder
+CREATE TABLE `SaleOrder` (
+  `ID` VARCHAR(191) NOT NULL,
+  `SONumber` VARCHAR(50) NOT NULL,
+  `CustomerCode` VARCHAR(50) NULL,
+  `CustomerName` VARCHAR(255) NOT NULL,
+  `SalesPerson` VARCHAR(255) NULL,
+  `SODate` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `RequiredDate` DATETIME(3) NULL,
+  `Status` VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+  `PaymentTerm` VARCHAR(50) NULL,
+  `Remark` VARCHAR(500) NULL,
+  `CompanyID` VARCHAR(191) NOT NULL,
+  `CreatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `UpdatedAt` DATETIME(3) NOT NULL,
+  PRIMARY KEY (`ID`),
+  UNIQUE INDEX `SaleOrder_CompanyID_SONumber_key`(`CompanyID`, `SONumber`),
+  INDEX `SaleOrder_CompanyID_idx`(`CompanyID`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable SOItem
+CREATE TABLE `SOItem` (
+  `ID` VARCHAR(191) NOT NULL,
+  `SOID` VARCHAR(191) NOT NULL,
+  `LineNo` INT NOT NULL,
+  `ProductCode` VARCHAR(50) NULL,
+  `Description` VARCHAR(255) NOT NULL,
+  `Qty` DECIMAL(18, 2) NOT NULL DEFAULT 0,
+  `Unit` VARCHAR(50) NULL,
+  `UnitPrice` DECIMAL(19, 4) NOT NULL DEFAULT 0,
+  `Discount` DECIMAL(5, 2) NOT NULL DEFAULT 0,
+  `Amount` DECIMAL(19, 4) NOT NULL DEFAULT 0,
+  `DeliveredQty` DECIMAL(18, 2) NOT NULL DEFAULT 0,
+  `ConvertedToPR` TINYINT(1) NOT NULL DEFAULT 0,
+  `PRNumber` VARCHAR(50) NULL,
+  `Remark` VARCHAR(255) NULL,
+  PRIMARY KEY (`ID`),
+  INDEX `SOItem_SOID_idx`(`SOID`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey SaleOrder → Company
+ALTER TABLE `SaleOrder` ADD CONSTRAINT `SaleOrder_CompanyID_fkey`
+  FOREIGN KEY (`CompanyID`) REFERENCES `Company`(`ID`)
+  ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey SOItem → SaleOrder
+ALTER TABLE `SOItem` ADD CONSTRAINT `SOItem_SOID_fkey`
+  FOREIGN KEY (`SOID`) REFERENCES `SaleOrder`(`ID`)
+  ON DELETE CASCADE ON UPDATE CASCADE;

@@ -3,6 +3,7 @@ import CodeController from '../controllers/CodeController';
 
 const router = express.Router();
 
+router.get('/codes/product-options', CodeController.getProductOptions);
 router.get('/codes/:type', CodeController.getAll);
 router.post('/codes/:type', CodeController.create);
 router.put('/codes/:type/:id', CodeController.update);
