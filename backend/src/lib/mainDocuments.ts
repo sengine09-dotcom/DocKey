@@ -1050,6 +1050,74 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     }
   }
 
+  // RE completion trigger: stock OUT + QT/SO Completed when DP+RE >= QT total
+  if (type === 'receipt' && existing === null) {
+    const linkedSOId = parseString(header.linkedSOId);
+    const linkedQTId = parseString(header.linkedQuotationId);
+
+    if (linkedSOId && linkedQTId) {
+      const qt = await prisma.document.findFirst({
+        where: { id: linkedQTId, companyId, documentType: 'QUOTATION' },
+        select: { id: true, totalAmount: true },
+      });
+
+      if (qt) {
+        const dps = await prisma.depositReceiptDocument.findMany({
+          where: { linkedSOId },
+          select: { paymentAmount: true },
+        });
+        const dpTotal = dps.reduce((sum, dp) => sum + toNumber(dp.paymentAmount), 0);
+        const reTotal = toNumber(header.total);
+        const paidTotal = dpTotal + reTotal;
+
+        if (paidTotal >= toNumber(qt.totalAmount)) {
+          await prisma.document.update({
+            where: { id: qt.id },
+            data: { status: 'Completed' },
+          });
+
+          await prisma.saleOrder.update({
+            where: { id: linkedSOId },
+            data: { status: 'COMPLETED' },
+          });
+
+          const stockItems = validItems
+            .map((item: any) => ({
+              productCode: String(parseString(item.productCode) || ''),
+              qty: toNumber(item.quantity),
+            }))
+            .filter((i) => i.productCode && i.qty > 0);
+
+          if (stockItems.length > 0) {
+            const productRows = await prisma.product.findMany({
+              where: { companyId, productCode: { in: stockItems.map((i) => i.productCode) } },
+              select: { id: true, productCode: true },
+            });
+            const productIdMap = new Map(productRows.map((p) => [p.productCode, p.id]));
+
+            const moveItems = stockItems
+              .map((i) => ({ ...i, productId: productIdMap.get(i.productCode) || '' }))
+              .filter((i) => i.productId);
+
+            if (moveItems.length > 0) {
+              await prisma.$transaction(async (tx) => {
+                await recordStockMove(tx, {
+                  items: moveItems,
+                  docNumber: documentNumber,
+                  docType: 'RECEIPT',
+                  direction: 'OUT',
+                  companyId,
+                  docId: documentId,
+                  userId: parseString(header.createdBy) ?? undefined,
+                });
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
   if (type === 'invoice') {
     const linkedQuotationNumber = parseString(header.linkedQuotationNumber);
 

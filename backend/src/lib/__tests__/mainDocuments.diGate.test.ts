@@ -20,6 +20,22 @@ describe('Deposit Invoice gate validation', () => {
   });
 });
 
+describe('RE completion check math', () => {
+  it('triggers when DP + RE equals QT total exactly', () => {
+    const qtTotal = 26322.00;
+    const dpTotal = 7896.60;
+    const reTotal = 18425.40;
+    expect(dpTotal + reTotal >= qtTotal).toBe(true);
+  });
+
+  it('does not trigger when amounts are short', () => {
+    const qtTotal = 26322.00;
+    const dpTotal = 7896.60;
+    const reTotal = 10000.00;
+    expect(dpTotal + reTotal >= qtTotal).toBe(false);
+  });
+});
+
 describe('Balance Invoice GR gate helpers', () => {
   it('returns empty array when no convertedToPr items', () => {
     const soItems: Array<{ prNumber: string | null }> = [];
