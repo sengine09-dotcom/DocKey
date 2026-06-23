@@ -13,6 +13,7 @@ enum DocumentType {
   INVOICE
   RECEIPT
   DEPOSIT_RECEIPT
+  DEPOSIT_INVOICE
   PURCHASE_ORDER
   WORK_ORDER
   DELIVERY_ORDER
@@ -78,6 +79,7 @@ model Product {
   model         String?  @map("Model") @db.VarChar(255)
   price         Decimal  @map("Price") @db.Decimal(19, 4)
   cost          Decimal? @map("Cost") @db.Decimal(19, 4)
+  unitCode      String?  @map("UnitCode") @db.VarChar(50)
   stockQty      Int      @default(0) @map("StockQty")
   minQty        Int      @default(0) @map("MinQty")
   maxQty        Int      @default(0) @map("MaxQty")
@@ -99,6 +101,18 @@ model Destination {
   used            String? @map("Used") @db.VarChar(1)
   companyId       String  @map("CompanyID") @db.VarChar(191)
   company         Company @relation("DestinationCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId])
+}
+
+model UnitCode {
+  id        String  @id @map("ID") @db.VarChar(26)
+  unitCode  String  @map("UnitCode") @db.VarChar(50)
+  unitName  String? @map("UnitName") @db.VarChar(100)
+  shortName String? @map("ShortName") @db.VarChar(20)
+  used      String? @map("Used") @db.VarChar(1)
+  companyId String  @map("CompanyID") @db.VarChar(191)
+  company   Company @relation("UnitCodeCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([companyId])
 }
@@ -168,6 +182,7 @@ model Company {
   products     Product[]     @relation("ProductCompany")
   vendors      Vendor[]      @relation("VendorCompany")
   destinations Destination[] @relation("DestinationCompany")
+  unitCodes             UnitCode[]             @relation("UnitCodeCompany")
   paymentTerms          PaymentTerm[]          @relation("PaymentTermCompany")
   systemActivations     SystemActivation[]
   purchaseRequisitions  PurchaseRequisition[]  @relation("PRCompany")
@@ -210,6 +225,7 @@ model Document {
   invoiceDocument        InvoiceDocument?
   receiptDocument        ReceiptDocument?
   depositReceiptDocument DepositReceiptDocument?
+  depositInvoiceDocument DepositInvoiceDocument?
   purchaseOrderDocument  PurchaseOrderDocument?
   workOrderDocument      WorkOrderDocument?
   deliveryOrderDocument  DeliveryOrderDocument?
@@ -258,16 +274,21 @@ model InvoiceDocument {
   dueDate             DateTime? @map("DueDate")
   doNo                String?   @map("DoNo") @db.VarChar(255)
   linkedReceiptId     String?   @map("LinkedReceiptId") @db.VarChar(26)
-  linkedReceiptNumber String?   @map("LinkedReceiptNumber") @db.VarChar(50)
-  document            Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  linkedReceiptNumber    String?   @map("LinkedReceiptNumber") @db.VarChar(50)
+  linkedDepositReceiptId String?   @map("LinkedDepositReceiptId") @db.VarChar(26)
+  linkedSOId             String?   @map("LinkedSOId") @db.VarChar(191)
+  document               Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model ReceiptDocument {
   id               String    @id @map("ID") @db.Char(26)
   documentNumber   String    @map("DocumentNumber") @db.Char(26)
   receivedDate     DateTime? @map("ReceivedDate")
-  paymentReference String?   @map("PaymentReference") @db.VarChar(100)
-  document         Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  paymentReference       String?   @map("PaymentReference") @db.VarChar(100)
+  linkedDepositReceiptId String?   @map("LinkedDepositReceiptId") @db.VarChar(26)
+  linkedSOId             String?   @map("LinkedSOId") @db.VarChar(191)
+  depositAmountDeducted  Decimal?  @map("DepositAmountDeducted") @db.Decimal(19, 4)
+  document               Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model DepositReceiptDocument {
@@ -279,6 +300,7 @@ model DepositReceiptDocument {
   paymentType           String?   @map("PaymentType") @db.VarChar(30)
   linkedQuotationId     String?   @map("LinkedQuotationId") @db.VarChar(26)
   linkedQuotationNumber String?   @map("LinkedQuotationNumber") @db.VarChar(50)
+  linkedSOId            String?   @map("LinkedSOId") @db.VarChar(191)
   document              Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
@@ -471,4 +493,15 @@ model StockTransaction {
   @@index([companyId, docType, docNumber])
   @@index([productId])
   @@map("StockTransaction")
+}
+
+model DepositInvoiceDocument {
+  documentId        String   @id @map("DocumentID") @db.Char(26)
+  documentNumber    String   @map("DocumentNumber") @db.Char(26)
+  linkedQuotationId String?  @map("LinkedQuotationId") @db.VarChar(26)
+  linkedSOId        String?  @map("LinkedSOId") @db.VarChar(191)
+  depositPercentage Decimal  @map("DepositPercentage") @db.Decimal(5, 2)
+  depositAmount     Decimal  @map("DepositAmount") @db.Decimal(19, 4)
+  balanceAmount     Decimal  @map("BalanceAmount") @db.Decimal(19, 4)
+  document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
