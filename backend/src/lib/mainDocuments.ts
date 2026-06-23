@@ -786,6 +786,54 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     }
   }
 
+  if (type === 'invoice' && existing === null) {
+    const linkedSOId = parseString(header.linkedSOId);
+
+    if (linkedSOId) {
+      // 1. Check DP exists for this SO
+      const dp = await prisma.depositReceiptDocument.findFirst({
+        where: { linkedSOId },
+        select: { id: true },
+      });
+      if (!dp) {
+        throw new Error('ยังไม่มีใบรับมัดจำสำหรับ SO นี้ กรุณาสร้างใบรับมัดจำก่อน');
+      }
+
+      // 2. 3-hop GR gate: SO items → PR items → GR
+      const soItems = await prisma.sOItem.findMany({
+        where: { soId: linkedSOId, convertedToPr: true },
+        select: { prNumber: true },
+      });
+      const prNumbers = soItems
+        .map(i => i.prNumber)
+        .filter((v): v is string => Boolean(v));
+
+      if (prNumbers.length === 0) {
+        throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
+      }
+
+      const prItems = await prisma.pRItem.findMany({
+        where: { prNumber: { in: prNumbers }, convertedToPo: true },
+        select: { poNumber: true },
+      });
+      const poNumbers = prItems
+        .map(i => i.poNumber)
+        .filter((v): v is string => Boolean(v));
+
+      if (poNumbers.length === 0) {
+        throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
+      }
+
+      const gr = await prisma.goodsReceipt.findFirst({
+        where: { poNumber: { in: poNumbers }, status: 'CONFIRMED', companyId },
+        select: { id: true },
+      });
+      if (!gr) {
+        throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
+      }
+    }
+  }
+
   if (type === 'deposit_invoice' && existing === null) {
     const linkedSOId = parseString(header.linkedSOId);
     const linkedQTId = parseString(header.linkedQuotationId);
