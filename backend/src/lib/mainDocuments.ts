@@ -7,6 +7,7 @@ const DOCUMENT_TYPE_MAP = {
   invoice: 'INVOICE',
   receipt: 'RECEIPT',
   deposit_receipt: 'DEPOSIT_RECEIPT',
+  deposit_invoice: 'DEPOSIT_INVOICE',
   purchase_order: 'PURCHASE_ORDER',
   work_order: 'WORK_ORDER',
   delivery_order: 'DELIVERY_ORDER',
@@ -18,6 +19,7 @@ const PRISMA_TO_APP_DOCUMENT_TYPE = {
   INVOICE: 'invoice',
   RECEIPT: 'receipt',
   DEPOSIT_RECEIPT: 'deposit_receipt',
+  DEPOSIT_INVOICE: 'deposit_invoice',
   PURCHASE_ORDER: 'purchase_order',
   WORK_ORDER: 'work_order',
   DELIVERY_ORDER: 'delivery_order',
@@ -29,6 +31,7 @@ const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
   invoice: 'Pending',
   receipt: 'Received',
   deposit_receipt: 'Received',
+  deposit_invoice: 'Draft',
   purchase_order: 'Open',
   work_order: 'Open',
   delivery_order: 'Draft',
@@ -40,6 +43,7 @@ const DOCUMENT_PREFIX: Record<MainDocumentType, string> = {
   invoice: 'INV',
   receipt: 'RC',
   deposit_receipt: 'DR',
+  deposit_invoice: 'DI',
   purchase_order: 'PO',
   work_order: 'WO',
   delivery_order: 'DO',
@@ -48,19 +52,26 @@ const DOCUMENT_PREFIX: Record<MainDocumentType, string> = {
 
 type MainDocumentType = keyof typeof DOCUMENT_TYPE_MAP;
 
-const documentInclude = {
-  items: {
-    orderBy: { lineNo: 'asc' as const },
-  },
-  quotationDocument: true,
-  invoiceDocument: true,
-  receiptDocument: true,
-  depositReceiptDocument: true,
-  purchaseOrderDocument: true,
-  workOrderDocument: true,
-  deliveryOrderDocument: true,
-  customerReturnDocument: true,
+// Lightweight includes — only the relevant type-specific relation per query type
+const TYPE_RELATION_MAP: Record<string, object> = {
+  quotation:        { quotationDocument: true },
+  invoice:          { invoiceDocument: true },
+  receipt:          { receiptDocument: true },
+  deposit_receipt:  { depositReceiptDocument: true },
+  deposit_invoice:  { depositInvoiceDocument: true },
+  purchase_order:   { purchaseOrderDocument: true },
+  work_order:       { workOrderDocument: true },
+  delivery_order:   { deliveryOrderDocument: true },
+  customer_return:  { customerReturnDocument: true },
 };
+
+const buildListInclude = (type: MainDocumentType) =>
+  TYPE_RELATION_MAP[type] ?? {};
+
+const buildDetailInclude = (type: MainDocumentType) => ({
+  ...buildListInclude(type),
+  items: { orderBy: { lineNo: 'asc' as const } },
+});
 
 const toNumber = (value: any) => (value == null || value === '' ? 0 : Number(value));
 
@@ -164,7 +175,11 @@ const buildInvoiceStatusOnline = (status: string | null | undefined) => {
   return 1;
 };
 
-const mapDocumentItem = (item: any, productNameMap: Record<string, string> = {}) => ({
+const mapDocumentItem = (
+  item: any,
+  productNameMap: Record<string, string> = {},
+  unitNameMap: Record<string, string> = {},
+) => ({
   lineNo: item.lineNo,
   productCode: item.productCode || '',
   vendorCode: item.vendorCode || '',
@@ -175,7 +190,8 @@ const mapDocumentItem = (item: any, productNameMap: Record<string, string> = {})
   sellingPrice: toNumber(item.sellingPrice).toFixed(2),
   totalCost: toNumber(item.totalCost).toFixed(2),
   totalSellingPrice: toNumber(item.totalSellingPrice).toFixed(2),
-  unitID: item.unitId || 'x',
+  unitCode: item.unitId || '',
+  unitName: unitNameMap[String(item.unitId || '').trim()] || '',
 });
 
 const buildCustomerNameMap = async (documents: any[], companyId: string) => {
@@ -236,9 +252,35 @@ const buildProductNameMap = async (documents: any[], companyId: string) => {
   }, {} as Record<string, string>);
 };
 
-const mapDocumentRecord = (document: any, customerNameMap: Record<string, string> = {}, productNameMap: Record<string, string> = {}) => {
+const buildUnitNameMap = async (documents: any[], companyId: string) => {
+  const unitCodes = Array.from(new Set(
+    documents
+      .flatMap((doc) => Array.isArray(doc?.items) ? doc.items : [])
+      .map((item) => String(item?.unitId || '').trim())
+      .filter(Boolean)
+  ));
+
+  if (unitCodes.length === 0) return {} as Record<string, string>;
+
+  const units = await prisma.unitCode.findMany({
+    where: { companyId, unitCode: { in: unitCodes } },
+    select: { unitCode: true, unitName: true },
+  });
+
+  return units.reduce((acc, u) => {
+    acc[u.unitCode] = u.unitName || u.unitCode;
+    return acc;
+  }, {} as Record<string, string>);
+};
+
+const mapDocumentRecord = (
+  document: any,
+  customerNameMap: Record<string, string> = {},
+  productNameMap: Record<string, string> = {},
+  unitNameMap: Record<string, string> = {},
+) => {
   const documentType = PRISMA_TO_APP_DOCUMENT_TYPE[document.documentType as keyof typeof PRISMA_TO_APP_DOCUMENT_TYPE] as MainDocumentType;
-  const items = (document.items || []).map((item: any) => mapDocumentItem(item, productNameMap));
+  const items = (document.items || []).map((item: any) => mapDocumentItem(item, productNameMap, unitNameMap));
   const status = document.status || DOCUMENT_DEFAULT_STATUS[documentType];
   const customerCode = document.customerId || '';
 
@@ -284,6 +326,8 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
       statusOnline: document.invoiceDocument?.statusOnline ?? buildInvoiceStatusOnline(status),
       linkedQuotationId: document.invoiceDocument?.linkedQuotationId || '',
       linkedQuotationNumber: document.invoiceDocument?.linkedQuotationNumber || '',
+      linkedDepositReceiptId: document.invoiceDocument?.linkedDepositReceiptId || '',
+      linkedSOId: document.invoiceDocument?.linkedSOId || '',
     };
   }
 
@@ -304,6 +348,9 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
       paymentReference: document.receiptDocument?.paymentReference || '',
       linkedInvoiceId: document.receiptDocument?.linkedInvoiceId || '',
       linkedInvoiceNumber: document.receiptDocument?.linkedInvoiceNumber || '',
+      linkedDepositReceiptId: document.receiptDocument?.linkedDepositReceiptId || '',
+      linkedSOId: document.receiptDocument?.linkedSOId || '',
+      depositAmountDeducted: toNumber(document.receiptDocument?.depositAmountDeducted),
     };
   }
 
@@ -316,6 +363,18 @@ const mapDocumentRecord = (document: any, customerNameMap: Record<string, string
       paymentType: document.depositReceiptDocument?.paymentType || 'full',
       linkedQuotationId: document.depositReceiptDocument?.linkedQuotationId || '',
       linkedQuotationNumber: document.depositReceiptDocument?.linkedQuotationNumber || '',
+      linkedSOId: document.depositReceiptDocument?.linkedSOId || '',
+    };
+  }
+
+  if (documentType === 'deposit_invoice') {
+    return {
+      ...baseRecord,
+      linkedQuotationId: document.depositInvoiceDocument?.linkedQuotationId || '',
+      linkedSOId: document.depositInvoiceDocument?.linkedSOId || '',
+      depositPercentage: toNumber(document.depositInvoiceDocument?.depositPercentage),
+      depositAmount: toNumber(document.depositInvoiceDocument?.depositAmount),
+      balanceAmount: toNumber(document.depositInvoiceDocument?.balanceAmount),
     };
   }
 
@@ -367,14 +426,17 @@ const buildDocumentWhere = (type: MainDocumentType, identifier: string, companyI
 const fetchDocumentRecord = async (type: MainDocumentType, identifier: string, companyId: string) => {
   const document = await prisma.document.findFirst({
     where: buildDocumentWhere(type, identifier, companyId),
-    include: documentInclude,
+    include: buildDetailInclude(type),
   });
   if (!document) {
     return null;
   }
-  const customerNameMap = await buildCustomerNameMap([document], companyId);
-  const productNameMap = await buildProductNameMap([document], companyId);
-  return mapDocumentRecord(document, customerNameMap, productNameMap);
+  const [customerNameMap, productNameMap, unitNameMap] = await Promise.all([
+    buildCustomerNameMap([document], companyId),
+    buildProductNameMap([document], companyId),
+    buildUnitNameMap([document], companyId),
+  ]);
+  return mapDocumentRecord(document, customerNameMap, productNameMap, unitNameMap);
 };
 
 const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: string, documentNumber: string) => {
@@ -386,14 +448,18 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         id: documentId,
         documentNumber,
         dueDate: parseDate(header.dueDate),
-        doNo: parseString(header.doNo),       
+        doNo: parseString(header.doNo),
         linkedReceiptId: '',
         linkedReceiptNumber: '',
+        linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
+        linkedSOId: parseString(header.linkedSOId),
       } as any,
       update: {
         documentNumber,
         dueDate: parseDate(header.dueDate),
         doNo: parseString(header.doNo),
+        linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
+        linkedSOId: parseString(header.linkedSOId),
       } as any,
     });
   }
@@ -423,11 +489,17 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         documentNumber,
         receivedDate: parseDate(header.receivedDate),
         paymentReference: parseString(header.paymentReference),
+        linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
+        linkedSOId: parseString(header.linkedSOId),
+        depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
       },
       update: {
         documentNumber,
         receivedDate: parseDate(header.receivedDate),
         paymentReference: parseString(header.paymentReference),
+        linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
+        linkedSOId: parseString(header.linkedSOId),
+        depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
       },
     });
   }
@@ -444,6 +516,7 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         paymentType: parseString(header.paymentType),
         linkedQuotationId: parseString(header.linkedQuotationId),
         linkedQuotationNumber: parseString(header.linkedQuotationNumber),
+        linkedSOId: parseString(header.linkedSOId),
       },
       update: {
         documentNumber,
@@ -453,6 +526,30 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         paymentType: parseString(header.paymentType),
         linkedQuotationId: parseString(header.linkedQuotationId),
         linkedQuotationNumber: parseString(header.linkedQuotationNumber),
+        linkedSOId: parseString(header.linkedSOId),
+      },
+    });
+  }
+
+  if (type === 'deposit_invoice') {
+    return prisma.depositInvoiceDocument.upsert({
+      where: { documentId },
+      create: {
+        documentId,
+        documentNumber,
+        linkedQuotationId: parseString(header.linkedQuotationId),
+        linkedSOId: parseString(header.linkedSOId),
+        depositPercentage: toNumber(header.depositPercentage) || 30,
+        depositAmount: toNumber(header.depositAmount),
+        balanceAmount: toNumber(header.balanceAmount),
+      },
+      update: {
+        documentNumber,
+        linkedQuotationId: parseString(header.linkedQuotationId),
+        linkedSOId: parseString(header.linkedSOId),
+        depositPercentage: toNumber(header.depositPercentage) || 30,
+        depositAmount: toNumber(header.depositAmount),
+        balanceAmount: toNumber(header.balanceAmount),
       },
     });
   }
@@ -564,13 +661,14 @@ export const listDocumentsByType = async (typeInput: string, companyId: string, 
 
   const documents = await prisma.document.findMany({
     where,
-    include: documentInclude,
+    include: buildListInclude(type),
     orderBy: [{ documentDate: 'desc' }, { updatedAt: 'desc' }],
     ...(limit ? { take: limit } : {}),
   });
-  const customerNameMap = await buildCustomerNameMap(documents, companyId);
-  const productNameMap = await buildProductNameMap(documents, companyId);
-  return documents.map((document) => mapDocumentRecord(document, customerNameMap, productNameMap));
+  const [customerNameMap] = await Promise.all([
+    buildCustomerNameMap(documents, companyId),
+  ]);
+  return documents.map((document) => mapDocumentRecord(document, customerNameMap));
 };
 
 export const getDocumentById = async (typeInput: string, identifier: string, companyId: string) => {
@@ -815,7 +913,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         sellingPrice: parseNullableNumber(item.sellingPrice),
         totalCost: parseNullableNumber(item.totalCost),
         totalSellingPrice: parseNullableNumber(item.totalSellingPrice),
-        unitId: parseString(item.unitId),
+        unitId: parseString(item.unitCode || item.unitId),
       })),
     });
   } else {
