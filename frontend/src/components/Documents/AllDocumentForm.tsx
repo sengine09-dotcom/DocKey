@@ -1286,6 +1286,16 @@ export default function AllDocumentForm({
       return;
     }
 
+    // For deposit_invoice, override total/tax with deposit-only amounts.
+    // depositAmount is VAT-inclusive (pct × grand total), so extract VAT from it.
+    let finalTotal = total;
+    let finalTax = tax;
+    if (documentType === 'deposit_invoice') {
+      const depositAmt = parseFloat(header.depositAmount) || 0;
+      finalTotal = depositAmt;
+      finalTax = depositAmt * taxRate / (100 + taxRate);
+    }
+
     const payload = {
       header: {
         ...header,
@@ -1296,8 +1306,8 @@ export default function AllDocumentForm({
         totalCost,
         totalSellingPrice,
         totalProfit,
-        total,
-        tax,
+        total: finalTotal,
+        tax: finalTax,
         totalQuantity,
         margin: documentType === 'quotation' ? parseNumberInput(header.margin).toFixed(2) : header.margin,
         taxRate,
