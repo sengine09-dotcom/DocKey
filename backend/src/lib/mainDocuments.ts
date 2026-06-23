@@ -813,7 +813,10 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
       }
 
       const prItems = await prisma.pRItem.findMany({
-        where: { prNumber: { in: prNumbers }, convertedToPo: true },
+        where: {
+          pr: { prNumber: { in: prNumbers } },
+          convertedToPo: true,
+        },
         select: { poNumber: true },
       });
       const poNumbers = prItems
