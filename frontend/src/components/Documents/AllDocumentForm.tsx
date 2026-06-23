@@ -1836,7 +1836,7 @@ export default function AllDocumentForm({
                       value={(header as any).depositPercentage || '30'}
                       onChange={(e) => {
                         const pct = Math.min(99, Math.max(1, Number(e.target.value) || 30));
-                        const qtTotal = parseNumberInput((header as any).totalAmount || (header as any).total || totalSellingPrice + tax || '0');
+                        const qtTotal = totalSellingPrice + tax;
                         const depositAmt = Math.round(qtTotal * pct / 100 * 100) / 100;
                         const balanceAmt = Math.round((qtTotal - depositAmt) * 100) / 100;
                         setHeader((h: any) => ({
@@ -1849,22 +1849,32 @@ export default function AllDocumentForm({
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
                     />
                   </label>
-                  <div className="space-y-1.5">
-                    <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      ยอดมัดจำ (บาท)
-                    </span>
-                    <p className={`py-2 px-3 text-sm font-semibold ${darkMode ? 'text-teal-300' : 'text-teal-700'}`}>
-                      ฿{formatDisplayAmount((header as any).depositAmount || '0')}
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      ยอดคงเหลือ (บาท)
-                    </span>
-                    <p className={`py-2 px-3 text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                      ฿{formatDisplayAmount((header as any).balanceAmount || '0')}
-                    </p>
-                  </div>
+                  {(() => {
+                    const pct = Number((header as any).depositPercentage) || 30;
+                    const qtTotal = totalSellingPrice + tax;
+                    const depositAmt = Math.round(qtTotal * pct / 100 * 100) / 100;
+                    const balanceAmt = Math.round((qtTotal - depositAmt) * 100) / 100;
+                    return (
+                      <>
+                        <div className="space-y-1.5">
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            ยอดมัดจำ ({pct}%)
+                          </span>
+                          <p className={`py-2 px-3 text-sm font-bold ${darkMode ? 'text-teal-300' : 'text-teal-700'}`}>
+                            ฿{formatDisplayAmount(depositAmt)}
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            ยอดคงเหลือ ({100 - pct}%)
+                          </span>
+                          <p className={`py-2 px-3 text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                            ฿{formatDisplayAmount(balanceAmt)}
+                          </p>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -1926,7 +1936,54 @@ export default function AllDocumentForm({
                   {printItems.length || items.length} item(s)
                 </div>
               </div>
-              {isViewMode && documentType === 'purchase_order' ? (
+              {documentType === 'deposit_invoice' ? (
+                <>
+                  {/* Deposit Invoice — always display-only, no editable inputs */}
+                  <div
+                    className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
+                      ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                  >
+                    <div>#</div>
+                    <div>Code</div>
+                    <div>Description</div>
+                    <div className="text-right">Qty</div>
+                    <div>หน่วยนับ</div>
+                    <div className="text-right">Unit Price</div>
+                    <div className="text-right">Line Total</div>
+                  </div>
+                  {items.map((item, index) => (
+                    <div key={`di-item-${index}`}
+                      className={`grid items-center gap-1 px-4 py-3
+                        ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
+                      style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                    >
+                      <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
+                      <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {getProductDisplayName(item.productCode, item.productName) || item.productName || '-'}
+                      </div>
+                      <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {(unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                      </div>
+                      <div className={`text-right text-sm font-medium ${darkMode ? 'text-teal-300' : 'text-teal-700'}`}>
+                        {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
+                      </div>
+                      <div className={`text-right text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        ฿{formatDisplayAmount(parseFloat(item.totalSellingPrice) || 0)}
+                      </div>
+                    </div>
+                  ))}
+                  <div className={`flex items-center justify-end gap-4 border-t px-4 py-3
+                    ${darkMode ? 'border-gray-700 bg-gray-800 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                    <span className="text-xs font-semibold uppercase tracking-wide">มูลค่ารวมทั้งสิ้น (100%)</span>
+                    <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      ฿{formatDisplayAmount(totalSellingPrice + tax)}
+                    </span>
+                  </div>
+                </>
+              ) : isViewMode && documentType === 'purchase_order' ? (
                 <>
                   {/* View-mode read-only table for Purchase Order */}
                   <div
@@ -1955,7 +2012,7 @@ export default function AllDocumentForm({
                       </div>
                       <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
                       <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {item.unitName || (unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                        {(unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
                       </div>
                       <div className={`text-right text-sm font-medium ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>
                         {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
@@ -2009,7 +2066,7 @@ export default function AllDocumentForm({
                       </div>
                       <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
                       <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {item.unitName || (unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                        {(unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
                       </div>
                       <div className={`text-right text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         {formatDisplayAmount(parseFloat(item.cost) || 0)}
