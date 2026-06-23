@@ -17,6 +17,7 @@ const DOCUMENT_TYPE_LABELS: Record<MainDocumentType, string> = {
   invoice: 'Invoice',
   receipt: 'Receipt',
   deposit_receipt: 'Deposit Receipt',
+  deposit_invoice: 'Deposit Invoice',
   purchase_order: 'Purchase Order',
   work_order: 'Work Order',
   delivery_order: 'Delivery Order',
@@ -28,6 +29,7 @@ const DOCUMENT_DEFAULT_STATUS: Record<MainDocumentType, string> = {
   invoice: 'Pending',
   receipt: 'Received',
   deposit_receipt: 'Received',
+  deposit_invoice: 'Draft',
   purchase_order: 'Open',
   work_order: 'Open',
   delivery_order: 'Draft',
@@ -39,6 +41,7 @@ const DOCUMENT_NUMBER_PREFIX: Record<MainDocumentType, string> = {
   invoice: 'INV',
   receipt: 'RC',
   deposit_receipt: 'DR',
+  deposit_invoice: 'DI',
   purchase_order: 'PO',
   work_order: 'WO',
   delivery_order: 'DO',
@@ -115,7 +118,7 @@ const createEmptyItem = () => (
     sellingPrice: '',
     totalCost: '',
     totalSellingPrice: '',
-    unitID: '',
+    unitCode: '',
     vendorCode: '',
   }
 );
@@ -264,6 +267,7 @@ export default function AllDocumentForm({
   preloadedVendors,
   preloadedPaymentTerms,
   preloadedQuotations,
+  preloadedUnitCodes,
 }: {
   darkMode: boolean;
   onNavigate?: (page: string, state?: unknown) => void;
@@ -274,6 +278,7 @@ export default function AllDocumentForm({
   preloadedVendors?: any[];
   preloadedPaymentTerms?: any[];
   preloadedQuotations?: any[];
+  preloadedUnitCodes?: any[];
 }) {
   const [mode, setMode] = useState('create');
   const [header, setHeader] = useState(getEmptyHeader(documentType));
@@ -282,6 +287,7 @@ export default function AllDocumentForm({
   const [destinationCodes, setDestinationCodes] = useState<any[]>([]);
   const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
   const [vendorCodes, setVendorCodes] = useState<any[]>([]);
+  const [unitCodes, setUnitCodes] = useState<any[]>([]);
   const [productCodes, setProductCodes] = useState<any[]>([]);
   const [confirmedQuotationItems, setConfirmedQuotationItems] = useState<any[]>([]);
   const [approvedPRItems, setApprovedPRItems] = useState<any[]>([]);
@@ -317,6 +323,7 @@ export default function AllDocumentForm({
     if (preloadedVendors?.length) setVendorCodes(preloadedVendors);
     if (preloadedPaymentTerms?.length) setPaymentTermCodes(preloadedPaymentTerms);
     if (preloadedQuotations?.length) setConfirmedQuotationItems(buildConfirmedQuotationItems(preloadedQuotations));
+    if (preloadedUnitCodes?.length) setUnitCodes(preloadedUnitCodes);
 
     const loadCodeOptions = async () => {
       setIsLoadingCodes(true);
@@ -327,6 +334,7 @@ export default function AllDocumentForm({
           destinationResponse,
           paymentTermResponse,
           vendorResponse,
+          unitCodeResponse,
           productResponse,
           companyResponse,
           quotationResponse,
@@ -336,6 +344,7 @@ export default function AllDocumentForm({
           codeService.getAll('destination'),
           preloadedPaymentTerms?.length ? Promise.resolve(null) : codeService.getAll('payment-term'),
           preloadedVendors?.length ? Promise.resolve(null) : codeService.getAll('vendor'),
+          preloadedUnitCodes?.length ? Promise.resolve(null) : codeService.getAll('unit-code'),
           codeService.getAll('product'),
           codeService.getAll('company'),
           needsQuotation ? documentService.getAll('quotation') : Promise.resolve(null),
@@ -346,6 +355,7 @@ export default function AllDocumentForm({
         setDestinationCodes(destinationResponse.data.data || []);
         if (paymentTermResponse) setPaymentTermCodes(paymentTermResponse.data.data || []);
         if (vendorResponse) setVendorCodes(vendorResponse.data.data || []);
+        if (unitCodeResponse) setUnitCodes(unitCodeResponse.data.data || []);
         setProductCodes(productResponse.data.data || []);
         setCompanyInfo((companyResponse.data.data || []).find((c: any) => c?.isActive !== false) || companyResponse.data.data?.[0] || null);
         if (quotationResponse) setConfirmedQuotationItems(buildConfirmedQuotationItems(quotationResponse.data.data || []));
@@ -384,7 +394,8 @@ export default function AllDocumentForm({
   useEffect(() => {
     if (productCodes.length === 0) return;
     setItems((prev) => prev.map((item) => {
-      if (!item.productCode || item.productName) return item;
+      if (!item.productCode) return item;
+      if (item.productName && item.unitCode) return item;
       const matchedProduct = productCodes.find((product) => {
         const productCode = String(product.productCode || product.productId || product.id || '').trim();
         return productCode === String(item.productCode || '').trim();
@@ -392,7 +403,8 @@ export default function AllDocumentForm({
       if (!matchedProduct) return item;
       return {
         ...item,
-        productName: matchedProduct.productName || item.productName || '',
+        productName: item.productName || matchedProduct.productName || '',
+        unitCode: item.unitCode || matchedProduct.unitCode || '',
       };
     }));
   }, [productCodes]);
@@ -474,7 +486,7 @@ export default function AllDocumentForm({
         sellingPrice: item.sellingPrice || '',
         totalCost: item.totalCost || '',
         totalSellingPrice: item.totalSellingPrice || '',
-        unitID: item.unitID || '',
+        unitCode: item.unitCode || item.unitID || '',
         vendorCode: item.vendorCode || '',
       })));
     } else {
@@ -712,6 +724,7 @@ export default function AllDocumentForm({
         id: product.id || next[selectedItemIndex].id,
         productCode: product.productCode || '',
         productName: product.productName || '',
+        unitCode: product.unitCode || next[selectedItemIndex].unitCode || '',
         quantity: nextQuantity,
         margin: header.margin,
         cost: nextCost,
@@ -1802,12 +1815,13 @@ export default function AllDocumentForm({
                   <div
                     className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
                       ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
-                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 130px 140px' }}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 130px 140px' }}
                   >
                     <div>#</div>
                     <div>Code</div>
                     <div>Description</div>
                     <div className="text-right">Qty</div>
+                    <div>หน่วยนับ</div>
                     <div className="text-right">ราคาทุน/หน่วย</div>
                     <div className="text-right">รวมทุน</div>
                   </div>
@@ -1815,7 +1829,7 @@ export default function AllDocumentForm({
                     <div key={`po-view-item-${index}`}
                       className={`grid items-center gap-1 px-4 py-3
                         ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
-                      style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 130px 140px' }}
+                      style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 130px 140px' }}
                     >
                       <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
                       <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
@@ -1823,6 +1837,9 @@ export default function AllDocumentForm({
                         {getProductDisplayName(item.productCode, item.productName) || '-'}
                       </div>
                       <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {item.unitName || (unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                      </div>
                       <div className={`text-right text-sm font-medium ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>
                         {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
                       </div>
@@ -1833,7 +1850,7 @@ export default function AllDocumentForm({
                   ))}
                   <div className={`grid items-center gap-1 border-t px-4 py-3
                     ${darkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-50'}`}
-                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 130px 140px' }}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 130px 140px' }}
                   >
                     <div></div><div></div><div></div><div></div>
                     <div className={`text-right text-xs font-semibold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -1850,12 +1867,13 @@ export default function AllDocumentForm({
                   <div
                     className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
                       ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
-                    style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 120px 120px 130px 1fr' }}
+                    style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 80px 120px 120px 130px 1fr' }}
                   >
                     <div>#</div>
                     <div>Code</div>
                     <div>Description</div>
                     <div className="text-right">Qty</div>
+                    <div>หน่วยนับ</div>
                     <div className="text-right">ราคาทุน</div>
                     <div className="text-right">ราคาขาย</div>
                     <div className="text-right">Line Total</div>
@@ -1865,7 +1883,7 @@ export default function AllDocumentForm({
                     <div key={`view-item-${index}`}
                       className={`grid items-center gap-1 px-4 py-3
                         ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
-                      style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 120px 120px 130px 1fr' }}
+                      style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 80px 120px 120px 130px 1fr' }}
                     >
                       <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
                       <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
@@ -1873,6 +1891,9 @@ export default function AllDocumentForm({
                         {getProductDisplayName(item.productCode, item.productName) || '-'}
                       </div>
                       <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {item.unitName || (unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                      </div>
                       <div className={`text-right text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         {formatDisplayAmount(parseFloat(item.cost) || 0)}
                       </div>
@@ -1892,9 +1913,9 @@ export default function AllDocumentForm({
                   {/* Subtotal footer row */}
                   <div className={`grid items-center gap-1 border-t px-4 py-3
                     ${darkMode ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-gray-50'}`}
-                    style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 120px 120px 130px 1fr' }}
+                    style={{ gridTemplateColumns: '36px 90px minmax(200px,2fr) 70px 80px 120px 120px 130px 1fr' }}
                   >
-                    <div></div><div></div><div></div><div></div>
+                    <div></div><div></div><div></div><div></div><div></div>
                     <div className={`text-right text-xs font-semibold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       ทุนรวม: ฿{formatDisplayAmount(totalCost)}
                     </div>
@@ -1913,14 +1934,15 @@ export default function AllDocumentForm({
                       ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
                     style={{
                       gridTemplateColumns: documentType === 'quotation' ?
-                        '44px 100px minmax(180px,1.2fr) 90px 100px 110px 120px 52px 100px 160px 44px' :
-                        '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
+                        '44px 100px minmax(180px,1.2fr) 90px 90px 100px 110px 120px 52px 100px 160px 44px' :
+                        '44px 100px minmax(260px,1.8fr) 90px 80px 120px 120px 130px'
                     }}
                   >
                     <div>Item</div>
                     <div>Code</div>
                     <div>Description</div>
                     <div>Qty</div>
+                    <div>หน่วยนับ</div>
                     {documentType === 'quotation' ?
                       <>
                         <div>Margin (%)</div>
@@ -1940,8 +1962,8 @@ export default function AllDocumentForm({
                       ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
                       style={{
                         gridTemplateColumns: documentType === 'quotation' ?
-                          '44px 100px minmax(180px,1.2fr) 90px 100px 110px 120px 52px 100px 160px 44px' :
-                          '44px 100px minmax(260px,1.8fr) 90px 120px 120px 130px'
+                          '44px 100px minmax(180px,1.2fr) 90px 90px 100px 110px 120px 52px 100px 160px 44px' :
+                          '44px 100px minmax(260px,1.8fr) 90px 80px 120px 120px 130px'
                       }}
                     >
                       <div className={`pt-2 text-sm font-semibold
@@ -1967,6 +1989,17 @@ export default function AllDocumentForm({
                         value={item.quantity}
                         onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
                       />
+                      <select
+                        disabled={isItemLocked}
+                        className={`rounded-lg border border-gray-300 px-2 py-2 text-xs w-full ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
+                        value={item.unitCode || ''}
+                        onChange={(e) => handleItemChange(index, 'unitCode', e.target.value)}
+                      >
+                        <option value="">-</option>
+                        {unitCodes.map((u: any) => (
+                          <option key={u.unitCode} value={u.unitCode}>{u.unitName || u.unitCode}</option>
+                        ))}
+                      </select>
                       {documentType === 'quotation' ?
                         <>
                           <input type="number" step="0.01"
