@@ -198,6 +198,13 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   refDocNumber: '',
   scheduledDate: '',
   assignedTo: '',
+  // deposit_invoice specific
+  depositPercentage: '30',
+  depositAmount: '0',
+  balanceAmount: '0',
+  linkedSOId: '',
+  linkedSONumber: '',
+  linkedDepositReceiptId: '',
 });
 
 const getSubtypeFields = (documentType: MainDocumentType) => {
@@ -473,6 +480,13 @@ export default function AllDocumentForm({
       refDocNumber: initialData.refDocNumber || '',
       scheduledDate: initialData.scheduledDate ? String(initialData.scheduledDate).slice(0, 10) : '',
       assignedTo: initialData.assignedTo || '',
+      // deposit_invoice specific
+      depositPercentage: String(initialData.depositPercentage ?? '30'),
+      depositAmount: String(initialData.depositAmount ?? '0'),
+      balanceAmount: String(initialData.balanceAmount ?? '0'),
+      linkedSOId: initialData.linkedSOId || '',
+      linkedSONumber: initialData.linkedSONumber || '',
+      linkedDepositReceiptId: initialData.linkedDepositReceiptId || '',
     });
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
@@ -1751,6 +1765,84 @@ export default function AllDocumentForm({
               ))}
               </div>
             </div>
+
+            {documentType === 'deposit_invoice' && (
+              <div className={`mt-6 rounded-2xl border p-5 ${darkMode ? 'border-teal-700/60 bg-gray-900/80' : 'border-teal-200 bg-teal-50/40'} shadow-sm`}>
+                <div className="mb-4">
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-teal-400' : 'text-teal-600'}`}>ข้อมูลมัดจำ</p>
+                  <h4 className={`mt-1 text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Deposit Invoice Details</h4>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-1 mb-4">
+                  {Array.isArray(initialData?.__confirmedSOs) && (initialData.__confirmedSOs as any[]).length > 1 && (
+                    <label className="block space-y-1.5">
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        เลือกใบสั่งขาย (SO) <span className="text-red-500">*</span>
+                      </span>
+                      <select
+                        value={(header as any).linkedSOId || ''}
+                        onChange={(e) => {
+                          const so = (initialData.__confirmedSOs as any[]).find((s: any) => s.id === e.target.value);
+                          setHeader((h: any) => ({ ...h, linkedSOId: e.target.value, linkedSONumber: so?.soNumber || '' }));
+                        }}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      >
+                        <option value="">-- เลือก SO --</option>
+                        {(initialData.__confirmedSOs as any[]).map((so: any) => (
+                          <option key={so.id} value={so.id}>{so.soNumber} — {so.customerName}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {(header as any).linkedSOId && (
+                    <p className={`text-xs ${darkMode ? 'text-teal-300' : 'text-teal-700'}`}>
+                      SO: {(header as any).linkedSOId}
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <label className="block space-y-1.5">
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      เปอร์เซ็นต์มัดจำ (%)
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={(header as any).depositPercentage || '30'}
+                      onChange={(e) => {
+                        const pct = Math.min(99, Math.max(1, Number(e.target.value) || 30));
+                        const qtTotal = parseNumberInput((header as any).totalAmount || (header as any).total || totalSellingPrice + tax || '0');
+                        const depositAmt = Math.round(qtTotal * pct / 100 * 100) / 100;
+                        const balanceAmt = Math.round((qtTotal - depositAmt) * 100) / 100;
+                        setHeader((h: any) => ({
+                          ...h,
+                          depositPercentage: String(pct),
+                          depositAmount: String(depositAmt),
+                          balanceAmount: String(balanceAmt),
+                        }));
+                      }}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    />
+                  </label>
+                  <div className="space-y-1.5">
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      ยอดมัดจำ (บาท)
+                    </span>
+                    <p className={`py-2 px-3 text-sm font-semibold ${darkMode ? 'text-teal-300' : 'text-teal-700'}`}>
+                      ฿{formatDisplayAmount((header as any).depositAmount || '0')}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      ยอดคงเหลือ (บาท)
+                    </span>
+                    <p className={`py-2 px-3 text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      ฿{formatDisplayAmount((header as any).balanceAmount || '0')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className={`mt-6 rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
               <div className="mb-4">
