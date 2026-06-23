@@ -7,6 +7,7 @@ import purchaseService from '../../services/purchaseService';
 import { printDocumentContent } from '../../utils/printDocument';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import { getQuotationStatusStyle } from '../../pages/documents/documentShared';
+import DepositDeductionSummary from './DepositDeductionSummary';
 
 const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
 
@@ -205,6 +206,13 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   linkedSOId: '',
   linkedSONumber: '',
   linkedDepositReceiptId: '',
+  // receipt with deposit deduction
+  linkedDepositReceiptNumber: '',
+  depositAmountDeducted: '0',
+  qtTotal: '0',
+  dpNumber: '',
+  balanceBase: '0',
+  balanceVat: '0',
 });
 
 const getSubtypeFields = (documentType: MainDocumentType) => {
@@ -487,6 +495,13 @@ export default function AllDocumentForm({
       linkedSOId: initialData.linkedSOId || '',
       linkedSONumber: initialData.linkedSONumber || '',
       linkedDepositReceiptId: initialData.linkedDepositReceiptId || '',
+      // receipt with deposit deduction
+      linkedDepositReceiptNumber: initialData.linkedDepositReceiptNumber || '',
+      depositAmountDeducted: String(initialData.depositAmountDeducted ?? '0'),
+      qtTotal: String(initialData.qtTotal ?? '0'),
+      dpNumber: initialData.dpNumber || '',
+      balanceBase: String(initialData.balanceBase ?? '0'),
+      balanceVat: String(initialData.balanceVat ?? '0'),
     });
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
@@ -2174,6 +2189,21 @@ export default function AllDocumentForm({
                 </>
               )}
             </div>
+
+            {documentType === 'receipt' && header.linkedDepositReceiptId && (
+              <div className="mt-4">
+                <DepositDeductionSummary
+                  qtTotal={parseNumberInput(header.qtTotal || '0')}
+                  dpNumber={header.dpNumber || header.linkedDepositReceiptNumber || ''}
+                  depositPercentage={parseNumberInput(header.depositPercentage || '30')}
+                  depositAmount={parseNumberInput(header.depositAmountDeducted || '0')}
+                  balanceNet={total}
+                  balanceBase={parseNumberInput(header.balanceBase || '0')}
+                  vatAmount={parseNumberInput(header.balanceVat || '0')}
+                  darkMode={darkMode}
+                />
+              </div>
+            )}
           </fieldset>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">

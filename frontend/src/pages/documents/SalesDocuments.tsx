@@ -10,9 +10,14 @@ import codeService from '../../services/codeService';
 import {
   documentTypeConfigs, accentClasses, createEmptyCollections, DocumentsByType,
   getRecordKey, formatDate, formatCurrency, replaceRecord, loadTabDocuments,
-  buildInvoiceDraftFromQuotation, buildDepositReceiptDraftFromQuotation, buildReceiptDraftFromInvoice,
+  buildInvoiceDraftFromQuotation, buildReceiptDraftFromInvoice,
+  buildDepositInvoiceDraftFromQuotation,
+  buildDPFromDepositInvoice,
+  buildBalanceInvoiceFromDP,
+  buildReceiptDraftFromBalanceInvoice,
   QUOTATION_STATUS_OPTIONS, getQuotationStatusStyle,
 } from './documentShared';
+import soService from '../../services/soService';
 import SOTab from './SOTab';
 
 type SalesTabId = MainDocumentType | 'so';
@@ -27,18 +32,35 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   const [customerCodes, setCustomerCodes] = useState<any[]>([]);
   const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
   const [vendorCodes, setVendorCodes] = useState<any[]>([]);
+  const [unitCodes, setUnitCodes] = useState<any[]>([]);
   const [editorState, setEditorState] = useState<{ type: MainDocumentType; initialData: any } | null>(null);
   const [pendingSO, setPendingSO] = useState<any>(null);
+  const [confirmedSOs, setConfirmedSOs] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [isLoading, setIsLoading] = useState(true);
   const [isTabLoading, setIsTabLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const loadedTabsRef = useRef<Set<SalesTabId>>(new Set());
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const codesLoadedRef = useRef(false);
   const navigate = useNavigate();
+
+  const loadCodes = useCallback(async () => {
+    if (codesLoadedRef.current) return;
+    codesLoadedRef.current = true;
+    const [custRes, termRes, vendorRes, unitRes] = await Promise.all([
+      codeService.getAll('customer'),
+      codeService.getAll('payment-term'),
+      codeService.getAll('vendor'),
+      codeService.getAll('unit-code'),
+    ]);
+    setCustomerCodes(custRes?.data?.data || []);
+    setPaymentTermCodes(termRes?.data?.data || []);
+    setVendorCodes(vendorRes?.data?.data || []);
+    setUnitCodes(unitRes?.data?.data || []);
+  }, []);
 
   const isSOTab = activeTab === 'so';
   const cfg = isSOTab ? { ...SO_TAB_META } as any : documentTypeConfigs[activeTab as MainDocumentType];
@@ -60,23 +82,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     void axios.get('/api/auth/me').then((res) => {
       setIsAdmin(String(res.data?.user?.role || '').toLowerCase() === 'admin');
     });
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const [custRes, termRes, vendorRes] = await Promise.all([
-          codeService.getAll('customer'),
-          codeService.getAll('payment-term'),
-          codeService.getAll('vendor'),
-        ]);
-        setCustomerCodes(custRes?.data?.data || []);
-        setPaymentTermCodes(termRes?.data?.data || []);
-        setVendorCodes(vendorRes?.data?.data || []);
-      } finally {
-        setIsLoading(false);
-      }
-      void fetchTab('quotation');
-    };
-    void load();
+    void fetchTab('quotation');
   }, [fetchTab]);
 
   useEffect(() => {
@@ -86,11 +92,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
 
   const records = docs[activeTab] || [];
 
-  const getPartyLabel = (record: any) => {
-    const custCode = String(record?.customer || '').trim();
-    const matched = customerCodes.find((c) => c.customerCode === custCode);
-    return matched?.customerName || matched?.shortName || record?.customerName || record?.attentionTo || '-';
-  };
+  const getPartyLabel = (record: any) =>
+    record?.customerName || record?.attentionTo || String(record?.customer || '').trim() || '-';
 
   const getPaymentLabel = (record: any) => {
     const termId = String(record?.paymentTerm || '').trim();
@@ -137,9 +140,10 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     }, 400);
   };
 
-  const handleCreate = () => { setSelectedRecord(null); setEditorState({ type: activeTab as MainDocumentType, initialData: null }); };
+  const handleCreate = () => { void loadCodes(); setSelectedRecord(null); setEditorState({ type: activeTab as MainDocumentType, initialData: null }); };
 
   const handleView = async (record: any) => {
+    void loadCodes();
     setSelectedRecord(null);
     try {
       const id = record?.documentId || record?.id || record?.documentNumber;
@@ -151,6 +155,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   };
 
   const handleEdit = (record: any) => {
+    void loadCodes();
     setSelectedRecord(null);
     setEditorState({ type: activeTab as MainDocumentType, initialData: { ...record, __mode: 'edit' } });
   };
@@ -171,35 +176,103 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     }
   };
 
-  const handleLinkToInvoice = (quotation: any) => {
+  const fetchFullRecord = async (record: any, type: MainDocumentType) => {
+    if (Array.isArray(record?.items) && record.items.length > 0) return record;
+    try {
+      const id = record?.documentId || record?.id || record?.documentNumber;
+      const res = await documentService.getById(type, id);
+      return res?.data?.data || record;
+    } catch {
+      return record;
+    }
+  };
+
+  const handleLinkToInvoice = async (quotation: any) => {
+    const full = await fetchFullRecord(quotation, 'quotation');
     setActiveTab('invoice');
     setSelectedRecord(null);
-    setEditorState({ type: 'invoice', initialData: buildInvoiceDraftFromQuotation(quotation) });
+    setEditorState({ type: 'invoice', initialData: buildInvoiceDraftFromQuotation(full) });
   };
 
-  const handleLinkToDeposit = (quotation: any) => {
-    setActiveTab('deposit_receipt');
-    setSelectedRecord(null);
-    setEditorState({ type: 'deposit_receipt', initialData: buildDepositReceiptDraftFromQuotation(quotation) });
-  };
-
-  const handleLinkToReceipt = (invoice: any) => {
+  const handleLinkToReceipt = async (invoice: any) => {
+    const full = await fetchFullRecord(invoice, 'invoice');
     setActiveTab('receipt');
     setSelectedRecord(null);
-    setEditorState({ type: 'receipt', initialData: buildReceiptDraftFromInvoice(invoice) });
+
+    if (full.linkedDepositReceiptId) {
+      try {
+        const dpRes = await documentService.getById('deposit_receipt', full.linkedDepositReceiptId);
+        const dp = dpRes?.data?.data;
+        setEditorState({ type: 'receipt', initialData: buildReceiptDraftFromBalanceInvoice(full, dp) });
+      } catch {
+        setEditorState({ type: 'receipt', initialData: buildReceiptDraftFromInvoice(full) });
+      }
+    } else {
+      setEditorState({ type: 'receipt', initialData: buildReceiptDraftFromInvoice(full) });
+    }
   };
 
-  const handleLinkToSO = (quotation: any) => {
+  const handleLinkToSO = async (quotation: any) => {
+    const full = await fetchFullRecord(quotation, 'quotation');
     const customerName = (() => {
-      const code = String(quotation.customer || '').trim();
+      const code = String(full.customer || '').trim();
       if (!code) return '';
       const matched = customerCodes.find((c) => c.customerCode === code);
       return matched?.customerName || matched?.shortName || '';
     })();
     setEditorState(null);
     setSelectedRecord(null);
-    setPendingSO({ ...quotation, customerName });
+    setPendingSO({ ...full, customerName });
     setActiveTab('so');
+  };
+
+  const handleLinkToDI = async (quotation: any) => {
+    const full = await fetchFullRecord(quotation, 'quotation');
+    await loadCodes();
+
+    let soList: any[] = [];
+    try {
+      const res = await soService.getAll();
+      const allSOs = res?.data?.data || [];
+      soList = allSOs.filter(
+        (so: any) =>
+          so.status === 'CONFIRMED' &&
+          (!full.customer || so.customerCode === full.customer),
+      );
+    } catch {
+      soList = [];
+    }
+    setConfirmedSOs(soList);
+
+    if (soList.length === 0) {
+      await showAppAlert({ title: 'ไม่พบ SO', message: 'ยังไม่มี SO ที่ยืนยันแล้ว กรุณาสร้าง SO ก่อน', tone: 'warning' });
+      return;
+    }
+
+    const autoSO = soList.length === 1 ? soList[0] : null;
+    setActiveTab('deposit_invoice');
+    setSelectedRecord(null);
+    setEditorState({
+      type: 'deposit_invoice',
+      initialData: {
+        ...buildDepositInvoiceDraftFromQuotation(full, autoSO),
+        __confirmedSOs: soList,
+      },
+    });
+  };
+
+  const handleLinkToDPFromDI = async (di: any) => {
+    const full = await fetchFullRecord(di, 'deposit_invoice');
+    setActiveTab('deposit_receipt');
+    setSelectedRecord(null);
+    setEditorState({ type: 'deposit_receipt', initialData: buildDPFromDepositInvoice(full) });
+  };
+
+  const handleLinkToBalanceInvoice = async (dp: any) => {
+    const full = await fetchFullRecord(dp, 'deposit_receipt');
+    setActiveTab('invoice');
+    setSelectedRecord(null);
+    setEditorState({ type: 'invoice', initialData: buildBalanceInvoiceFromDP(full) });
   };
 
   const handleEditorNavigate = (page: string, state?: unknown) => {
@@ -235,18 +308,21 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   const accentTextCls: Record<string, string> = {
     blue:    darkMode ? 'text-blue-300'    : 'text-blue-600',
     cyan:    darkMode ? 'text-cyan-300'    : 'text-cyan-600',
+    teal:    darkMode ? 'text-teal-300'    : 'text-teal-600',
     emerald: darkMode ? 'text-emerald-300' : 'text-emerald-600',
     amber:   darkMode ? 'text-amber-300'   : 'text-amber-600',
   };
   const bannerBgCls: Record<string, string> = {
     blue:    darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900'       : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-sky-50',
     cyan:    darkMode ? 'border-cyan-500/30 bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900'       : 'border-cyan-200 bg-gradient-to-r from-cyan-50 via-white to-teal-50',
+    teal:    darkMode ? 'border-teal-500/30 bg-gradient-to-r from-slate-900 via-teal-950/40 to-slate-900'       : 'border-teal-200 bg-gradient-to-r from-teal-50 via-white to-cyan-50',
     emerald: darkMode ? 'border-emerald-500/30 bg-gradient-to-r from-slate-900 via-emerald-950/40 to-slate-900' : 'border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-teal-50',
     amber:   darkMode ? 'border-amber-500/30 bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-900'    : 'border-amber-200 bg-gradient-to-r from-amber-50 via-white to-yellow-50',
   };
   const bannerCardCls: Record<string, string> = {
     blue:    darkMode ? 'border-white/10 bg-white/5' : 'border-blue-100 bg-white/80',
     cyan:    darkMode ? 'border-white/10 bg-white/5' : 'border-cyan-100 bg-white/80',
+    teal:    darkMode ? 'border-white/10 bg-white/5' : 'border-teal-100 bg-white/80',
     emerald: darkMode ? 'border-white/10 bg-white/5' : 'border-emerald-100 bg-white/80',
     amber:   darkMode ? 'border-white/10 bg-white/5' : 'border-amber-100 bg-white/80',
   };
@@ -319,8 +395,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                 </button>
               );
             })()}
-            {/* deposit_receipt → invoice → receipt */}
-            {(['deposit_receipt', 'invoice', 'receipt'] as const).map((tab) => {
+            {/* deposit_invoice → deposit_receipt → invoice → receipt */}
+            {(['deposit_invoice', 'deposit_receipt', 'invoice', 'receipt'] as const).map((tab) => {
               const c = documentTypeConfigs[tab];
               const a = accentClasses[c.accent];
               const isActive = activeTab === tab;
@@ -379,7 +455,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                     </button>
                   </div>
 
-                  {isLoading ? (
+                  {isTabLoading && filteredRecords.length === 0 ? (
                     <div className={`text-center py-16 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       <div className="text-3xl mb-3">⏳</div>
                       <p className="text-sm">กำลังโหลดเอกสาร...</p>
@@ -434,15 +510,28 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                                         className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-blue-900/40 text-blue-300 hover:bg-blue-800/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
                                         🛒 ใบสั่งขาย
                                       </button>
-                                      <button type="button" onClick={() => handleLinkToDeposit(record)}
-                                        className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
-                                        🏦 มัดจำ
+                                      <button type="button" onClick={() => handleLinkToDI(record)}
+                                        className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
+                                        📋 แจ้งหนี้มัดจำ
                                       </button>
                                       <button type="button" onClick={() => handleLinkToInvoice(record)}
-                                        className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
-                                        🧾 Invoice
+                                        className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                                        title="ต้องมี GR ก่อน">
+                                        🧾 Balance Invoice
                                       </button>
                                     </>
+                                  )}
+                                  {activeTab === 'deposit_invoice' && (
+                                    <button type="button" onClick={() => handleLinkToDPFromDI(record)}
+                                      className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+                                      🏦 สร้างใบรับมัดจำ
+                                    </button>
+                                  )}
+                                  {activeTab === 'deposit_receipt' && (
+                                    <button type="button" onClick={() => handleLinkToBalanceInvoice(record)}
+                                      className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
+                                      🧾 ใบแจ้งหนี้งวดสุดท้าย
+                                    </button>
                                   )}
                                   {activeTab === 'invoice' && (
                                     <button type="button" onClick={() => handleLinkToReceipt(record)}
@@ -467,7 +556,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                     </div>
                   )}
 
-                  {!isLoading && filteredRecords.length > 0 && (
+                  {filteredRecords.length > 0 && (
                     <div className={`px-5 py-3 border-t text-xs ${darkMode ? 'border-gray-700 text-gray-500' : 'border-gray-100 text-gray-400'}`}>
                       แสดง {filteredRecords.length} จาก {records.length} รายการ
                       <span className="ml-3 font-semibold">
@@ -569,7 +658,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                                 <td className={`px-5 py-3 font-mono text-xs ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</td>
                                 <td className={`px-5 py-3 ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.productName || '-'}</td>
                                 <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>{Number(item.quantity || 0).toLocaleString()}</td>
-                                <td className={`px-5 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{item.unitID || '-'}</td>
+                                <td className={`px-5 py-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{item.unitName || (unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}</td>
                                 <td className={`px-5 py-3 text-right ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>{formatCurrency(Number(item.cost || 0))}</td>
                                 <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(Number(item.quantity) > 0 ? Number(item.totalSellingPrice || 0) / Number(item.quantity) : Number(item.sellingPrice || 0))}</td>
                                 <td className={`px-5 py-3 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(Number(item.totalSellingPrice || 0))}</td>
@@ -595,19 +684,32 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                   )}
 
                   {/* Quick-link actions */}
-                  {(activeTab === 'quotation' || activeTab === 'invoice') && (
-                    <div className="flex gap-3">
+                  {(activeTab === 'quotation' || activeTab === 'deposit_invoice' || activeTab === 'deposit_receipt' || activeTab === 'invoice') && (
+                    <div className="flex gap-3 flex-wrap">
                       {activeTab === 'quotation' && (
                         <>
-                          <button type="button" onClick={() => handleLinkToDeposit(selectedRecord)}
-                            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
-                            🏦 สร้างใบรับมัดจำ
+                          <button type="button" onClick={() => handleLinkToDI(selectedRecord)}
+                            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
+                            📋 สร้างใบแจ้งหนี้มัดจำ
                           </button>
                           <button type="button" onClick={() => handleLinkToInvoice(selectedRecord)}
-                            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
-                            🧾 สร้างใบแจ้งหนี้
+                            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                            title="ต้องมี GR ก่อน">
+                            🧾 สร้าง Balance Invoice
                           </button>
                         </>
+                      )}
+                      {activeTab === 'deposit_invoice' && (
+                        <button type="button" onClick={() => handleLinkToDPFromDI(selectedRecord)}
+                          className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>
+                          🏦 สร้างใบรับมัดจำ
+                        </button>
+                      )}
+                      {activeTab === 'deposit_receipt' && (
+                        <button type="button" onClick={() => handleLinkToBalanceInvoice(selectedRecord)}
+                          className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
+                          🧾 สร้างใบแจ้งหนี้งวดสุดท้าย
+                        </button>
                       )}
                       {activeTab === 'invoice' && (
                         <button type="button" onClick={() => handleLinkToReceipt(selectedRecord)}
@@ -630,6 +732,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                     darkMode={darkMode}
                     preloadedCustomers={customerCodes}
                     preloadedVendors={vendorCodes}
+                    preloadedUnitCodes={unitCodes}
                     preloadedPaymentTerms={paymentTermCodes}
                     preloadedQuotations={docs.quotation}
                   />
