@@ -528,7 +528,7 @@ export default function AllDocumentForm({
   const isApprovedStatus  = documentType === 'quotation' && header.status === 'Approved';
   const isSentStatus      = documentType === 'quotation' && header.status === 'Sent';
   const isConfirmedStatus = documentType === 'quotation' && header.status === 'Confirmed';
-  const isItemLocked      = isApprovedStatus || isSentStatus || isConfirmedStatus;
+  const isItemLocked      = isApprovedStatus || isSentStatus || isConfirmedStatus || documentType === 'deposit_invoice';
   const typeLabel = DOCUMENT_TYPE_LABELS[documentType];
   const subtypeFields = useMemo(() => getSubtypeFields(documentType), [documentType]);
   const taxRate = Number(header.taxRate || 0);
