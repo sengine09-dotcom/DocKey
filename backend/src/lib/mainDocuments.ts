@@ -1052,8 +1052,26 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
 
   // RE completion trigger: stock OUT + QT/SO Completed when DP+RE >= QT total
   if (type === 'receipt' && existing === null) {
-    const linkedSOId = parseString(header.linkedSOId);
-    const linkedQTId = parseString(header.linkedQuotationId);
+    let linkedSOId = parseString(header.linkedSOId);
+    let linkedQTId = parseString(header.linkedQuotationId);
+
+    // If not in header, try to derive from linked DP
+    if (!linkedSOId && header.linkedDepositReceiptId) {
+      const dpDoc = await prisma.depositReceiptDocument.findFirst({
+        where: { id: String(header.linkedDepositReceiptId) },
+        select: { linkedSOId: true },
+      });
+      if (dpDoc?.linkedSOId) linkedSOId = dpDoc.linkedSOId;
+    }
+
+    // If still missing QT, try to find it from the Deposit Invoice linked to this SO
+    if (!linkedQTId && linkedSOId) {
+      const diDoc = await prisma.depositInvoiceDocument.findFirst({
+        where: { linkedSOId },
+        select: { linkedQuotationId: true },
+      });
+      if (diDoc?.linkedQuotationId) linkedQTId = diDoc.linkedQuotationId;
+    }
 
     if (linkedSOId && linkedQTId) {
       const qt = await prisma.document.findFirst({
