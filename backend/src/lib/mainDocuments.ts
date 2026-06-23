@@ -350,7 +350,7 @@ const mapDocumentRecord = (
       linkedInvoiceNumber: document.receiptDocument?.linkedInvoiceNumber || '',
       linkedDepositReceiptId: document.receiptDocument?.linkedDepositReceiptId || '',
       linkedSOId: document.receiptDocument?.linkedSOId || '',
-      depositAmountDeducted: toNumber(document.receiptDocument?.depositAmountDeducted),
+      depositAmountDeducted: parseNullableNumber(document.receiptDocument?.depositAmountDeducted),
     };
   }
 
@@ -661,14 +661,16 @@ export const listDocumentsByType = async (typeInput: string, companyId: string, 
 
   const documents = await prisma.document.findMany({
     where,
-    include: buildListInclude(type),
+    include: buildDetailInclude(type),
     orderBy: [{ documentDate: 'desc' }, { updatedAt: 'desc' }],
     ...(limit ? { take: limit } : {}),
   });
-  const [customerNameMap] = await Promise.all([
+  const [customerNameMap, productNameMap, unitNameMap] = await Promise.all([
     buildCustomerNameMap(documents, companyId),
+    buildProductNameMap(documents, companyId),
+    buildUnitNameMap(documents, companyId),
   ]);
-  return documents.map((document) => mapDocumentRecord(document, customerNameMap));
+  return documents.map((document) => mapDocumentRecord(document, customerNameMap, productNameMap, unitNameMap));
 };
 
 export const getDocumentById = async (typeInput: string, identifier: string, companyId: string) => {
