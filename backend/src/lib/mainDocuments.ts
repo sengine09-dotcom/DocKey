@@ -786,7 +786,45 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     }
   }
 
-  
+  if (type === 'deposit_invoice' && existing === null) {
+    const linkedSOId = parseString(header.linkedSOId);
+    const linkedQTId = parseString(header.linkedQuotationId);
+    const pct = toNumber(header.depositPercentage);
+
+    if (!linkedSOId) {
+      throw new Error('กรุณาระบุใบสั่งขาย (SO)');
+    }
+    if (!linkedQTId) {
+      throw new Error('กรุณาระบุใบเสนอราคา (QT)');
+    }
+    if (pct < 1 || pct > 99) {
+      throw new Error('เปอร์เซ็นต์มัดจำต้องอยู่ระหว่าง 1-99');
+    }
+
+    const so = await prisma.saleOrder.findFirst({
+      where: { id: linkedSOId, companyId },
+      select: { status: true },
+    });
+    if (!so) {
+      throw new Error('ไม่พบใบสั่งขาย');
+    }
+    if (so.status !== 'CONFIRMED') {
+      throw new Error('SO ยังไม่ยืนยัน กรุณายืนยัน SO ก่อนสร้างใบแจ้งหนี้มัดจำ');
+    }
+
+    const qt = await prisma.document.findFirst({
+      where: { id: linkedQTId, companyId, documentType: 'QUOTATION' },
+      select: { status: true },
+    });
+    if (!qt) {
+      throw new Error('ไม่พบใบเสนอราคา');
+    }
+    if (qt.status !== 'Confirmed') {
+      throw new Error('ใบเสนอราคายังไม่ได้รับการยืนยัน กรุณาเปลี่ยนสถานะ QT เป็น Confirmed');
+    }
+  }
+
+
   await prisma.document.upsert({
     where: { id: documentId },
     create: {
