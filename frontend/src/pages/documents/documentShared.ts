@@ -259,6 +259,48 @@ export const buildDepositInvoiceDraftFromQuotation = (quotation: any, so: any) =
   };
 };
 
+export const buildDepositInvoiceDraftFromSO = (so: any) => {
+  const soNum = String(so?.soNumber || '').trim();
+  const today = toDateInputValue(new Date());
+  const soTotal = Number(so?.total || 0);
+  const depositPct = 30;
+  const depositAmount = Math.round((soTotal * depositPct / 100) * 100) / 100;
+  const balanceAmount = Math.round((soTotal - depositAmount) * 100) / 100;
+  const taxRate = 7;
+  const depositBase = Math.round((depositAmount / (1 + taxRate / 100)) * 100) / 100;
+  const depositVat = Math.round((depositAmount - depositBase) * 100) / 100;
+
+  return {
+    __mode: 'create',
+    title: `ใบแจ้งหนี้มัดจำ — ${so?.customerName || soNum}`,
+    documentDate: today,
+    customer: so?.customerCode || '',
+    billTo: so?.customerName || '',
+    paymentTerm: so?.paymentTerm || '',
+    paymentMethod: so?.paymentMethod || 'Bank Transfer',
+    referenceNo: soNum,
+    status: 'Draft',
+    remark: `มัดจำ ${depositPct}% ตามใบสั่งขาย ${soNum}`,
+    taxRate: String(taxRate),
+    tax: String(depositVat),
+    total: String(depositAmount),
+    linkedQuotationId: '',
+    linkedQuotationNumber: '',
+    linkedSOId: so?.id || '',
+    linkedSONumber: soNum,
+    depositPercentage: depositPct,
+    depositAmount,
+    balanceAmount,
+    items: (so?.items || []).map((item: any) => ({
+      id: item?.id || '', productCode: item?.productCode || '',
+      productName: item?.productName || item?.description || '', quantity: item?.quantity || '',
+      cost: item?.cost || '', margin: item?.margin || '',
+      sellingPrice: item?.sellingPrice || '', totalCost: item?.totalCost || '',
+      totalSellingPrice: item?.totalSellingPrice || item?.amount || '', unitId: item?.unitId || '',
+    })),
+  };
+};
+
 export const buildDPFromDepositInvoice = (di: any) => {
   const diNum = String(di?.documentNumber || '').trim();
   const today = toDateInputValue(new Date());

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import soService, { SOPayload, SaleOrder } from '../../services/soService';
 import codeService from '../../services/codeService';
@@ -31,9 +31,15 @@ const emptyForm = (): SOPayload => ({
   requiredDate: '', paymentTerm: '', remark: '', items: [emptyItem()],
 });
 
-interface Props { darkMode: boolean; isAdmin?: boolean; initialQuotation?: any; }
+interface Props {
+  darkMode: boolean;
+  isAdmin?: boolean;
+  initialQuotation?: any;
+  onLinkToDI?: (so: any) => void;
+  onLinkToBalanceInvoice?: (so: any) => void;
+}
 
-export default function SOTab({ darkMode, isAdmin = false, initialQuotation }: Props) {
+export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice }: Props) {
   const [sos, setSos] = useState<SaleOrder[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -90,17 +96,23 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation }: P
     setMode('create');
   }, [initialQuotation]);
 
+  const formCodesLoadedRef = useRef(false);
+  const loadFormCodes = useCallback(async () => {
+    if (formCodesLoadedRef.current) return;
+    formCodesLoadedRef.current = true;
+    const [custRes, prodRes] = await Promise.all([
+      codeService.getAll('customer'),
+      codeService.getAll('product'),
+    ]);
+    setCustomers(custRes?.data?.data || []);
+    setProducts(prodRes?.data?.data || []);
+  }, []);
+
   const load = async () => {
     setIsLoading(true);
     try {
-      const [soRes, custRes, prodRes] = await Promise.allSettled([
-        soService.getAll(),
-        codeService.getAll('customer'),
-        codeService.getAll('product'),
-      ]);
-      if (soRes.status === 'fulfilled') setSos(soRes.value.data?.data || []);
-      if (custRes.status === 'fulfilled') setCustomers(custRes.value.data?.data || []);
-      if (prodRes.status === 'fulfilled') setProducts(prodRes.value.data?.data || []);
+      const soRes = await soService.getAll();
+      setSos(soRes?.data?.data || []);
     } finally { setIsLoading(false); }
   };
 
@@ -126,9 +138,10 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation }: P
   };
 
   // ── Actions ──────────────────────────────────────────────────────────────────
-  const openCreate = () => { setForm(emptyForm()); setEditingId(null); setMode('create'); };
+  const openCreate = () => { void loadFormCodes(); setForm(emptyForm()); setEditingId(null); setMode('create'); };
 
   const openEdit = (so: SaleOrder) => {
+    void loadFormCodes();
     setForm({
       customerCode: so.customerCode || '',
       customerName: so.customerName || '',
@@ -499,6 +512,19 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation }: P
                     ยกเลิก
                   </button>
                 )}
+                {viewing.status === 'CONFIRMED' && onLinkToDI && (
+                  <button type="button" onClick={() => onLinkToDI(viewing)}
+                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
+                    📋 สร้างใบแจ้งหนี้มัดจำ
+                  </button>
+                )}
+                {viewing.status === 'CONFIRMED' && onLinkToBalanceInvoice && (
+                  <button type="button" onClick={() => onLinkToBalanceInvoice(viewing)}
+                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                    title="ต้องมี GR และใบรับมัดจำก่อน">
+                    🧾 สร้าง Balance Invoice
+                  </button>
+                )}
                 {(viewing.status === 'DRAFT' || isAdmin) && (
                   <button type="button" onClick={() => handleDelete(viewing)}
                     className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
@@ -681,10 +707,25 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation }: P
                         </button>
                       )}
                       {so.status === 'CONFIRMED' && (
-                        <button type="button" onClick={() => handleCancel(so)}
-                          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
-                          ยกเลิก
-                        </button>
+                        <>
+                          <button type="button" onClick={() => handleCancel(so)}
+                            className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                            ยกเลิก
+                          </button>
+                          {onLinkToDI && (
+                            <button type="button" onClick={() => onLinkToDI(so)}
+                              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
+                              📋 แจ้งหนี้มัดจำ
+                            </button>
+                          )}
+                          {onLinkToBalanceInvoice && (
+                            <button type="button" onClick={() => onLinkToBalanceInvoice(so)}
+                              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                              title="ต้องมี GR และใบรับมัดจำก่อน">
+                              🧾 Balance Invoice
+                            </button>
+                          )}
+                        </>
                       )}
                       <button type="button" onClick={() => openView(so)}
                         className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>

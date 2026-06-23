@@ -12,6 +12,7 @@ import {
   getRecordKey, formatDate, formatCurrency, replaceRecord, loadTabDocuments,
   buildInvoiceDraftFromQuotation, buildReceiptDraftFromInvoice,
   buildDepositInvoiceDraftFromQuotation,
+  buildDepositInvoiceDraftFromSO,
   buildDPFromDepositInvoice,
   buildBalanceInvoiceFromDP,
   buildReceiptDraftFromBalanceInvoice,
@@ -261,6 +262,28 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     });
   };
 
+  const handleSOtoDI = async (so: any) => {
+    await loadCodes();
+    setActiveTab('deposit_invoice');
+    setSelectedRecord(null);
+    setEditorState({
+      type: 'deposit_invoice',
+      initialData: buildDepositInvoiceDraftFromSO(so),
+    });
+  };
+
+  const handleSOtoBalanceInvoice = async (so: any) => {
+    const dp = docs['deposit_receipt']?.find((d: any) => d.linkedSOId === so.id);
+    if (!dp) {
+      await showAppAlert({ title: 'ไม่พบใบรับมัดจำ', message: 'ยังไม่มีใบรับมัดจำสำหรับ SO นี้ กรุณาสร้างใบแจ้งหนี้มัดจำและรับมัดจำก่อน', tone: 'warning' });
+      return;
+    }
+    const full = await fetchFullRecord(dp, 'deposit_receipt');
+    setActiveTab('invoice');
+    setSelectedRecord(null);
+    setEditorState({ type: 'invoice', initialData: buildBalanceInvoiceFromDP(full) });
+  };
+
   const handleLinkToDPFromDI = async (di: any) => {
     const full = await fetchFullRecord(di, 'deposit_invoice');
     setActiveTab('deposit_receipt');
@@ -420,6 +443,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               darkMode={darkMode}
               isAdmin={isAdmin}
               initialQuotation={pendingSO ?? undefined}
+              onLinkToDI={handleSOtoDI}
+              onLinkToBalanceInvoice={handleSOtoBalanceInvoice}
             />
           )}
 
@@ -505,21 +530,10 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                               <td className="px-5 py-3.5">
                                 <div className="flex justify-end gap-2">
                                   {activeTab === 'quotation' && (
-                                    <>
-                                      <button type="button" onClick={() => handleLinkToSO(record)}
-                                        className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-blue-900/40 text-blue-300 hover:bg-blue-800/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
-                                        🛒 ใบสั่งขาย
-                                      </button>
-                                      <button type="button" onClick={() => handleLinkToDI(record)}
-                                        className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
-                                        📋 แจ้งหนี้มัดจำ
-                                      </button>
-                                      <button type="button" onClick={() => handleLinkToInvoice(record)}
-                                        className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                                        title="ต้องมี GR ก่อน">
-                                        🧾 Balance Invoice
-                                      </button>
-                                    </>
+                                    <button type="button" onClick={() => handleLinkToSO(record)}
+                                      className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-blue-900/40 text-blue-300 hover:bg-blue-800/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+                                      🛒 ใบสั่งขาย
+                                    </button>
                                   )}
                                   {activeTab === 'deposit_invoice' && (
                                     <button type="button" onClick={() => handleLinkToDPFromDI(record)}
@@ -687,17 +701,10 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                   {(activeTab === 'quotation' || activeTab === 'deposit_invoice' || activeTab === 'deposit_receipt' || activeTab === 'invoice') && (
                     <div className="flex gap-3 flex-wrap">
                       {activeTab === 'quotation' && (
-                        <>
-                          <button type="button" onClick={() => handleLinkToDI(selectedRecord)}
-                            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
-                            📋 สร้างใบแจ้งหนี้มัดจำ
-                          </button>
-                          <button type="button" onClick={() => handleLinkToInvoice(selectedRecord)}
-                            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                            title="ต้องมี GR ก่อน">
-                            🧾 สร้าง Balance Invoice
-                          </button>
-                        </>
+                        <button type="button" onClick={() => handleLinkToSO(selectedRecord)}
+                          className={`rounded-xl px-4 py-2 text-sm font-medium transition ${darkMode ? 'bg-blue-900/40 text-blue-300 hover:bg-blue-800/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+                          🛒 สร้างใบสั่งขาย
+                        </button>
                       )}
                       {activeTab === 'deposit_invoice' && (
                         <button type="button" onClick={() => handleLinkToDPFromDI(selectedRecord)}
