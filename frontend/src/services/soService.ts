@@ -60,6 +60,39 @@ export interface SaleOrder {
   items: SOItem[];
 }
 
+export interface SOWorkflowStatus {
+  di: {
+    documentNumber: string;
+    status: string;
+    depositPercentage: number;
+    depositAmount: number;
+  } | null;
+  dr: {
+    documentNumber: string;
+    status: string;
+    paymentAmount: number;
+    receivedDate: string | null;
+  } | null;
+  invoice: {
+    documentNumber: string;
+    status: string;
+    total: number;
+  } | null;
+  receipt: {
+    documentNumber: string;
+    status: string;
+    total: number;
+    receivedDate: string | null;
+  } | null;
+}
+
+export async function fetchSOWorkflowStatus(soId: string): Promise<SOWorkflowStatus> {
+  const res = await axios.get<{ success: boolean; data: SOWorkflowStatus }>(
+    `${BASE}/${encodeURIComponent(soId)}/deposit-status`
+  );
+  return res.data.data;
+}
+
 const soService = {
   getAll: () => axios.get<{ success: boolean; data: SaleOrder[] }>(BASE),
   getById: (id: string) => axios.get<{ success: boolean; data: SaleOrder }>(`${BASE}/${encodeURIComponent(id)}`),
