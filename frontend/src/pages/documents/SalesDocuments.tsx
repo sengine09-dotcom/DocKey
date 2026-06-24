@@ -307,6 +307,42 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     setEditorState({ type: 'invoice', initialData: buildBalanceInvoiceFromDP(full) });
   };
 
+  const handleNavigateToDI = async (diDocumentNumber: string) => {
+    setActiveTab('deposit_invoice');
+    setSelectedRecord(null);
+    setEditorState(null);
+    loadedTabsRef.current.delete('deposit_invoice');
+    void fetchTab('deposit_invoice');
+    try {
+      const res = await documentService.getAll('deposit_invoice');
+      const list: any[] = res?.data?.data || [];
+      const found = list.find((d: any) => d.documentNumber === diDocumentNumber);
+      if (found) {
+        const id = found.documentId || found.id;
+        const full = await documentService.getById('deposit_invoice', id);
+        setEditorState({ type: 'deposit_invoice', initialData: { ...(full?.data?.data || found), __mode: 'view' } });
+      }
+    } catch { /* silent — tab already switched */ }
+  };
+
+  const handleNavigateToInvoice = async (invDocumentNumber: string) => {
+    setActiveTab('invoice');
+    setSelectedRecord(null);
+    setEditorState(null);
+    loadedTabsRef.current.delete('invoice');
+    void fetchTab('invoice');
+    try {
+      const res = await documentService.getAll('invoice');
+      const list: any[] = res?.data?.data || [];
+      const found = list.find((d: any) => d.documentNumber === invDocumentNumber);
+      if (found) {
+        const id = found.documentId || found.id;
+        const full = await documentService.getById('invoice', id);
+        setEditorState({ type: 'invoice', initialData: { ...(full?.data?.data || found), __mode: 'view' } });
+      }
+    } catch { /* silent — tab already switched */ }
+  };
+
   const handleEditorNavigate = (page: string, state?: unknown) => {
     if (page === 'documents') {
       const s = (state as any) || {};
@@ -461,6 +497,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               initialQuotation={pendingSO ?? undefined}
               onLinkToDI={handleSOtoDI}
               onLinkToBalanceInvoice={handleSOtoBalanceInvoice}
+              onNavigateToDI={handleNavigateToDI}
+              onNavigateToInvoice={handleNavigateToInvoice}
             />
           )}
 
