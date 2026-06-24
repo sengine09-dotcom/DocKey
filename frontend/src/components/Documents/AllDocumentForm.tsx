@@ -78,8 +78,14 @@ const CUSTOMER_RETURN_STATUS_OPTIONS = [
   'Processed',
   'Rejected',
 ];
+const DEPOSIT_INVOICE_STATUS_OPTIONS = [
+  'Draft',
+  'Sent',
+  'Awaiting_Verify',
+  'Paid',
+];
 const DEPOSIT_RECEIPT_PAYMENT_TYPE_OPTIONS = [
-  { value: 'partial', label: 'จ่ายบางส่วน' },
+  { value: 'partial', label: 'ชำระบางส่วน' },
   { value: 'full', label: 'จ่ายเต็ม' },
 ];
 
@@ -528,7 +534,7 @@ export default function AllDocumentForm({
   const isApprovedStatus  = documentType === 'quotation' && header.status === 'Approved';
   const isSentStatus      = documentType === 'quotation' && header.status === 'Sent';
   const isConfirmedStatus = documentType === 'quotation' && header.status === 'Confirmed';
-  const isItemLocked      = isApprovedStatus || isSentStatus || isConfirmedStatus || documentType === 'deposit_invoice';
+  const isItemLocked      = isApprovedStatus || isSentStatus || isConfirmedStatus || documentType === 'deposit_invoice' || documentType === 'deposit_receipt';
   const typeLabel = DOCUMENT_TYPE_LABELS[documentType];
   const subtypeFields = useMemo(() => getSubtypeFields(documentType), [documentType]);
   const taxRate = Number(header.taxRate || 0);
@@ -669,6 +675,24 @@ export default function AllDocumentForm({
       paymentAmount: nextPaymentAmount,
     }));
   }, [documentType, header.paymentAmount, header.paymentType, isViewMode, total]);
+
+  // Keep depositAmount in sync with live item totals for deposit_invoice
+  useEffect(() => {
+    if (documentType !== 'deposit_invoice') return;
+    if (isViewMode) return;
+    const pct = Number(header.depositPercentage || 30);
+    const qtTotal = totalSellingPrice + tax;
+    const depositAmt = Math.round(qtTotal * pct / 100 * 100) / 100;
+    const balanceAmt = Math.round((qtTotal - depositAmt) * 100) / 100;
+    const next = depositAmt.toFixed(2);
+    if (String(header.depositAmount || '') === next) return;
+    setHeader((prev: any) => ({
+      ...prev,
+      depositAmount: next,
+      balanceAmount: balanceAmt.toFixed(2),
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentType, isViewMode, totalSellingPrice, tax, header.depositPercentage]);
 
   const handleRoundSellingPrice = (index: number, direction: 'up' | 'down') => {
     if (isViewMode || isItemLocked) return;
@@ -1666,6 +1690,16 @@ export default function AllDocumentForm({
                         <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
+                  ) : documentType === 'deposit_invoice' ? (
+                    <select
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      value={header.status}
+                      onChange={(e) => handleHeaderChange('status', e.target.value)}
+                    >
+                      {DEPOSIT_INVOICE_STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   ) : (
                     <input
                       className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
@@ -1756,16 +1790,14 @@ export default function AllDocumentForm({
                         }
                       </datalist>
                     </>
+                  ) : field.key === 'paymentAmount' && documentType === 'deposit_receipt' ? (
+                    <p className={`rounded-lg border px-3 py-2 text-sm font-semibold ${darkMode ? 'border-gray-600 bg-gray-800 text-cyan-300' : 'border-gray-200 bg-gray-50 text-cyan-700'}`}>
+                      ฿{formatDisplayAmount(parseFloat(header.paymentAmount) || 0)}
+                    </p>
                   ) : field.key === 'paymentType' && documentType === 'deposit_receipt' ? (
-                    <select
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
-                      value={(header as any)[field.key]}
-                      onChange={(e) => handleHeaderChange(field.key, e.target.value)}
-                    >
-                      {DEPOSIT_RECEIPT_PAYMENT_TYPE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+                    <p className={`rounded-lg border px-3 py-2 text-sm font-medium ${darkMode ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                      {DEPOSIT_RECEIPT_PAYMENT_TYPE_OPTIONS.find(o => o.value === header.paymentType)?.label || header.paymentType}
+                    </p>
                   ) : field.key === 'vendorCode' && documentType === 'purchase_order' ? (
                     <div className="pt-1">
                       {header.vendorCode ? (
@@ -1983,6 +2015,53 @@ export default function AllDocumentForm({
                     </span>
                   </div>
                 </>
+              ) : documentType === 'deposit_receipt' ? (
+                <>
+                  {/* Deposit Receipt — always display-only, no editable inputs */}
+                  <div
+                    className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
+                      ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                  >
+                    <div>#</div>
+                    <div>Code</div>
+                    <div>Description</div>
+                    <div className="text-right">Qty</div>
+                    <div>หน่วยนับ</div>
+                    <div className="text-right">Unit Price</div>
+                    <div className="text-right">Line Total</div>
+                  </div>
+                  {items.map((item, index) => (
+                    <div key={`dr-item-${index}`}
+                      className={`grid items-center gap-1 px-4 py-3
+                        ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
+                      style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                    >
+                      <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
+                      <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {getProductDisplayName(item.productCode, item.productName) || item.productName || '-'}
+                      </div>
+                      <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {(unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                      </div>
+                      <div className={`text-right text-sm font-medium ${darkMode ? 'text-cyan-300' : 'text-cyan-700'}`}>
+                        {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
+                      </div>
+                      <div className={`text-right text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        ฿{formatDisplayAmount(parseFloat(item.totalSellingPrice) || 0)}
+                      </div>
+                    </div>
+                  ))}
+                  <div className={`flex items-center justify-end gap-4 border-t px-4 py-3
+                    ${darkMode ? 'border-gray-700 bg-gray-800 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                    <span className="text-xs font-semibold uppercase tracking-wide">มูลค่ารวมทั้งสิ้น (100%)</span>
+                    <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      ฿{formatDisplayAmount(totalSellingPrice + tax)}
+                    </span>
+                  </div>
+                </>
               ) : isViewMode && documentType === 'purchase_order' ? (
                 <>
                   {/* View-mode read-only table for Purchase Order */}
@@ -2098,6 +2177,53 @@ export default function AllDocumentForm({
                       ยอดขาย: ฿{formatDisplayAmount(totalSellingPrice)}
                     </div>
                     <div></div>
+                  </div>
+                </>
+              ) : documentType === 'invoice' ? (
+                <>
+                  {/* Invoice — always display-only, no editable inputs */}
+                  <div
+                    className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
+                      ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                  >
+                    <div>#</div>
+                    <div>Code</div>
+                    <div>Description</div>
+                    <div className="text-right">Qty</div>
+                    <div>หน่วยนับ</div>
+                    <div className="text-right">Unit Price</div>
+                    <div className="text-right">Line Total</div>
+                  </div>
+                  {items.map((item, index) => (
+                    <div key={`inv-item-${index}`}
+                      className={`grid items-center gap-1 px-4 py-3
+                        ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
+                      style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                    >
+                      <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
+                      <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {getProductDisplayName(item.productCode, item.productName) || item.productName || '-'}
+                      </div>
+                      <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {(unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                      </div>
+                      <div className={`text-right text-sm font-medium ${darkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                        {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
+                      </div>
+                      <div className={`text-right text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        ฿{formatDisplayAmount(parseFloat(item.totalSellingPrice) || 0)}
+                      </div>
+                    </div>
+                  ))}
+                  <div className={`flex items-center justify-end gap-4 border-t px-4 py-3
+                    ${darkMode ? 'border-gray-700 bg-gray-800 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                    <span className="text-xs font-semibold uppercase tracking-wide">ยอดรวม</span>
+                    <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      ฿{formatDisplayAmount(totalSellingPrice + tax)}
+                    </span>
                   </div>
                 </>
               ) : (
