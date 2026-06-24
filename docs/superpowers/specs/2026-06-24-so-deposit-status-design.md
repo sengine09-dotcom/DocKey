@@ -19,6 +19,9 @@
 4. เอกสารที่ยังไม่สร้าง: ไม่แสดงแถวนั้น (ไม่แสดง placeholder "รอ...")
 5. ยกเว้น: ถ้ามี DI แต่ไม่มี DR → แสดงแถว "รอรับมัดจำ" เพื่อบอก next step
 6. ดึงข้อมูลเมื่อ enter view mode เท่านั้น (ไม่ fetch ตอน list)
+7. แถว DI มีปุ่ม "เปิด →" เมื่อ DI มีอยู่ — กดแล้วสลับไปแท็บ deposit_invoice และเปิด DI นั้น
+8. แถว Invoice มีปุ่ม "เปิด →" เมื่อ Invoice มีอยู่ — กดแล้วสลับไปแท็บ invoice และเปิด Invoice นั้น
+9. DR และ Receipt ไม่มีปุ่มนำทางจาก SO (เข้าถึงจาก DI และ Invoice ตามลำดับ)
 
 ---
 
@@ -150,6 +153,15 @@ export async function fetchSOWorkflowStatus(soId: string): Promise<SOWorkflowSta
 
 ### Frontend — `SOTab.tsx`
 
+**Callback props เพิ่ม:**
+```typescript
+interface Props {
+  // ... existing props ...
+  onNavigateToDI?: (diDocumentNumber: string) => void;
+  onNavigateToInvoice?: (invDocumentNumber: string) => void;
+}
+```
+
 **State เพิ่ม:**
 ```typescript
 const [workflowStatus, setWorkflowStatus] = useState<SOWorkflowStatus | null>(null);
@@ -167,10 +179,48 @@ useEffect(() => {
 
 **แสดงผล (ใน SO card ใต้ top bar divider):**
 - แสดง section เมื่อ `workflowStatus` มีค่าอย่างน้อย 1 ใน `di/dr/invoice/receipt` ไม่เป็น null
-- แถว DI: แสดงเมื่อ `workflowStatus.di != null`
-- แถว DR: แสดงเมื่อ `workflowStatus.dr != null` — ถ้า `di != null && dr == null` แสดงแถว "รอรับมัดจำ"
-- แถว Invoice: แสดงเมื่อ `workflowStatus.invoice != null`
-- แถว Receipt: แสดงเมื่อ `workflowStatus.receipt != null`
+- แถว DI: แสดงเมื่อ `workflowStatus.di != null` + ปุ่ม "เปิด →" ที่เรียก `onNavigateToDI(di.documentNumber)`
+- แถว DR: แสดงเมื่อ `workflowStatus.dr != null` — ถ้า `di != null && dr == null` แสดงแถว "รอรับมัดจำ" (ไม่มีปุ่ม)
+- แถว Invoice: แสดงเมื่อ `workflowStatus.invoice != null` + ปุ่ม "เปิด →" ที่เรียก `onNavigateToInvoice(invoice.documentNumber)`
+- แถว Receipt: แสดงเมื่อ `workflowStatus.receipt != null` (ไม่มีปุ่ม — เข้าถึงจาก Invoice tab)
+
+---
+
+### Frontend — `SalesDocuments.tsx`
+
+**Handlers ใหม่:**
+```typescript
+const handleNavigateToDI = (diDocumentNumber: string) => {
+  setActiveTab('deposit_invoice');
+  loadedTabsRef.current.delete('deposit_invoice');
+  void fetchTab('deposit_invoice').then(() => {
+    const di = docs['deposit_invoice']?.find(
+      (d: any) => d.documentNumber === diDocumentNumber
+    );
+    if (di) handleView(di);
+  });
+};
+
+const handleNavigateToInvoice = (invDocumentNumber: string) => {
+  setActiveTab('invoice');
+  loadedTabsRef.current.delete('invoice');
+  void fetchTab('invoice').then(() => {
+    const inv = docs['invoice']?.find(
+      (d: any) => d.documentNumber === invDocumentNumber
+    );
+    if (inv) handleView(inv);
+  });
+};
+```
+
+**Wire ใน `<SOTab>`:**
+```tsx
+<SOTab
+  ...
+  onNavigateToDI={handleNavigateToDI}
+  onNavigateToInvoice={handleNavigateToInvoice}
+/>
+```
 
 ---
 
@@ -180,7 +230,8 @@ useEffect(() => {
 |------|--------|
 | `backend/src/controllers/SOController.ts` | เพิ่ม route + handler `GET /:id/deposit-status` |
 | `frontend/src/services/soService.ts` | เพิ่ม type `SOWorkflowStatus` + function `fetchSOWorkflowStatus` |
-| `frontend/src/pages/documents/SOTab.tsx` | เพิ่ม state, effect, และ UI section ใน view mode |
+| `frontend/src/pages/documents/SOTab.tsx` | เพิ่ม props `onNavigateToDI` / `onNavigateToInvoice`, state, effect, UI section |
+| `frontend/src/pages/documents/SalesDocuments.tsx` | เพิ่ม `handleNavigateToDI` / `handleNavigateToInvoice` และ wire ใน `<SOTab>` |
 
 ---
 
