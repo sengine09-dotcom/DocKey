@@ -1,23 +1,38 @@
-# Design: SO Deposit Status Section (สถานะมัดจำใน Sale Order)
+# Design: SO Workflow Status Section (สถานะการดำเนินการใน Sale Order)
 
 **Date:** 2026-06-24
-**Scope:** SO view mode — deposit workflow status section in header
+**Scope:** SO view mode — complete workflow status section in header
 
 ---
 
 ## Background
 
-ปัจจุบัน SO view mode แสดงแค่ข้อมูล SO และ action buttons ไม่มีข้อมูลว่า DI หรือ DR สร้างแล้วหรือยัง ผู้ใช้ต้องสลับไปแท็บ DI/DR เพื่อดูสถานะ
+ปัจจุบัน SO view mode แสดงแค่ข้อมูล SO และ action buttons ไม่มีข้อมูล workflow ว่า DI / DR / Invoice / Receipt สร้างแล้วหรือยัง ผู้ใช้ต้องสลับแท็บเพื่อดูสถานะแต่ละขั้นตอน
 
 ---
 
 ## Requirements
 
-1. แสดง section "สถานะมัดจำ" ใน SO view mode เท่านั้น (ไม่แสดงใน list หรือ create/edit mode)
-2. Section แสดงเฉพาะเมื่อมี DI linked กับ SO นั้น — ถ้าไม่มี DI ไม่แสดง section เลย
-3. ถ้ามี DI แต่ยังไม่มี DR: แสดง DI info + badge "รอรับมัดจำ"
-4. ถ้ามีทั้ง DI + DR: แสดงครบทั้งคู่
-5. ดึงข้อมูล DI/DR เมื่อ enter view mode เท่านั้น (ไม่ fetch ตอน list)
+1. แสดง section "สถานะการดำเนินการ" ใน SO view mode เท่านั้น (ไม่แสดงใน list หรือ create/edit mode)
+2. Section แสดงเฉพาะเมื่อมีเอกสารอย่างน้อย 1 ใบที่ linked กับ SO — ถ้าไม่มีเลยไม่แสดง section
+3. แสดงครบ 4 ประเภทเอกสาร: DI → DR → Invoice → Receipt ตามลำดับ workflow
+4. เอกสารที่ยังไม่สร้าง: ไม่แสดงแถวนั้น (ไม่แสดง placeholder "รอ...")
+5. ยกเว้น: ถ้ามี DI แต่ไม่มี DR → แสดงแถว "รอรับมัดจำ" เพื่อบอก next step
+6. ดึงข้อมูลเมื่อ enter view mode เท่านั้น (ไม่ fetch ตอน list)
+
+---
+
+## Workflow Display
+
+```
+สถานะการดำเนินการ
+├─ ใบแจ้งหนี้มัดจำ   DI-26-000001  [Paid]      30% / ฿7,380
+├─ ใบรับมัดจำ        DR-26-000001  [Received]  ฿7,380   24/06/2569
+├─ ใบแจ้งหนี้        INV-26-000001 [Sent]      ฿24,620
+└─ ใบเสร็จรับเงิน    RE-26-000001  [Received]  ฿24,620  24/06/2569
+```
+
+**SO จบ workflow:** เมื่อ RE ปรากฏและ status = Received
 
 ---
 
@@ -30,9 +45,9 @@
 GET /api/so/:id/deposit-status
 ```
 
-Handler ทำ 2 parallel queries:
+Handler ทำ 4 parallel queries:
 ```typescript
-const [diDoc, drDoc] = await Promise.all([
+const [diDoc, drDoc, invDoc, reDoc] = await Promise.all([
   prisma.document.findFirst({
     where: { depositInvoiceDocument: { linkedSOId: soId }, companyId },
     select: {
@@ -45,6 +60,17 @@ const [diDoc, drDoc] = await Promise.all([
     select: {
       documentNumber: true, status: true,
       depositReceiptDocument: { select: { paymentAmount: true, receivedDate: true } },
+    },
+  }),
+  prisma.document.findFirst({
+    where: { invoiceDocument: { linkedSOId: soId }, companyId },
+    select: { documentNumber: true, status: true, total: true },
+  }),
+  prisma.document.findFirst({
+    where: { receiptDocument: { linkedSOId: soId }, companyId },
+    select: {
+      documentNumber: true, status: true, total: true,
+      receiptDocument: { select: { receivedDate: true } },
     },
   }),
 ]);
@@ -64,12 +90,22 @@ Response shape:
     "status": "Received",
     "paymentAmount": 7380,
     "receivedDate": "2026-06-24T00:00:00.000Z"
+  },
+  "invoice": {
+    "documentNumber": "INV-26-000001",
+    "status": "Sent",
+    "total": 24620
+  },
+  "receipt": {
+    "documentNumber": "RE-26-000001",
+    "status": "Received",
+    "total": 24620,
+    "receivedDate": "2026-06-24T00:00:00.000Z"
   }
 }
 ```
 
-- `di` เป็น `null` ถ้าไม่พบ DI ที่ linked กับ SO นี้
-- `dr` เป็น `null` ถ้าไม่พบ DR ที่ linked กับ SO นี้
+แต่ละ field เป็น `null` ถ้าไม่พบเอกสารที่ linked กับ SO นี้
 
 ---
 
@@ -78,7 +114,7 @@ Response shape:
 เพิ่ม type + function:
 
 ```typescript
-export interface SODepositStatus {
+export interface SOWorkflowStatus {
   di: {
     documentNumber: string;
     status: string;
@@ -91,9 +127,20 @@ export interface SODepositStatus {
     paymentAmount: number;
     receivedDate: string | null;
   } | null;
+  invoice: {
+    documentNumber: string;
+    status: string;
+    total: number;
+  } | null;
+  receipt: {
+    documentNumber: string;
+    status: string;
+    total: number;
+    receivedDate: string | null;
+  } | null;
 }
 
-export async function fetchSODepositStatus(soId: string): Promise<SODepositStatus> {
+export async function fetchSOWorkflowStatus(soId: string): Promise<SOWorkflowStatus> {
   const res = await api.get(`/so/${soId}/deposit-status`);
   return res.data;
 }
@@ -105,29 +152,25 @@ export async function fetchSODepositStatus(soId: string): Promise<SODepositStatu
 
 **State เพิ่ม:**
 ```typescript
-const [depositStatus, setDepositStatus] = useState<SODepositStatus | null>(null);
+const [workflowStatus, setWorkflowStatus] = useState<SOWorkflowStatus | null>(null);
 ```
 
 **Effect เมื่อ enter view mode:**
 ```typescript
 useEffect(() => {
-  if (mode !== 'view' || !viewing) { setDepositStatus(null); return; }
-  fetchSODepositStatus(viewing.id).then(setDepositStatus).catch(() => setDepositStatus(null));
+  if (mode !== 'view' || !viewing) { setWorkflowStatus(null); return; }
+  fetchSOWorkflowStatus(viewing.id)
+    .then(setWorkflowStatus)
+    .catch(() => setWorkflowStatus(null));
 }, [mode, viewing?.id]);
 ```
 
-**Section แสดงผล** (ใต้ top bar ใน view mode, ก่อน items table):
-- แสดงเมื่อ `depositStatus?.di != null` เท่านั้น
-- DI row: documentNumber + status badge + `{depositPercentage}% / ฿{depositAmount}`
-- DR row (ถ้ามี): documentNumber + `รับแล้ว ฿{paymentAmount}` + วันที่
-- DR row (ถ้าไม่มี): ป้าย "รอรับมัดจำ"
-
-**UI Layout (ใน SO card ใต้ divider):**
-```
-สถานะมัดจำ
-├─ 📄 DI-26-000001   [Paid]   30% / ฿7,380
-└─ 🏦 DR-26-000001   รับแล้ว ฿7,380   24/06/2026
-```
+**แสดงผล (ใน SO card ใต้ top bar divider):**
+- แสดง section เมื่อ `workflowStatus` มีค่าอย่างน้อย 1 ใน `di/dr/invoice/receipt` ไม่เป็น null
+- แถว DI: แสดงเมื่อ `workflowStatus.di != null`
+- แถว DR: แสดงเมื่อ `workflowStatus.dr != null` — ถ้า `di != null && dr == null` แสดงแถว "รอรับมัดจำ"
+- แถว Invoice: แสดงเมื่อ `workflowStatus.invoice != null`
+- แถว Receipt: แสดงเมื่อ `workflowStatus.receipt != null`
 
 ---
 
@@ -136,17 +179,18 @@ useEffect(() => {
 | File | Action |
 |------|--------|
 | `backend/src/controllers/SOController.ts` | เพิ่ม route + handler `GET /:id/deposit-status` |
-| `frontend/src/services/soService.ts` | เพิ่ม type `SODepositStatus` + function `fetchSODepositStatus` |
+| `frontend/src/services/soService.ts` | เพิ่ม type `SOWorkflowStatus` + function `fetchSOWorkflowStatus` |
 | `frontend/src/pages/documents/SOTab.tsx` | เพิ่ม state, effect, และ UI section ใน view mode |
 
 ---
 
 ## Edge Cases
 
-- **SO ไม่มี DI:** section ไม่แสดง (ไม่ error, ไม่แสดง placeholder)
-- **DI มี แต่ DR ไม่มี:** แสดง DI row + "รอรับมัดจำ" แทน DR row
+- **ไม่มีเอกสารเลย:** section ไม่แสดง
+- **มี DI แต่ไม่มี DR:** แสดง DI row + แถว "รอรับมัดจำ"
+- **มี DR แต่ไม่มี Invoice:** แสดงแค่ DI + DR (ไม่แสดง placeholder invoice)
 - **Fetch error:** section ไม่แสดง (silent fail, ไม่ crash)
-- **ออกจาก view mode:** clear `depositStatus` เพื่อไม่ให้ข้อมูลเก่าค้าง
+- **ออกจาก view mode:** clear `workflowStatus`
 
 ---
 
@@ -155,4 +199,5 @@ useEffect(() => {
 - ไม่แสดงใน list view
 - ไม่แสดงใน create/edit mode
 - ไม่เพิ่ม column ใน SO schema
-- ไม่แก้ DI/DR tabs
+- ไม่แก้ DI/DR/Invoice/Receipt tabs
+- ไม่แสดง PR/PO/GR workflow (เฉพาะ sales document side)
