@@ -290,12 +290,12 @@ const SOController = {
         invoice: invDoc ? {
           documentNumber: invDoc.documentNumber,
           status: invDoc.status,
-          total: Number(invDoc.totalAmount) || 0,
+          total: Number(invDoc.totalAmount ?? 0),
         } : null,
         receipt: reDoc ? {
           documentNumber: reDoc.documentNumber,
           status: reDoc.status,
-          total: Number(reDoc.totalAmount) || 0,
+          total: Number(reDoc.totalAmount ?? 0),
           receivedDate: reDoc.receiptDocument?.receivedDate?.toISOString() ?? null,
         } : null,
       },
