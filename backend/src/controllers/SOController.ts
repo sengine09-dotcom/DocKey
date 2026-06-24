@@ -227,6 +227,80 @@ const SOController = {
     });
     return res.json({ success: true, data: updated });
   },
+
+  async getWorkflowStatus(req: Request, res: Response) {
+    const ctx = await resolveCompanyContext(req);
+    if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const { companyId } = ctx;
+    const soId = req.params.id;
+
+    const so = await prisma.saleOrder.findFirst({
+      where: { id: soId, companyId },
+      select: { id: true },
+    });
+    if (!so) return res.status(404).json({ success: false, message: 'Not found' });
+
+    const [diDoc, drDoc, invDoc, reDoc] = await Promise.all([
+      prisma.document.findFirst({
+        where: { depositInvoiceDocument: { linkedSOId: soId }, companyId },
+        select: {
+          documentNumber: true,
+          status: true,
+          depositInvoiceDocument: { select: { depositPercentage: true, depositAmount: true } },
+        },
+      }),
+      prisma.document.findFirst({
+        where: { depositReceiptDocument: { linkedSOId: soId }, companyId },
+        select: {
+          documentNumber: true,
+          status: true,
+          depositReceiptDocument: { select: { paymentAmount: true, receivedDate: true } },
+        },
+      }),
+      prisma.document.findFirst({
+        where: { invoiceDocument: { linkedSOId: soId }, companyId },
+        select: { documentNumber: true, status: true, totalAmount: true },
+      }),
+      prisma.document.findFirst({
+        where: { receiptDocument: { linkedSOId: soId }, companyId },
+        select: {
+          documentNumber: true,
+          status: true,
+          totalAmount: true,
+          receiptDocument: { select: { receivedDate: true } },
+        },
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        di: diDoc ? {
+          documentNumber: diDoc.documentNumber,
+          status: diDoc.status,
+          depositPercentage: Number(diDoc.depositInvoiceDocument?.depositPercentage ?? 0),
+          depositAmount: Number(diDoc.depositInvoiceDocument?.depositAmount ?? 0),
+        } : null,
+        dr: drDoc ? {
+          documentNumber: drDoc.documentNumber,
+          status: drDoc.status,
+          paymentAmount: Number(drDoc.depositReceiptDocument?.paymentAmount ?? 0),
+          receivedDate: drDoc.depositReceiptDocument?.receivedDate?.toISOString() ?? null,
+        } : null,
+        invoice: invDoc ? {
+          documentNumber: invDoc.documentNumber,
+          status: invDoc.status,
+          total: Number(invDoc.totalAmount) || 0,
+        } : null,
+        receipt: reDoc ? {
+          documentNumber: reDoc.documentNumber,
+          status: reDoc.status,
+          total: Number(reDoc.totalAmount) || 0,
+          receivedDate: reDoc.receiptDocument?.receivedDate?.toISOString() ?? null,
+        } : null,
+      },
+    });
+  },
 };
 
 export default SOController;

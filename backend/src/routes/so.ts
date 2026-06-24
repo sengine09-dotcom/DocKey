@@ -4,6 +4,7 @@ import SOController from '../controllers/SOController';
 const router = express.Router();
 
 router.get('/so', SOController.getAll);
+router.get('/so/:id/deposit-status', SOController.getWorkflowStatus);
 router.get('/so/:id', SOController.getById);
 router.post('/so', SOController.create);
 router.put('/so/:id', SOController.update);
