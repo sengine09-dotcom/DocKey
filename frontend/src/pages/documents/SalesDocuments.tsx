@@ -311,11 +311,11 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     setActiveTab('deposit_invoice');
     setSelectedRecord(null);
     setEditorState(null);
-    loadedTabsRef.current.delete('deposit_invoice');
-    void fetchTab('deposit_invoice');
     try {
       const res = await documentService.getAll('deposit_invoice');
       const list: any[] = res?.data?.data || [];
+      setDocs((prev) => ({ ...prev, deposit_invoice: list }));
+      loadedTabsRef.current.add('deposit_invoice');
       const found = list.find((d: any) => d.documentNumber === diDocumentNumber);
       if (found) {
         const id = found.documentId || found.id;
@@ -329,11 +329,11 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     setActiveTab('invoice');
     setSelectedRecord(null);
     setEditorState(null);
-    loadedTabsRef.current.delete('invoice');
-    void fetchTab('invoice');
     try {
       const res = await documentService.getAll('invoice');
       const list: any[] = res?.data?.data || [];
+      setDocs((prev) => ({ ...prev, invoice: list }));
+      loadedTabsRef.current.add('invoice');
       const found = list.find((d: any) => d.documentNumber === invDocumentNumber);
       if (found) {
         const id = found.documentId || found.id;
