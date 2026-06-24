@@ -8,6 +8,7 @@ import { printDocumentContent } from '../../utils/printDocument';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import { getQuotationStatusStyle } from '../../pages/documents/documentShared';
 import DepositDeductionSummary from './DepositDeductionSummary';
+import InvoiceSummary from './InvoiceSummary';
 
 const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
 
@@ -665,16 +666,14 @@ export default function AllDocumentForm({
   useEffect(() => {
     if (documentType !== 'deposit_receipt') return;
     if (isViewMode) return;
-    if (String(header.paymentType || '').trim().toLowerCase() !== 'full') return;
 
     const nextPaymentAmount = total.toFixed(2);
-    if (String(header.paymentAmount || '') === nextPaymentAmount) return;
-
-    setHeader((prev) => ({
-      ...prev,
-      paymentAmount: nextPaymentAmount,
-    }));
-  }, [documentType, header.paymentAmount, header.paymentType, isViewMode, total]);
+    setHeader((prev) => {
+      if (String(prev.paymentType || '').trim().toLowerCase() !== 'full') return prev;
+      if (String(prev.paymentAmount || '') === nextPaymentAmount) return prev;
+      return { ...prev, paymentAmount: nextPaymentAmount };
+    });
+  }, [documentType, isViewMode, total]);
 
   // Keep depositAmount in sync with live item totals for deposit_invoice
   useEffect(() => {
@@ -2218,13 +2217,16 @@ export default function AllDocumentForm({
                       </div>
                     </div>
                   ))}
-                  <div className={`flex items-center justify-end gap-4 border-t px-4 py-3
-                    ${darkMode ? 'border-gray-700 bg-gray-800 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
-                    <span className="text-xs font-semibold uppercase tracking-wide">ยอดรวม</span>
-                    <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                      ฿{formatDisplayAmount(totalSellingPrice + tax)}
-                    </span>
-                  </div>
+                  <InvoiceSummary
+                    subtotal={totalSellingPrice}
+                    vat={tax}
+                    grandTotal={totalSellingPrice + tax}
+                    taxRate={taxRate}
+                    depositAmount={parseFloat(header.depositAmountDeducted) > 0
+                      ? parseFloat(header.depositAmountDeducted) : undefined}
+                    depositReceiptNumber={header.linkedDepositReceiptNumber || undefined}
+                    darkMode={darkMode}
+                  />
                 </>
               ) : (
                 <>
