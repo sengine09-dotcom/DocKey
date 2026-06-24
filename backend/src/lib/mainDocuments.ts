@@ -799,7 +799,8 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         throw new Error('ยังไม่มีใบรับมัดจำสำหรับ SO นี้ กรุณาสร้างใบรับมัดจำก่อน');
       }
 
-      // 2. 3-hop GR gate: SO items → PR items → GR
+      // 2. GR gate: supports both 3-hop (SO→PR→PO→GR) and direct (SO→PO→GR) flows.
+      // When PO is created directly from SO, SOItem.prNumber stores the PO number instead of a PR number.
       const soItems = await prisma.sOItem.findMany({
         where: { soId: linkedSOId, convertedToPr: true },
         select: { prNumber: true },
@@ -812,6 +813,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
       }
 
+      // 3-hop path: prNumbers are real PR numbers → resolve to PO numbers via PRItem
       const prItems = await prisma.pRItem.findMany({
         where: {
           pr: { prNumber: { in: prNumbers } },
@@ -819,16 +821,21 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         },
         select: { poNumber: true },
       });
-      const poNumbers = prItems
+      const poNumbersFromPR = prItems
         .map(i => i.poNumber)
         .filter((v): v is string => Boolean(v));
 
-      if (poNumbers.length === 0) {
+      // Fallback: prNumbers may actually be PO numbers (SO→PO direct flow)
+      const directPONumbers = prNumbers.filter(n => n.toUpperCase().startsWith('PO-'));
+
+      const allPONumbers = [...new Set([...poNumbersFromPR, ...directPONumbers])];
+
+      if (allPONumbers.length === 0) {
         throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
       }
 
       const gr = await prisma.goodsReceipt.findFirst({
-        where: { poNumber: { in: poNumbers }, status: 'CONFIRMED', companyId },
+        where: { poNumber: { in: allPONumbers }, status: 'CONFIRMED', companyId },
         select: { id: true },
       });
       if (!gr) {
@@ -845,9 +852,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     if (!linkedSOId) {
       throw new Error('กรุณาระบุใบสั่งขาย (SO)');
     }
-    if (!linkedQTId) {
-      throw new Error('กรุณาระบุใบเสนอราคา (QT)');
-    }
     if (pct < 1 || pct > 99) {
       throw new Error('เปอร์เซ็นต์มัดจำต้องอยู่ระหว่าง 1-99');
     }
@@ -863,15 +867,17 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
       throw new Error('SO ยังไม่ยืนยัน กรุณายืนยัน SO ก่อนสร้างใบแจ้งหนี้มัดจำ');
     }
 
-    const qt = await prisma.document.findFirst({
-      where: { id: linkedQTId, companyId, documentType: 'QUOTATION' },
-      select: { status: true },
-    });
-    if (!qt) {
-      throw new Error('ไม่พบใบเสนอราคา');
-    }
-    if (qt.status !== 'Confirmed') {
-      throw new Error('ใบเสนอราคายังไม่ได้รับการยืนยัน กรุณาเปลี่ยนสถานะ QT เป็น Confirmed');
+    if (linkedQTId) {
+      const qt = await prisma.document.findFirst({
+        where: { id: linkedQTId, companyId, documentType: 'QUOTATION' },
+        select: { status: true },
+      });
+      if (!qt) {
+        throw new Error('ไม่พบใบเสนอราคา');
+      }
+      if (qt.status !== 'Confirmed') {
+        throw new Error('ใบเสนอราคายังไม่ได้รับการยืนยัน กรุณาเปลี่ยนสถานะ QT เป็น Confirmed');
+      }
     }
   }
 
@@ -1012,6 +1018,21 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
 
   await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber);
 
+  // Auto-update linked DI status to Paid when DR is saved
+  if (type === 'deposit_receipt') {
+    const diNumber = String(parseString(header.referenceNo) || '').trim();
+    if (diNumber) {
+      await prisma.document.updateMany({
+        where: {
+          companyId,
+          documentType: 'DEPOSIT_INVOICE',
+          documentNumber: diNumber,
+        },
+        data: { status: 'Paid' },
+      });
+    }
+  }
+
   // Stock deduction on first save of DO; stock return on first save of CUSTOMER_RETURN
   const isStockDoc = type === 'delivery_order' || type === 'customer_return';
   if (isStockDoc && existing === null) {
@@ -1132,6 +1153,22 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
             }
           }
         }
+      }
+    }
+  }
+
+  if (type === 'deposit_receipt') {
+    const linkedSOId = parseString(header.linkedSOId);
+    if (linkedSOId) {
+      const diDoc = await prisma.depositInvoiceDocument.findFirst({
+        where: { linkedSOId },
+        select: { documentId: true },
+      });
+      if (diDoc) {
+        await prisma.document.update({
+          where: { id: diDoc.documentId },
+          data: { status: 'Paid' },
+        });
       }
     }
   }
