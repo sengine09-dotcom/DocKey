@@ -17,6 +17,7 @@ import {
   buildBalanceInvoiceFromDP,
   buildReceiptDraftFromBalanceInvoice,
   QUOTATION_STATUS_OPTIONS, getQuotationStatusStyle,
+  DEPOSIT_INVOICE_STATUS_OPTIONS, getDepositInvoiceStatusStyle,
 } from './documentShared';
 import soService from '../../services/soService';
 import SOTab from './SOTab';
@@ -110,7 +111,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
 
   const filteredRecords = useMemo(() => {
     const base = docs[activeTab as MainDocumentType] || [];
-    if (activeTab !== 'quotation' || statusFilter === 'All') return base;
+    const canFilter = activeTab === 'quotation' || activeTab === 'deposit_invoice';
+    if (!canFilter || statusFilter === 'All') return base;
     return base.filter((r) => String(r.status || '').trim() === statusFilter);
   }, [docs, activeTab, statusFilter]);
 
@@ -285,7 +287,14 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   };
 
   const handleLinkToDPFromDI = async (di: any) => {
-    const full = await fetchFullRecord(di, 'deposit_invoice');
+    const id = di?.documentId || di?.id || di?.documentNumber;
+    let full = di;
+    if (id) {
+      try {
+        const res = await documentService.getById('deposit_invoice', id);
+        full = res?.data?.data || di;
+      } catch { /* fall back to cached record */ }
+    }
     setActiveTab('deposit_receipt');
     setSelectedRecord(null);
     setEditorState({ type: 'deposit_receipt', initialData: buildDPFromDepositInvoice(full) });
@@ -306,6 +315,9 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
         setDocs((prev) => ({ ...prev, [type]: replaceRecord(prev[type], s.savedRecord) }));
         setSelectedRecord(s.savedRecord);
         loadedTabsRef.current.delete(type);
+        if (type === 'deposit_receipt') {
+          loadedTabsRef.current.delete('deposit_invoice');
+        }
         void fetchTab(type);
       }
       setEditorState(null);
@@ -351,10 +363,14 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   };
   const textMuted = darkMode ? 'text-gray-400' : 'text-gray-500';
 
-  const renderStatus = (record: any, isQuotation = false) => {
+  const renderStatus = (record: any, isQuotation = false, isDepositInvoice = false) => {
     const status = record?.status || 'Draft';
     if (isQuotation) {
       const style = getQuotationStatusStyle(status);
+      return <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold" style={style}>{status}</span>;
+    }
+    if (isDepositInvoice) {
+      const style = getDepositInvoiceStatusStyle(status);
       return <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold" style={style}>{status}</span>;
     }
     const tone = record?.color === 'green' ? (darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700')
@@ -473,6 +489,12 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                           {QUOTATION_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       )}
+                      {activeTab === 'deposit_invoice' && (
+                        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                          className={`rounded-xl border px-3 py-2 text-sm outline-none ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}>
+                          {DEPOSIT_INVOICE_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      )}
                     </div>
                     <button type="button" onClick={handleCreate}
                       className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${acc.btn} whitespace-nowrap`}>
@@ -526,7 +548,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                               </td>
                               <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.documentDate)}</td>
                               <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(record.total)}</td>
-                              <td className="px-5 py-3.5">{renderStatus(record, activeTab === 'quotation')}</td>
+                              <td className="px-5 py-3.5">{renderStatus(record, activeTab === 'quotation', activeTab === 'deposit_invoice')}</td>
                               <td className="px-5 py-3.5">
                                 <div className="flex justify-end gap-2">
                                   {activeTab === 'quotation' && (
@@ -610,7 +632,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                       {selectedRecord.title && (
                         <p className={`text-sm mt-1 mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{selectedRecord.title}</p>
                       )}
-                      <div className="mt-3 mb-5">{renderStatus(selectedRecord, activeTab === 'quotation')}</div>
+                      <div className="mt-3 mb-5">{renderStatus(selectedRecord, activeTab === 'quotation', activeTab === 'deposit_invoice')}</div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div className={`rounded-xl border p-4 ${bannerCardCls[cfg.accent] || bannerCardCls.blue}`}>
                           <p className={`text-xs uppercase tracking-wide ${textMuted}`}>มูลค่ารวม</p>
