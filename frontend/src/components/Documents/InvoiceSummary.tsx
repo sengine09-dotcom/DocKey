@@ -1,4 +1,4 @@
-import bahttext from 'bahttext';
+import { bahttext } from 'bahttext';
 
 interface InvoiceSummaryProps {
   subtotal: number;
