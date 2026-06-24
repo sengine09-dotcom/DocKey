@@ -327,6 +327,8 @@ const mapDocumentRecord = (
       linkedQuotationId: document.invoiceDocument?.linkedQuotationId || '',
       linkedQuotationNumber: document.invoiceDocument?.linkedQuotationNumber || '',
       linkedDepositReceiptId: document.invoiceDocument?.linkedDepositReceiptId || '',
+      linkedDepositReceiptNumber: document.invoiceDocument?.linkedDepositReceiptNumber || '',
+      depositAmountDeducted: parseNullableNumber(document.invoiceDocument?.depositAmountDeducted),
       linkedSOId: document.invoiceDocument?.linkedSOId || '',
     };
   }
@@ -452,6 +454,8 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         linkedReceiptId: '',
         linkedReceiptNumber: '',
         linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
+        linkedDepositReceiptNumber: parseString(header.linkedDepositReceiptNumber),
+        depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
         linkedSOId: parseString(header.linkedSOId),
       } as any,
       update: {
@@ -459,6 +463,8 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
         dueDate: parseDate(header.dueDate),
         doNo: parseString(header.doNo),
         linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
+        linkedDepositReceiptNumber: parseString(header.linkedDepositReceiptNumber),
+        depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
         linkedSOId: parseString(header.linkedSOId),
       } as any,
     });

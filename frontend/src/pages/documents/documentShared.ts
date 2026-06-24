@@ -4,6 +4,20 @@ export const DOCUMENT_TYPES: MainDocumentType[] = ['quotation', 'invoice', 'rece
 
 export const QUOTATION_STATUS_OPTIONS = ['All', 'Draft', 'Pending Approval', 'Approved', 'Sent', 'Confirmed'];
 
+export const DEPOSIT_INVOICE_STATUS_OPTIONS = ['All', 'Draft', 'Sent', 'Awaiting_Verify', 'Paid'] as const;
+
+export const DEPOSIT_INVOICE_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  'Draft':           { bg: 'rgba(108,117,125,0.15)', text: '#495057' },
+  'Sent':            { bg: 'rgba(111,66,193,0.15)',  text: '#59359A' },
+  'Awaiting_Verify': { bg: 'rgba(253,126,20,0.15)',  text: '#B94B00' },
+  'Paid':            { bg: 'rgba(25,135,84,0.15)',   text: '#0F5132' },
+};
+
+export const getDepositInvoiceStatusStyle = (status: string): { backgroundColor: string; color: string } => {
+  const c = DEPOSIT_INVOICE_STATUS_COLORS[status] ?? DEPOSIT_INVOICE_STATUS_COLORS['Draft'];
+  return { backgroundColor: c.bg, color: c.text };
+};
+
 export const QUOTATION_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   'Draft':            { bg: 'rgba(108,117,125,0.15)', text: '#495057' },
   'Pending Approval': { bg: 'rgba(253,126,20,0.15)',  text: '#B94B00' },
@@ -254,7 +268,8 @@ export const buildDepositInvoiceDraftFromQuotation = (quotation: any, so: any) =
       productName: item?.productName || '', quantity: item?.quantity || '',
       cost: item?.cost || '', margin: item?.margin || '',
       sellingPrice: item?.sellingPrice || '', totalCost: item?.totalCost || '',
-      totalSellingPrice: item?.totalSellingPrice || '', unitId: item?.unitId || '',
+      totalSellingPrice: item?.totalSellingPrice || '',
+      unitCode: item?.unitCode || item?.unitId || '',
     })),
   };
 };
@@ -262,7 +277,11 @@ export const buildDepositInvoiceDraftFromQuotation = (quotation: any, so: any) =
 export const buildDepositInvoiceDraftFromSO = (so: any) => {
   const soNum = String(so?.soNumber || '').trim();
   const today = toDateInputValue(new Date());
-  const soTotal = Number(so?.total || 0);
+  const soTotal = (so?.items || []).reduce((s: number, i: any) => {
+    const qty = Number(i?.quantity || i?.qty || 0);
+    const price = Number(i?.sellingPrice || i?.unitPrice || 0);
+    return s + (Number(i?.totalSellingPrice || 0) || Number(i?.amount || 0) || (qty * price));
+  }, 0);
   const depositPct = 30;
   const depositAmount = Math.round((soTotal * depositPct / 100) * 100) / 100;
   const balanceAmount = Math.round((soTotal - depositAmount) * 100) / 100;
@@ -291,19 +310,36 @@ export const buildDepositInvoiceDraftFromSO = (so: any) => {
     depositPercentage: depositPct,
     depositAmount,
     balanceAmount,
-    items: (so?.items || []).map((item: any) => ({
-      id: item?.id || '', productCode: item?.productCode || '',
-      productName: item?.productName || item?.description || '', quantity: item?.quantity || '',
-      cost: item?.cost || '', margin: item?.margin || '',
-      sellingPrice: item?.sellingPrice || '', totalCost: item?.totalCost || '',
-      totalSellingPrice: item?.totalSellingPrice || item?.amount || '', unitId: item?.unitId || '',
-    })),
+    items: (so?.items || []).map((item: any) => {
+      const qty = item?.quantity || item?.qty || '';
+      const price = item?.sellingPrice || item?.unitPrice || '';
+      const lineTotal = item?.totalSellingPrice || item?.amount
+        || (Number(qty) * Number(price) || '');
+      return {
+        id: item?.id || '',
+        productCode: item?.productCode || '',
+        productName: item?.productName || item?.description || '',
+        quantity: String(qty),
+        cost: item?.cost || '',
+        margin: item?.margin || '',
+        sellingPrice: String(price),
+        totalCost: item?.totalCost || '',
+        totalSellingPrice: String(lineTotal),
+        unitCode: item?.unitCode || item?.unit || '',
+      };
+    }),
   };
 };
 
 export const buildDPFromDepositInvoice = (di: any) => {
   const diNum = String(di?.documentNumber || '').trim();
   const today = toDateInputValue(new Date());
+  const pct = Number(di?.depositPercentage || 30) / 100;
+  const storedAmount = Number(di?.depositAmount || di?.total || 0);
+  const itemsTotal = (di?.items || []).reduce(
+    (s: number, i: any) => s + Number(i?.totalSellingPrice || 0), 0,
+  );
+  const paymentAmount = storedAmount || Math.round(itemsTotal * pct * 100) / 100;
   return {
     __mode: 'create',
     title: `ใบรับมัดจำ — ${di?.title || diNum}`,
@@ -318,7 +354,7 @@ export const buildDPFromDepositInvoice = (di: any) => {
     taxRate: String(di?.taxRate || 7),
     receivedDate: today,
     paymentReference: '',
-    paymentAmount: String(di?.depositAmount || 0),
+    paymentAmount: String(paymentAmount),
     paymentType: 'partial',
     linkedQuotationId: di?.linkedQuotationId || '',
     linkedQuotationNumber: di?.linkedQuotationNumber || '',
@@ -352,6 +388,7 @@ export const buildBalanceInvoiceFromDP = (dp: any) => {
     total: String(balanceAmount),
     linkedDepositReceiptId: dp?.documentId || dp?.id || '',
     linkedDepositReceiptNumber: dpNum,
+    depositAmountDeducted: Number(dp?.paymentAmount || 0),
     linkedSOId: dp?.linkedSOId || '',
     linkedQuotationId: dp?.linkedQuotationId || '',
     linkedQuotationNumber: dp?.linkedQuotationNumber || '',

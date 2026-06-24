@@ -1,6 +1,7 @@
 generator client {
   provider   = "prisma-client-js"
   engineType = "binary"
+  output     = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -30,6 +31,13 @@ enum PaymentType {
   CASH
   CREDIT
   TRANSFER
+}
+
+enum DepositInvoiceStatus {
+  DRAFT           @map("Draft")
+  SENT            @map("Sent")
+  AWAITING_VERIFY @map("Awaiting_Verify")
+  PAID            @map("Paid")
 }
 
 model User {
@@ -275,9 +283,11 @@ model InvoiceDocument {
   doNo                String?   @map("DoNo") @db.VarChar(255)
   linkedReceiptId     String?   @map("LinkedReceiptId") @db.VarChar(26)
   linkedReceiptNumber    String?   @map("LinkedReceiptNumber") @db.VarChar(50)
-  linkedDepositReceiptId String?   @map("LinkedDepositReceiptId") @db.VarChar(26)
-  linkedSOId             String?   @map("LinkedSOId") @db.VarChar(191)
-  document               Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  linkedDepositReceiptId     String?  @map("LinkedDepositReceiptId") @db.VarChar(26)
+  linkedDepositReceiptNumber String?  @map("LinkedDepositReceiptNumber") @db.VarChar(50)
+  depositAmountDeducted      Decimal? @map("DepositAmountDeducted") @db.Decimal(19, 4)
+  linkedSOId                 String?  @map("LinkedSOId") @db.VarChar(191)
+  document                   Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model ReceiptDocument {
