@@ -1157,22 +1157,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     }
   }
 
-  if (type === 'deposit_receipt') {
-    const linkedSOId = parseString(header.linkedSOId);
-    if (linkedSOId) {
-      const diDoc = await prisma.depositInvoiceDocument.findFirst({
-        where: { linkedSOId },
-        select: { documentId: true },
-      });
-      if (diDoc) {
-        await prisma.document.update({
-          where: { id: diDoc.documentId },
-          data: { status: 'Paid' },
-        });
-      }
-    }
-  }
-
   if (type === 'invoice') {
     const linkedQuotationNumber = parseString(header.linkedQuotationNumber);
 
