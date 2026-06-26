@@ -221,6 +221,10 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   dpNumber: '',
   balanceBase: '0',
   balanceVat: '0',
+  // invoice tax fields
+  customerTaxId: '',
+  customerBranch: '',
+  paymentStatus: 'PENDING',
 });
 
 const getSubtypeFields = (documentType: MainDocumentType) => {
@@ -511,6 +515,9 @@ export default function AllDocumentForm({
       dpNumber: initialData.dpNumber || '',
       balanceBase: String(initialData.balanceBase ?? '0'),
       balanceVat: String(initialData.balanceVat ?? '0'),
+      customerTaxId: initialData.customerTaxId || '',
+      customerBranch: initialData.customerBranch || '',
+      paymentStatus: initialData.paymentStatus || 'PENDING',
     });
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
@@ -706,6 +713,26 @@ export default function AllDocumentForm({
     }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentType, isViewMode, totalSellingPrice, tax, header.depositPercentage]);
+
+  // Auto-calculate dueDate when paymentTerm or documentDate changes (invoice only)
+  useEffect(() => {
+    if (documentType !== 'invoice') return;
+    const termCode = String((header as any).paymentTerm || '').trim();
+    if (!termCode) return;
+    const matched = (preloadedPaymentTerms || []).find(
+      (t: any) => String(t.termId || '').trim() === termCode,
+    );
+    const days = parseInt(matched?.days || '0', 10);
+    if (!days) return;
+    const base = (header as any).documentDate
+      ? new Date((header as any).documentDate)
+      : new Date();
+    base.setDate(base.getDate() + days);
+    const computed = base.toISOString().slice(0, 10);
+    if ((header as any).dueDate !== computed) {
+      setHeader((h: any) => ({ ...h, dueDate: computed }));
+    }
+  }, [(header as any).paymentTerm, (header as any).documentDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRoundSellingPrice = (index: number, direction: 'up' | 'down') => {
     if (isViewMode || isItemLocked) return;
@@ -1862,6 +1889,48 @@ export default function AllDocumentForm({
                 </label>
               ))}
               </div>
+              {documentType === 'invoice' && (header as any).customerTaxId && (
+                <div className={`mt-3 flex items-center gap-2 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  <span className="font-medium">เลขผู้เสียภาษี:</span>
+                  <span className="font-mono">{(header as any).customerTaxId}</span>
+                  {(header as any).customerBranch && (
+                    <>
+                      <span className="mx-1">·</span>
+                      <span>{(header as any).customerBranch}</span>
+                    </>
+                  )}
+                </div>
+              )}
+              {documentType === 'invoice' && (() => {
+                const ps = (header as any).paymentStatus || 'PENDING';
+                const badge =
+                  ps === 'PAID'
+                    ? { label: 'ชำระแล้ว', cls: darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-700' }
+                    : ps === 'OVERDUE'
+                    ? { label: 'เกินกำหนด', cls: darkMode ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-700' }
+                    : { label: 'รอชำระ', cls: darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700' };
+                return (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                    {ps !== 'PAID' && ((header as any).documentId || (header as any).id) && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm('ยืนยันการชำระเงิน?')) return;
+                          const docId = (header as any).documentId || (header as any).id;
+                          await fetch(`/api/documents/${docId}/mark-paid`, { method: 'PATCH' });
+                          setHeader((h: any) => ({ ...h, paymentStatus: 'PAID' }));
+                        }}
+                        className={`text-xs rounded-lg px-2 py-0.5 font-semibold transition ${darkMode ? 'bg-green-700 hover:bg-green-600 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+                      >
+                        Mark Paid
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {documentType === 'deposit_invoice' && (
