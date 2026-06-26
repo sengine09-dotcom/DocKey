@@ -44,6 +44,7 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
     purchaseOrders: 0,
     workOrders: 0,
     activeWorkOrders: 0,
+    overdueInvoice: 0,
     ...counts,
   };
 
@@ -88,6 +89,19 @@ export default function Dashboard({ onNavigate = () => {} }: any) {
                 <StatCard title="Invoice Documents" value={c.invoices} icon="🧾"
                   bgClass={darkMode ? 'bg-purple-900/40' : 'bg-purple-100'}
                   textClass={darkMode ? 'text-purple-300' : 'text-purple-700'} />
+                {c.overdueInvoice > 0 && (
+                  <div
+                    className={`rounded-2xl p-4 cursor-pointer transition ${darkMode ? 'bg-red-900/30 hover:bg-red-900/50 border border-red-700/40' : 'bg-red-50 hover:bg-red-100 border border-red-200'}`}
+                    onClick={() => onNavigate('documents')}
+                  >
+                    <div className={`text-2xl font-bold ${darkMode ? 'text-red-300' : 'text-red-700'}`}>
+                      {c.overdueInvoice}
+                    </div>
+                    <div className={`text-xs font-medium mt-1 ${darkMode ? 'text-red-400' : 'text-red-600'}`}>
+                      Invoice เกินกำหนด
+                    </div>
+                  </div>
+                )}
                 <StatCard title="Active Work Orders" value={c.activeWorkOrders} icon="📌"
                   bgClass={darkMode ? 'bg-yellow-900/40' : 'bg-yellow-100'}
                   textClass={darkMode ? 'text-yellow-300' : 'text-yellow-700'} />
