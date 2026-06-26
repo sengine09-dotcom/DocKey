@@ -298,7 +298,15 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       const full = await fetchFullRecord(dp, 'deposit_receipt');
       setActiveTab('invoice');
       setSelectedRecord(null);
-      setEditorState({ type: 'invoice', initialData: buildBalanceInvoiceFromDP(full) });
+      setEditorState({
+        type: 'invoice',
+        initialData: {
+          ...buildBalanceInvoiceFromDP(full),
+          customerTaxId: customerExtra.customerTaxId,
+          customerBranch: customerExtra.customerBranch,
+          paymentStatus: 'PENDING',
+        },
+      });
       return;
     }
 

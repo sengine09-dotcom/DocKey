@@ -477,7 +477,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         linkedSOId: parseString(header.linkedSOId),
         customerTaxId: parseString(header.customerTaxId),
         customerBranch: parseString(header.customerBranch),
-        paymentStatus: parseString(header.paymentStatus) || 'PENDING',
+        paymentStatus: parseString(header.paymentStatus) === 'PAID' ? 'PAID' : 'PENDING',
       } as any,
       update: {
         documentNumber,
@@ -489,7 +489,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         linkedSOId: parseString(header.linkedSOId),
         customerTaxId: parseString(header.customerTaxId),
         customerBranch: parseString(header.customerBranch),
-        paymentStatus: parseString(header.paymentStatus) || 'PENDING',
+        paymentStatus: parseString(header.paymentStatus) === 'PAID' ? 'PAID' : 'PENDING',
       } as any,
     });
   }

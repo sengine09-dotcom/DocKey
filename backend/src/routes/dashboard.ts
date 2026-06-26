@@ -18,6 +18,7 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
       return res.json({ success: true, data: cached.data });
     }
 
+    const now = new Date();
     const [
       quotations,
       invoices,
@@ -26,6 +27,7 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
       workOrders,
       invoiceAgg,
       purchaseAgg,
+      overdueInvoiceCount,
     ] = await Promise.all([
       // Quotations: needed for paid/unpaid cross-link logic
       prisma.document.findMany({
@@ -70,6 +72,14 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
         where: { companyId: ctx.companyId, documentType: 'PURCHASE_ORDER' },
         _sum: { totalCost: true },
         _count: { id: true },
+      }),
+      // Overdue invoices: PENDING payment status with dueDate in the past
+      prisma.invoiceDocument.count({
+        where: {
+          paymentStatus: 'PENDING',
+          dueDate: { lt: now },
+          document: { companyId: ctx.companyId },
+        },
       }),
     ]);
 
@@ -137,6 +147,7 @@ router.get('/dashboard/metrics', async (req: Request, res) => {
         purchaseOrders: Number(purchaseAgg._count.id),
         workOrders: workOrders.length,
         activeWorkOrders,
+        overdueInvoice: overdueInvoiceCount,
       },
     };
 

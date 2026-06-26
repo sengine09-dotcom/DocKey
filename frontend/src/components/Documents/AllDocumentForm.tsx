@@ -719,6 +719,7 @@ export default function AllDocumentForm({
   // Auto-calculate dueDate when paymentTerm or documentDate changes (invoice only)
   useEffect(() => {
     if (documentType !== 'invoice') return;
+    if (isViewMode) return;
     const termCode = String((header as any).paymentTerm || '').trim();
     if (!termCode) return;
     const matched = paymentTermCodes.find(
