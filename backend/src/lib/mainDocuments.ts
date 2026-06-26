@@ -813,51 +813,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     }
   }
 
-  if (type === 'invoice' && existing === null) {
-    const linkedSOId = parseString(header.linkedSOId);
-
-    if (linkedSOId) {
-      // GR gate: goods must be received from supplier before issuing delivery invoice
-      const soItems = await prisma.sOItem.findMany({
-        where: { soId: linkedSOId, convertedToPr: true },
-        select: { prNumber: true },
-      });
-      const prNumbers = soItems
-        .map(i => i.prNumber)
-        .filter((v): v is string => Boolean(v));
-
-      if (prNumbers.length === 0) {
-        throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
-      }
-
-      const prItems = await prisma.pRItem.findMany({
-        where: {
-          pr: { prNumber: { in: prNumbers } },
-          convertedToPo: true,
-        },
-        select: { poNumber: true },
-      });
-      const poNumbersFromPR = prItems
-        .map(i => i.poNumber)
-        .filter((v): v is string => Boolean(v));
-
-      const directPONumbers = prNumbers.filter(n => n.toUpperCase().startsWith('PO-'));
-      const allPONumbers = [...new Set([...poNumbersFromPR, ...directPONumbers])];
-
-      if (allPONumbers.length === 0) {
-        throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
-      }
-
-      const gr = await prisma.goodsReceipt.findFirst({
-        where: { poNumber: { in: allPONumbers }, status: 'CONFIRMED', companyId },
-        select: { id: true },
-      });
-      if (!gr) {
-        throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
-      }
-    }
-  }
-
   if (type === 'deposit_invoice' && existing === null) {
     const linkedSOId = parseString(header.linkedSOId);
     const linkedQTId = parseString(header.linkedQuotationId);
