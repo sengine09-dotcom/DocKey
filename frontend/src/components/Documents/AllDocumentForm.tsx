@@ -719,11 +719,12 @@ export default function AllDocumentForm({
     if (documentType !== 'invoice') return;
     const termCode = String((header as any).paymentTerm || '').trim();
     if (!termCode) return;
-    const matched = (preloadedPaymentTerms || []).find(
+    const matched = paymentTermCodes.find(
       (t: any) => String(t.termId || '').trim() === termCode,
     );
     const days = parseInt(matched?.days || '0', 10);
     if (!days) return;
+    if (!(header as any).documentDate) return;
     const base = (header as any).documentDate
       ? new Date((header as any).documentDate)
       : new Date();
@@ -732,7 +733,7 @@ export default function AllDocumentForm({
     if ((header as any).dueDate !== computed) {
       setHeader((h: any) => ({ ...h, dueDate: computed }));
     }
-  }, [(header as any).paymentTerm, (header as any).documentDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [(header as any).paymentTerm, (header as any).documentDate, paymentTermCodes]);
 
   const handleRoundSellingPrice = (index: number, direction: 'up' | 'down') => {
     if (isViewMode || isItemLocked) return;
@@ -1920,7 +1921,11 @@ export default function AllDocumentForm({
                         onClick={async () => {
                           if (!window.confirm('ยืนยันการชำระเงิน?')) return;
                           const docId = (header as any).documentId || (header as any).id;
-                          await fetch(`/api/documents/${docId}/mark-paid`, { method: 'PATCH' });
+                          const res = await fetch(`/api/documents/${docId}/mark-paid`, { method: 'PATCH' });
+                          if (!res.ok) {
+                            alert('ไม่สามารถอัปเดตสถานะได้ กรุณาลองใหม่');
+                            return;
+                          }
                           setHeader((h: any) => ({ ...h, paymentStatus: 'PAID' }));
                         }}
                         className={`text-xs rounded-lg px-2 py-0.5 font-semibold transition ${darkMode ? 'bg-green-700 hover:bg-green-600 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`}
