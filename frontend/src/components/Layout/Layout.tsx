@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import documentService from '../../services/documentService';
 import codeService from '../../services/codeService';
 import { showAppAlert } from '../../services/dialogService';
 import { formatDate } from '../../utils/date';
 
 const TOKEN_EXPIRY_CACHE_PREFIX = 'doc-key-token-expiry-v3';
+
+// Module-level sidebar counts cache — survives Layout remounts during navigation
+type SidebarCounts = {
+  quotation: number; depositReceipt: number; invoice: number; receipt: number; so: number;
+  pr: number; purchaseOrder: number; gr: number; workOrder: number;
+  customer: number; product: number; vendor: number; company: number; destination: number; paymentTerm: number; endUser: number; unitCode: number;
+};
+let _sidebarCountsCache: SidebarCounts | null = null;
+let _sidebarCountsFetchedAt = 0;
+const SIDEBAR_COUNTS_TTL_MS = 5 * 60 * 1000; // re-fetch every 5 minutes
 
 const tokenExpiryMemoryCache = new Map<string, TokenExpirySummary>();
 let latestTokenExpiryCache: {
@@ -301,46 +310,41 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   useEffect(() => {
     const fetchCounts = async () => {
-      const [quotation, depositReceipt, invoice, receipt, so, pr, purchaseOrder, gr, workOrder, cust, prod, vendor, company, dest, term, endUser, unitCodeRes] = await Promise.allSettled([
-        documentService.getAll('quotation'),
-        documentService.getAll('deposit_receipt'),
-        documentService.getAll('invoice'),
-        documentService.getAll('receipt'),
-        axios.get('/api/so'),
-        axios.get('/api/purchase/pr'),
-        documentService.getAll('purchase_order'),
-        axios.get('/api/purchase/gr'),
-        documentService.getAll('work_order'),
-        codeService.getAll('customer'),
-        codeService.getAll('product'),
-        codeService.getAll('vendor'),
-        codeService.getAll('company'),
-        codeService.getAll('destination'),
-        codeService.getAll('payment-term'),
-        codeService.getAll('end-user'),
-        codeService.getAll('unit-code'),
-      ]);
-      setSidebarCounts({
-        quotation:     quotation.status === 'fulfilled' ? (quotation.value?.data?.data?.length ?? 0) : 0,
-        depositReceipt: depositReceipt.status === 'fulfilled' ? (depositReceipt.value?.data?.data?.length ?? 0) : 0,
-        invoice:       invoice.status === 'fulfilled' ? (invoice.value?.data?.data?.length ?? 0) : 0,
-        receipt:       receipt.status === 'fulfilled' ? (receipt.value?.data?.data?.length ?? 0) : 0,
-        so:            so.status === 'fulfilled' ? (so.value?.data?.data?.length ?? 0) : 0,
-        pr:            pr.status === 'fulfilled' ? (pr.value?.data?.data?.length ?? 0) : 0,
-        purchaseOrder: purchaseOrder.status === 'fulfilled' ? (purchaseOrder.value?.data?.data?.length ?? 0) : 0,
-        gr:            gr.status === 'fulfilled' ? (gr.value?.data?.data?.length ?? 0) : 0,
-        workOrder:     workOrder.status === 'fulfilled' ? (workOrder.value?.data?.data?.length ?? 0) : 0,
-        customer:      cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
-        product:       prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
-        vendor:        vendor.status === 'fulfilled' ? (vendor.value?.data?.data?.length ?? 0) : 0,
-        company:       company.status === 'fulfilled' ? (company.value?.data?.data?.length ?? 0) : 0,
-        destination:   dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
-        paymentTerm:   term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
-        endUser:       endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
-        unitCode:      unitCodeRes.status === 'fulfilled' ? (unitCodeRes.value?.data?.data?.length ?? 0) : 0,
-      });
+      // Return cached counts immediately if still fresh — avoids re-fetching on every navigation
+      if (_sidebarCountsCache && Date.now() - _sidebarCountsFetchedAt < SIDEBAR_COUNTS_TTL_MS) {
+        setSidebarCounts(_sidebarCountsCache);
+        return;
+      }
+      try {
+        const res = await axios.get('/api/documents/counts');
+        const d = res.data?.data || {};
+        const next: SidebarCounts = {
+          quotation:      d.quotation ?? 0,
+          depositReceipt: d.deposit_receipt ?? 0,
+          invoice:        d.invoice ?? 0,
+          receipt:        d.receipt ?? 0,
+          so:             d.so ?? 0,
+          pr:             d.pr ?? 0,
+          purchaseOrder:  d.purchase_order ?? 0,
+          gr:             d.gr ?? 0,
+          workOrder:      d.work_order ?? 0,
+          customer:       d.customer ?? 0,
+          product:        d.product ?? 0,
+          vendor:         d.vendor ?? 0,
+          company:        0,
+          destination:    d.destination ?? 0,
+          paymentTerm:    d.paymentTerm ?? 0,
+          endUser:        0,
+          unitCode:       d.unitCode ?? 0,
+        };
+        _sidebarCountsCache = next;
+        _sidebarCountsFetchedAt = Date.now();
+        setSidebarCounts(next);
+      } catch {
+        // Keep existing counts on error
+      }
     };
-    fetchCounts();
+    void fetchCounts();
   }, []);
 
   const toggleSubmenu = (menuId: string) => {

@@ -9,13 +9,21 @@ class DocumentController {
       const ctx = await resolveCompanyContext(req);
       if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-      const [docGroups, soCount] = await Promise.all([
+      const [docGroups, soCount, prCount, grCount, custCount, prodCount, vendorCount, destCount, termCount, unitCount] = await Promise.all([
         prisma.document.groupBy({
           by: ['documentType'],
           where: { companyId: ctx.companyId },
           _count: { _all: true },
         }),
         prisma.saleOrder.count({ where: { companyId: ctx.companyId } }),
+        prisma.purchaseRequisition.count({ where: { companyId: ctx.companyId } }),
+        prisma.goodsReceipt.count({ where: { companyId: ctx.companyId } }),
+        prisma.customer.count({ where: { companyId: ctx.companyId } }),
+        prisma.product.count({ where: { companyId: ctx.companyId } }),
+        prisma.vendor.count({ where: { companyId: ctx.companyId } }),
+        prisma.destination.count({ where: { companyId: ctx.companyId } }),
+        prisma.paymentTerm.count({ where: { companyId: ctx.companyId } }),
+        prisma.unitCode.count({ where: { companyId: ctx.companyId } }),
       ]);
 
       const PRISMA_TO_APP: Record<string, string> = {
@@ -24,9 +32,22 @@ class DocumentController {
         DEPOSIT_RECEIPT: 'deposit_receipt',
         INVOICE: 'invoice',
         RECEIPT: 'receipt',
+        PURCHASE_ORDER: 'purchase_order',
+        WORK_ORDER: 'work_order',
       };
 
-      const counts: Record<string, number> = { so: soCount };
+      const counts: Record<string, number> = {
+        so: soCount,
+        pr: prCount,
+        gr: grCount,
+        customer: custCount,
+        product: prodCount,
+        vendor: vendorCount,
+        destination: destCount,
+        paymentTerm: termCount,
+        endUser: 0,
+        unitCode: unitCount,
+      };
       for (const g of docGroups) {
         const key = PRISMA_TO_APP[String(g.documentType)];
         if (key) counts[key] = g._count._all;
