@@ -281,6 +281,13 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   };
 
   const handleSOtoBalanceInvoice = async (so: any) => {
+    // Lookup customer tax data from already-loaded codes (no extra API call)
+    const customer = customerCodes.find((c: any) => c.customerCode === so.customerCode);
+    const customerExtra = {
+      customerTaxId: customer?.gstId || '',
+      customerBranch: customer?.shortName || '',
+    };
+
     // 1. Check for deposit receipt (DR) — most complete path
     const drRes = await documentService.getAll('deposit_receipt');
     const drList: any[] = drRes?.data?.data || [];
@@ -305,7 +312,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     // 3. Build invoice (with DI deduction if found, otherwise full invoice)
     setActiveTab('invoice');
     setSelectedRecord(null);
-    setEditorState({ type: 'invoice', initialData: buildInvoiceFromSO(so, di || undefined) });
+    setEditorState({ type: 'invoice', initialData: buildInvoiceFromSO(so, di || undefined, customerExtra) });
   };
 
   const handleLinkToDPFromDI = async (di: any) => {

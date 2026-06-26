@@ -371,7 +371,11 @@ export const buildDPFromDepositInvoice = (di: any) => {
   };
 };
 
-export const buildInvoiceFromSO = (so: any, di?: any) => {
+export const buildInvoiceFromSO = (
+  so: any,
+  di?: any,
+  customerExtra?: { customerTaxId: string; customerBranch: string },
+) => {
   const soNum = String(so?.soNumber || '').trim();
   const today = toDateInputValue(new Date());
   const soTotal = (so?.items || []).reduce((s: number, i: any) => {
@@ -403,6 +407,9 @@ export const buildInvoiceFromSO = (so: any, di?: any) => {
     linkedDepositReceiptId: di?.documentId || di?.id || '',
     linkedDepositReceiptNumber: diNum,
     total: String(di ? balanceAmt : soTotal),
+    customerTaxId: customerExtra?.customerTaxId || '',
+    customerBranch: customerExtra?.customerBranch || '',
+    paymentStatus: 'PENDING',
     items: (so?.items || []).map((item: any) => ({
       id: '',
       productCode: item?.productCode || '',
