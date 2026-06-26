@@ -278,17 +278,20 @@ model QuotationDocument {
 }
 
 model InvoiceDocument {
-  id                  String    @id @map("ID") @db.Char(26)
-  documentNumber      String    @map("DocumentNumber") @db.Char(26)
-  dueDate             DateTime? @map("DueDate")
-  doNo                String?   @map("DoNo") @db.VarChar(255)
-  linkedReceiptId     String?   @map("LinkedReceiptId") @db.VarChar(26)
-  linkedReceiptNumber    String?   @map("LinkedReceiptNumber") @db.VarChar(50)
-  linkedDepositReceiptId     String?  @map("LinkedDepositReceiptId") @db.VarChar(26)
-  linkedDepositReceiptNumber String?  @map("LinkedDepositReceiptNumber") @db.VarChar(50)
-  depositAmountDeducted      Decimal? @map("DepositAmountDeducted") @db.Decimal(19, 4)
-  linkedSOId                 String?  @map("LinkedSOId") @db.VarChar(191)
-  document                   Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id                         String    @id @map("ID") @db.Char(26)
+  documentNumber             String    @map("DocumentNumber") @db.Char(26)
+  dueDate                    DateTime? @map("DueDate")
+  doNo                       String?   @map("DoNo") @db.VarChar(255)
+  linkedReceiptId            String?   @map("LinkedReceiptId") @db.VarChar(26)
+  linkedReceiptNumber        String?   @map("LinkedReceiptNumber") @db.VarChar(50)
+  linkedDepositReceiptId     String?   @map("LinkedDepositReceiptId") @db.VarChar(26)
+  linkedDepositReceiptNumber String?   @map("LinkedDepositReceiptNumber") @db.VarChar(50)
+  depositAmountDeducted      Decimal?  @map("DepositAmountDeducted") @db.Decimal(19, 4)
+  linkedSOId                 String?   @map("LinkedSOId") @db.VarChar(191)
+  customerTaxId              String?   @map("CustomerTaxId") @db.VarChar(20)
+  customerBranch             String?   @map("CustomerBranch") @db.VarChar(100)
+  paymentStatus              String    @default("PENDING") @map("PaymentStatus") @db.VarChar(20)
+  document                   Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 model ReceiptDocument {
