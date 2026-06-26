@@ -9,7 +9,8 @@ class DocumentController {
       const ctx = await resolveCompanyContext(req);
       if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
-      const [docGroups, soCount, prCount, grCount, custCount, prodCount, vendorCount, destCount, termCount, unitCount] = await Promise.all([
+      const now = new Date();
+      const [docGroups, soCount, prCount, grCount, custCount, prodCount, vendorCount, destCount, termCount, unitCount, overdueInvoiceCount] = await Promise.all([
         prisma.document.groupBy({
           by: ['documentType'],
           where: { companyId: ctx.companyId },
@@ -24,6 +25,13 @@ class DocumentController {
         prisma.destination.count({ where: { companyId: ctx.companyId } }),
         prisma.paymentTerm.count({ where: { companyId: ctx.companyId } }),
         prisma.unitCode.count({ where: { companyId: ctx.companyId } }),
+        prisma.invoiceDocument.count({
+          where: {
+            paymentStatus: 'PENDING',
+            dueDate: { lt: now },
+            document: { companyId: ctx.companyId },
+          },
+        }),
       ]);
 
       const PRISMA_TO_APP: Record<string, string> = {
@@ -47,6 +55,7 @@ class DocumentController {
         paymentTerm: termCount,
         endUser: 0,
         unitCode: unitCount,
+        overdueInvoice: overdueInvoiceCount,
       };
       for (const g of docGroups) {
         const key = PRISMA_TO_APP[String(g.documentType)];
@@ -134,6 +143,35 @@ class DocumentController {
       }
 
       return res.json({ success: true, message: 'Document deleted' });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  static async markPaid(req: Request, res: Response) {
+    try {
+      const ctx = await resolveCompanyContext(req);
+      if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const { id } = req.params;
+      const doc = await prisma.document.findFirst({
+        where: { id, companyId: ctx.companyId, documentType: 'INVOICE' },
+        select: { id: true },
+      });
+      if (!doc) return res.status(404).json({ success: false, message: 'Invoice not found' });
+
+      await prisma.$transaction([
+        prisma.invoiceDocument.update({
+          where: { id },
+          data: { paymentStatus: 'PAID' },
+        }),
+        prisma.document.update({
+          where: { id },
+          data: { status: 'Completed' },
+        }),
+      ]);
+
+      return res.json({ success: true });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.message });
     }
