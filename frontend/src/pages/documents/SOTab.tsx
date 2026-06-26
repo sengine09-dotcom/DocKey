@@ -544,10 +544,13 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                     📋 สร้างใบแจ้งหนี้มัดจำ
                   </button>
                 )}
-                {viewing.status === 'IN_PROGRESS' && onLinkToBalanceInvoice && !workflowStatus?.invoice && (
-                  <button type="button" onClick={() => onLinkToBalanceInvoice(viewing)}
-                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-violet-700 hover:bg-violet-600 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white'}`}>
-                    📄 สร้างใบแจ้งหนี้
+                {(viewing.status === 'CONFIRMED' || viewing.status === 'IN_PROGRESS') && onLinkToBalanceInvoice && !workflowStatus?.invoice && (
+                  <button
+                    type="button"
+                    onClick={() => onLinkToBalanceInvoice(viewing)}
+                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-violet-700 hover:bg-violet-600 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white'}`}
+                  >
+                    ออกใบกำกับภาษี
                   </button>
                 )}
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
