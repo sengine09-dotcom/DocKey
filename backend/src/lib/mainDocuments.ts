@@ -175,6 +175,15 @@ const buildInvoiceStatusOnline = (status: string | null | undefined) => {
   return 1;
 };
 
+export const computePaymentStatus = (
+  stored: string | null | undefined,
+  dueDate: Date | null | undefined,
+): 'PENDING' | 'OVERDUE' | 'PAID' => {
+  if (stored === 'PAID') return 'PAID';
+  if (stored === 'PENDING' && dueDate && dueDate < new Date()) return 'OVERDUE';
+  return 'PENDING';
+};
+
 const mapDocumentItem = (
   item: any,
   productNameMap: Record<string, string> = {},
@@ -316,12 +325,14 @@ const mapDocumentRecord = (
   };
 
   if (documentType === 'invoice') {
+    const storedPaymentStatus = document.invoiceDocument?.paymentStatus ?? 'PENDING';
+    const dueDate = document.invoiceDocument?.dueDate ?? null;
     return {
       ...baseRecord,
       invoiceId: document.documentNumber,
       invoiceNo: document.documentNumber,
       invoiceDate: document.documentDate,
-      dueDate: document.invoiceDocument?.dueDate || null,
+      dueDate: dueDate,
       doNo: document.invoiceDocument?.doNo || '',
       statusOnline: document.invoiceDocument?.statusOnline ?? buildInvoiceStatusOnline(status),
       linkedQuotationId: document.invoiceDocument?.linkedQuotationId || '',
@@ -330,6 +341,9 @@ const mapDocumentRecord = (
       linkedDepositReceiptNumber: document.invoiceDocument?.linkedDepositReceiptNumber || '',
       depositAmountDeducted: parseNullableNumber(document.invoiceDocument?.depositAmountDeducted),
       linkedSOId: document.invoiceDocument?.linkedSOId || '',
+      customerTaxId: document.invoiceDocument?.customerTaxId || '',
+      customerBranch: document.invoiceDocument?.customerBranch || '',
+      paymentStatus: computePaymentStatus(storedPaymentStatus, dueDate),
     };
   }
 
@@ -449,7 +463,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
   
   if (type === 'invoice') {
     return prisma.invoiceDocument.upsert({
-      where: { id : documentId },
+      where: { id: documentId },
       create: {
         id: documentId,
         documentNumber,
@@ -461,6 +475,9 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         linkedDepositReceiptNumber: parseString(header.linkedDepositReceiptNumber),
         depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
         linkedSOId: parseString(header.linkedSOId),
+        customerTaxId: parseString(header.customerTaxId),
+        customerBranch: parseString(header.customerBranch),
+        paymentStatus: parseString(header.paymentStatus) || 'PENDING',
       } as any,
       update: {
         documentNumber,
@@ -470,6 +487,9 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         linkedDepositReceiptNumber: parseString(header.linkedDepositReceiptNumber),
         depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
         linkedSOId: parseString(header.linkedSOId),
+        customerTaxId: parseString(header.customerTaxId),
+        customerBranch: parseString(header.customerBranch),
+        paymentStatus: parseString(header.paymentStatus) || 'PENDING',
       } as any,
     });
   }
@@ -537,7 +557,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
     if (diId) {
       await prisma.depositInvoiceDocument.updateMany({
         where: { documentId: diId },
-        data: { linkedDRId: documentId, linkedDRNumber: documentNumber },
+        data: { linkedDRId: documentId, linkedDRNumber: documentNumber } as any,
       });
     }
     return saved;
@@ -797,17 +817,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     const linkedSOId = parseString(header.linkedSOId);
 
     if (linkedSOId) {
-      // 1. Check DP exists for this SO
-      const dp = await prisma.depositReceiptDocument.findFirst({
-        where: { linkedSOId },
-        select: { id: true },
-      });
-      if (!dp) {
-        throw new Error('ยังไม่มีใบรับมัดจำสำหรับ SO นี้ กรุณาสร้างใบรับมัดจำก่อน');
-      }
-
-      // 2. GR gate: supports both 3-hop (SO→PR→PO→GR) and direct (SO→PO→GR) flows.
-      // When PO is created directly from SO, SOItem.prNumber stores the PO number instead of a PR number.
+      // GR gate: goods must be received from supplier before issuing delivery invoice
       const soItems = await prisma.sOItem.findMany({
         where: { soId: linkedSOId, convertedToPr: true },
         select: { prNumber: true },
@@ -820,7 +830,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         throw new Error('ยังไม่มีการรับสินค้า (GR) สำหรับ SO นี้');
       }
 
-      // 3-hop path: prNumbers are real PR numbers → resolve to PO numbers via PRItem
       const prItems = await prisma.pRItem.findMany({
         where: {
           pr: { prNumber: { in: prNumbers } },
@@ -832,9 +841,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         .map(i => i.poNumber)
         .filter((v): v is string => Boolean(v));
 
-      // Fallback: prNumbers may actually be PO numbers (SO→PO direct flow)
       const directPONumbers = prNumbers.filter(n => n.toUpperCase().startsWith('PO-'));
-
       const allPONumbers = [...new Set([...poNumbersFromPR, ...directPONumbers])];
 
       if (allPONumbers.length === 0) {
