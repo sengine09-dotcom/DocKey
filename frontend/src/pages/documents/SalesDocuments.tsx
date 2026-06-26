@@ -15,6 +15,7 @@ import {
   buildDepositInvoiceDraftFromSO,
   buildDPFromDepositInvoice,
   buildBalanceInvoiceFromDP,
+  buildInvoiceFromSO,
   buildReceiptDraftFromBalanceInvoice,
   QUOTATION_STATUS_OPTIONS, getQuotationStatusStyle,
   DEPOSIT_INVOICE_STATUS_OPTIONS, getDepositInvoiceStatusStyle,
@@ -37,6 +38,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   const [unitCodes, setUnitCodes] = useState<any[]>([]);
   const [editorState, setEditorState] = useState<{ type: MainDocumentType; initialData: any } | null>(null);
   const [pendingSO, setPendingSO] = useState<any>(null);
+  const [soCount, setSoCount] = useState(0);
+  const [tabCounts, setTabCounts] = useState<Record<string, number>>({});
   const [confirmedSOs, setConfirmedSOs] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [search, setSearch] = useState('');
@@ -85,6 +88,9 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       setIsAdmin(String(res.data?.user?.role || '').toLowerCase() === 'admin');
     });
     void fetchTab('quotation');
+    void axios.get<{ success: boolean; data: Record<string, number> }>('/api/documents/counts')
+      .then((res) => { if (res.data?.data) setTabCounts(res.data.data); })
+      .catch(() => {/* silent — badges will populate when tabs are clicked */});
   }, [fetchTab]);
 
   useEffect(() => {
@@ -275,15 +281,31 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   };
 
   const handleSOtoBalanceInvoice = async (so: any) => {
-    const dp = docs['deposit_receipt']?.find((d: any) => d.linkedSOId === so.id);
-    if (!dp) {
-      await showAppAlert({ title: 'ไม่พบใบรับมัดจำ', message: 'ยังไม่มีใบรับมัดจำสำหรับ SO นี้ กรุณาสร้างใบแจ้งหนี้มัดจำและรับมัดจำก่อน', tone: 'warning' });
+    // 1. Check for deposit receipt (DR) — most complete path
+    const drRes = await documentService.getAll('deposit_receipt');
+    const drList: any[] = drRes?.data?.data || [];
+    setDocs((prev) => ({ ...prev, deposit_receipt: drList }));
+    loadedTabsRef.current.add('deposit_receipt');
+    const dp = drList.find((d: any) => d.linkedSOId === so.id);
+    if (dp) {
+      const full = await fetchFullRecord(dp, 'deposit_receipt');
+      setActiveTab('invoice');
+      setSelectedRecord(null);
+      setEditorState({ type: 'invoice', initialData: buildBalanceInvoiceFromDP(full) });
       return;
     }
-    const full = await fetchFullRecord(dp, 'deposit_receipt');
+
+    // 2. No DR — check for deposit invoice (DI) to deduct deposit amount
+    const diRes = await documentService.getAll('deposit_invoice');
+    const diList: any[] = diRes?.data?.data || [];
+    setDocs((prev) => ({ ...prev, deposit_invoice: diList }));
+    loadedTabsRef.current.add('deposit_invoice');
+    const di = diList.find((d: any) => d.linkedSOId === so.id);
+
+    // 3. Build invoice (with DI deduction if found, otherwise full invoice)
     setActiveTab('invoice');
     setSelectedRecord(null);
-    setEditorState({ type: 'invoice', initialData: buildBalanceInvoiceFromDP(full) });
+    setEditorState({ type: 'invoice', initialData: buildInvoiceFromSO(so, di || undefined) });
   };
 
   const handleLinkToDPFromDI = async (di: any) => {
@@ -349,18 +371,19 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       if (s.action === 'save' && s.savedRecord) {
         const type = (s.selectedType || activeTab) as MainDocumentType;
         setDocs((prev) => ({ ...prev, [type]: replaceRecord(prev[type], s.savedRecord) }));
-        setSelectedRecord(s.savedRecord);
         loadedTabsRef.current.delete(type);
         if (type === 'deposit_receipt') {
           loadedTabsRef.current.delete('deposit_invoice');
         }
         void fetchTab(type);
+        setEditorState({ type, initialData: { ...s.savedRecord, __mode: 'view' } });
+        return;
       }
       setEditorState(null);
       return;
     }
     if (page === 'so') {
-      const quotation = (state as any) || {};
+      const quotation = (state as any)?.fromQuotation || (state as any) || {};
       const customerName = (() => {
         const code = String(quotation.customer || '').trim();
         if (!code) return '';
@@ -441,14 +464,15 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
           </div>
 
           {/* Tabs */}
-          <div className={`flex gap-1 mb-6 p-1 rounded-2xl w-fit ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+          <div className="mb-6 overflow-x-auto">
+          <div className={`flex gap-1 p-1 rounded-2xl w-fit ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
             {/* quotation first */}
             {(() => {
               const tab = 'quotation' as const;
               const c = documentTypeConfigs[tab];
               const a = accentClasses[c.accent];
               const isActive = activeTab === tab;
-              const count = docs[tab]?.length || 0;
+              const count = loadedTabsRef.current.has(tab) ? docs[tab].length : (tabCounts[tab] ?? docs[tab]?.length ?? 0);
               return (
                 <button key={tab} type="button" onClick={() => handleTabChange(tab)}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive ? a.activeTab : darkMode ? 'text-gray-400 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
@@ -467,6 +491,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive ? soAccent.activeTab : darkMode ? 'text-gray-400 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
                   <span>{SO_TAB_META.icon}</span>
                   <span className="hidden sm:inline">{SO_TAB_META.labelTh}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${isActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>{soCount || (tabCounts['so'] ?? 0)}</span>
                 </button>
               );
             })()}
@@ -475,7 +500,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               const c = documentTypeConfigs[tab];
               const a = accentClasses[c.accent];
               const isActive = activeTab === tab;
-              const count = docs[tab]?.length || 0;
+              const count = loadedTabsRef.current.has(tab) ? docs[tab].length : (tabCounts[tab] ?? 0);
               return (
                 <button key={tab} type="button" onClick={() => handleTabChange(tab)}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isActive ? a.activeTab : darkMode ? 'text-gray-400 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
@@ -488,6 +513,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               );
             })}
           </div>
+          </div>
 
           {activeTab === 'so' && (
             <SOTab
@@ -499,6 +525,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               onLinkToBalanceInvoice={handleSOtoBalanceInvoice}
               onNavigateToDI={handleNavigateToDI}
               onNavigateToInvoice={handleNavigateToInvoice}
+              onCountChange={setSoCount}
             />
           )}
 
@@ -581,20 +608,20 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                                 )}
                               </td>
                               <td className="px-5 py-3.5">
-                                <p className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{record.title || '-'}</p>
-                                <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getPartyLabel(record)}</p>
+                                {activeTab === 'quotation' ? (
+                                  <p className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{getPartyLabel(record)}</p>
+                                ) : (
+                                  <>
+                                    <p className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{record.title || '-'}</p>
+                                    <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getPartyLabel(record)}</p>
+                                  </>
+                                )}
                               </td>
                               <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.documentDate)}</td>
                               <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(record.total)}</td>
                               <td className="px-5 py-3.5">{renderStatus(record, activeTab === 'quotation', activeTab === 'deposit_invoice')}</td>
                               <td className="px-5 py-3.5">
                                 <div className="flex justify-end gap-2">
-                                  {activeTab === 'quotation' && (
-                                    <button type="button" onClick={() => handleLinkToSO(record)}
-                                      className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-blue-900/40 text-blue-300 hover:bg-blue-800/60' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
-                                      🛒 ใบสั่งขาย
-                                    </button>
-                                  )}
                                   {activeTab === 'deposit_invoice' && (
                                     <button type="button" onClick={() => handleLinkToDPFromDI(record)}
                                       className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60' : 'bg-cyan-50 text-cyan-700 hover:bg-cyan-100'}`}>

@@ -120,7 +120,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   const [sidebarCounts, setSidebarCounts] = useState({
     quotation: 0, depositReceipt: 0, invoice: 0, receipt: 0, so: 0,
     pr: 0, purchaseOrder: 0, gr: 0, workOrder: 0,
-    customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0,
+    customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0, unitCode: 0,
   });
   const [user, setUser] = useState({
     name: 'User',
@@ -268,6 +268,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     { id: 'destination-code', label: 'Destination', icon: '📍', href: '/codes/destination', count: sidebarCounts.destination, isActive: currentPage === 'destination-code' },
     { id: 'payment-term-code', label: 'Payment Term', icon: '💳', href: '/codes/payment-term', count: sidebarCounts.paymentTerm, isActive: currentPage === 'payment-term-code' },
     { id: 'end-user-code', label: 'End User', icon: '👤', href: '/codes/end-user', count: sidebarCounts.endUser, isActive: currentPage === 'end-user-code' },
+    { id: 'unit-code', label: 'หน่วยนับ', icon: '📐', href: '/codes/unit', count: sidebarCounts.unitCode, isActive: currentPage === 'unit-code' },
   ];
 
   const isDocumentSectionActive =
@@ -287,7 +288,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     currentPage === 'vendor-code' ||
     currentPage === 'destination-code' ||
     currentPage === 'payment-term-code' ||
-    currentPage === 'end-user-code';
+    currentPage === 'end-user-code' ||
+    currentPage === 'unit-code';
 
   useEffect(() => {
     localStorage.setItem('doc-key-sidebar-open', String(sidebarOpen));
@@ -299,7 +301,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
 
   useEffect(() => {
     const fetchCounts = async () => {
-      const [quotation, depositReceipt, invoice, receipt, so, pr, purchaseOrder, gr, workOrder, cust, prod, vendor, company, dest, term, endUser] = await Promise.allSettled([
+      const [quotation, depositReceipt, invoice, receipt, so, pr, purchaseOrder, gr, workOrder, cust, prod, vendor, company, dest, term, endUser, unitCodeRes] = await Promise.allSettled([
         documentService.getAll('quotation'),
         documentService.getAll('deposit_receipt'),
         documentService.getAll('invoice'),
@@ -316,6 +318,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         codeService.getAll('destination'),
         codeService.getAll('payment-term'),
         codeService.getAll('end-user'),
+        codeService.getAll('unit-code'),
       ]);
       setSidebarCounts({
         quotation:     quotation.status === 'fulfilled' ? (quotation.value?.data?.data?.length ?? 0) : 0,
@@ -334,6 +337,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
         destination:   dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
         paymentTerm:   term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
         endUser:       endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
+        unitCode:      unitCodeRes.status === 'fulfilled' ? (unitCodeRes.value?.data?.data?.length ?? 0) : 0,
       });
     };
     fetchCounts();
@@ -377,6 +381,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('payment-term-code');
     } else if (id === 'end-user-code') {
       onNavigate('end-user-code');
+    } else if (id === 'unit-code') {
+      onNavigate('unit-code');
     } else if (id === 'key-invoice') {
       onNavigate('key-invoice');
     } else if (id === 'reports') {

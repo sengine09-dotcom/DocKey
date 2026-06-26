@@ -228,12 +228,29 @@ const SOController = {
     return res.json({ success: true, data: updated });
   },
 
+  async complete(req: Request, res: Response) {
+    const ctx = await resolveCompanyContext(req);
+    if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const so = await prisma.saleOrder.findFirst({
+      where: { id: req.params.id, companyId: ctx.companyId },
+    });
+    if (!so) return res.status(404).json({ success: false, message: 'Not found' });
+    if (so.status === 'COMPLETED') return res.json({ success: true, data: so });
+
+    const updated = await prisma.saleOrder.update({
+      where: { id: so.id },
+      data: { status: 'COMPLETED' },
+      include: itemsInclude,
+    });
+    return res.json({ success: true, data: updated });
+  },
+
   async getWorkflowStatus(req: Request, res: Response) {
     const ctx = await resolveCompanyContext(req);
     if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
     const { companyId } = ctx;
     const soId = req.params.id;
-
     const so = await prisma.saleOrder.findFirst({
       where: { id: soId, companyId },
       select: { id: true },
@@ -300,6 +317,43 @@ const SOController = {
         } : null,
       },
     });
+  },
+
+  async getItemsGRStatus(req: Request, res: Response) {
+    const ctx = await resolveCompanyContext(req);
+    if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const { companyId } = ctx;
+    const soId = req.params.id;
+
+    const so = await prisma.saleOrder.findFirst({
+      where: { id: soId, companyId },
+      select: { items: { select: { prNumber: true } } },
+    });
+    if (!so) return res.status(404).json({ success: false, message: 'Not found' });
+
+    // SOItem.prNumber stores the PO document number (set during SO→PO conversion)
+    const poNumbers = [...new Set(so.items.map((i) => i.prNumber).filter(Boolean))] as string[];
+    if (poNumbers.length === 0) return res.json({ success: true, data: {} });
+
+    const grs = await prisma.goodsReceipt.findMany({
+      where: { poNumber: { in: poNumbers }, companyId },
+      select: { grNumber: true, poNumber: true, status: true },
+    });
+
+    const grByPO = new Map(grs.map((g) => [g.poNumber, g]));
+
+    const result: Record<string, { poNumber: string; grNumber: string | null; grStatus: string | null; grReceived: boolean }> = {};
+    for (const poNumber of poNumbers) {
+      const gr = grByPO.get(poNumber) ?? null;
+      result[poNumber] = {
+        poNumber,
+        grNumber: gr?.grNumber ?? null,
+        grStatus: gr?.status ?? null,
+        grReceived: gr?.status === 'CONFIRMED',
+      };
+    }
+
+    return res.json({ success: true, data: result });
   },
 };
 

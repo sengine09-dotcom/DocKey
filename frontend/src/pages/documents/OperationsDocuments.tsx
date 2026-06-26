@@ -7,7 +7,7 @@ import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import documentService, { MainDocumentType } from '../../services/documentService';
 import {
   documentTypeConfigs, accentClasses, createEmptyCollections, DocumentsByType,
-  getRecordKey, formatDate, formatCurrency, replaceRecord, loadAllDocuments,
+  getRecordKey, formatDate, formatCurrency, replaceRecord, loadTabDocuments,
 } from './documentShared';
 
 const TYPE: MainDocumentType = 'work_order';
@@ -28,7 +28,10 @@ export default function OperationsDocuments({ onNavigate = () => { }, currentPag
   const acc = accentClasses[cfg.accent];
 
   useEffect(() => {
-    loadAllDocuments().then((d) => { setDocs(d); setIsLoading(false); });
+    loadTabDocuments(TYPE).then((rows) => {
+      setDocs((prev) => ({ ...prev, [TYPE]: rows }));
+      setIsLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -86,7 +89,7 @@ export default function OperationsDocuments({ onNavigate = () => { }, currentPag
       if (s.action === 'save' && s.savedRecord) {
         setDocs((prev) => ({ ...prev, [TYPE]: replaceRecord(prev[TYPE], s.savedRecord) }));
         setSelectedRecord(s.savedRecord);
-        void loadAllDocuments().then(setDocs);
+        void loadTabDocuments(TYPE).then((rows) => setDocs((prev) => ({ ...prev, [TYPE]: rows })));
       }
       setEditorState(null);
       return;

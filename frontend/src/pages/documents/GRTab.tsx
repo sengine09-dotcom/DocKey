@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import purchaseService, { GRPayload } from '../../services/purchaseService';
 import documentService from '../../services/documentService';
@@ -57,16 +57,22 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
 
   useEffect(() => { void load(); }, []);
 
+  const poListLoadedRef = useRef(false);
+  const loadPoList = useCallback(async () => {
+    if (poListLoadedRef.current) return;
+    poListLoadedRef.current = true;
+    const res = await documentService.getAll('purchase_order');
+    setPoList(res?.data?.data || []);
+  }, []);
+
   const load = async () => {
     setIsLoading(true);
     try {
-      const [grRes, poRes, vendorRes] = await Promise.allSettled([
+      const [grRes, vendorRes] = await Promise.allSettled([
         purchaseService.gr.getAll(),
-        documentService.getAll('purchase_order'),
         codeService.getAll('vendor'),
       ]);
       if (grRes.status === 'fulfilled') setGrs(grRes.value.data?.data || []);
-      if (poRes.status === 'fulfilled') setPoList(poRes.value.data?.data || []);
       if (vendorRes.status === 'fulfilled') setVendors(vendorRes.value.data?.data || []);
     } finally {
       setIsLoading(false);
@@ -133,12 +139,14 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const openCreate = () => {
+    void loadPoList();
     setSelectedPoId(''); setSelectedPoNumber(''); setVendorCode('');
     setReceivedDate(getTodayStr()); setRemark(''); setFormItems([emptyItem()]);
     setEditingId(null); setMode('create');
   };
 
   const openEdit = (gr: any) => {
+    void loadPoList();
     setSelectedPoId(gr.poId || '');
     setSelectedPoNumber(gr.poNumber || '');
     setVendorCode(gr.vendorCode || '');
@@ -178,16 +186,19 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
     };
     setIsSaving(true);
     try {
+      let saved: any;
       if (editingId) {
         const res = await purchaseService.gr.update(editingId, payload);
-        const updated = res.data?.data;
-        setGrs((prev) => prev.map((g) => g.id === editingId ? updated : g));
+        saved = res.data?.data;
+        setGrs((prev) => prev.map((g) => g.id === editingId ? saved : g));
       } else {
         const res = await purchaseService.gr.create(payload);
-        const created = res.data?.data;
-        setGrs((prev) => [created, ...prev]);
+        saved = res.data?.data;
+        setGrs((prev) => [saved, ...prev]);
       }
-      backToList();
+      setEditingId(null);
+      setViewing(saved);
+      setMode('view');
     } catch (err: any) {
       await showAppAlert({ title: 'บันทึกไม่สำเร็จ', message: err?.response?.data?.message || 'ไม่สามารถบันทึกได้', tone: 'danger' });
     } finally {
@@ -196,9 +207,12 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
   };
 
   const handleDelete = async (gr: any) => {
+    const isConfirmed = gr.status === 'CONFIRMED';
     const confirmed = await showAppConfirm({
       title: 'ลบใบรับสินค้า',
-      message: `ต้องการลบ ${gr.grNumber}?\n\nไม่สามารถกู้คืนได้`,
+      message: isConfirmed
+        ? `ต้องการลบ ${gr.grNumber} (ยืนยันแล้ว)?\n\nระบบจะยกเลิกสต็อกที่รับเข้าและรีเซ็ตสถานะ PO กลับเป็น Open\n\nไม่สามารถกู้คืนได้`
+        : `ต้องการลบ ${gr.grNumber}?\n\nไม่สามารถกู้คืนได้`,
       confirmText: 'ลบ', cancelText: 'ยกเลิก', tone: 'danger',
     });
     if (!confirmed) return;
@@ -320,7 +334,7 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                             แก้ไข
                           </button>
                         )}
-                        {gr.status === 'DRAFT' && (
+                        {(gr.status === 'DRAFT' || isAdmin) && (
                           <button type="button" onClick={() => handleDelete(gr)}
                             className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
                             ลบ
@@ -371,11 +385,13 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                     className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                     แก้ไข
                   </button>
-                  <button type="button" onClick={() => handleDelete(viewing)}
-                    className="rounded-xl px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition">
-                    ลบ
-                  </button>
                 </>
+              )}
+              {(viewing.status === 'DRAFT' || isAdmin) && (
+                <button type="button" onClick={() => handleDelete(viewing)}
+                  className="rounded-xl px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition">
+                  ลบ
+                </button>
               )}
               <button type="button" onClick={backToList}
                 className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>

@@ -366,6 +366,8 @@ const mapDocumentRecord = (
       linkedQuotationId: document.depositReceiptDocument?.linkedQuotationId || '',
       linkedQuotationNumber: document.depositReceiptDocument?.linkedQuotationNumber || '',
       linkedSOId: document.depositReceiptDocument?.linkedSOId || '',
+      linkedDIId: document.depositReceiptDocument?.linkedDIId || '',
+      linkedDINumber: document.depositReceiptDocument?.linkedDINumber || '',
     };
   }
 
@@ -377,6 +379,8 @@ const mapDocumentRecord = (
       depositPercentage: toNumber(document.depositInvoiceDocument?.depositPercentage),
       depositAmount: toNumber(document.depositInvoiceDocument?.depositAmount),
       balanceAmount: toNumber(document.depositInvoiceDocument?.balanceAmount),
+      linkedDRId: document.depositInvoiceDocument?.linkedDRId || '',
+      linkedDRNumber: document.depositInvoiceDocument?.linkedDRNumber || '',
     };
   }
 
@@ -441,7 +445,7 @@ const fetchDocumentRecord = async (type: MainDocumentType, identifier: string, c
   return mapDocumentRecord(document, customerNameMap, productNameMap, unitNameMap);
 };
 
-const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: string, documentNumber: string) => {
+const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentId: string, documentNumber: string) => {
   
   if (type === 'invoice') {
     return prisma.invoiceDocument.upsert({
@@ -511,52 +515,49 @@ const buildSubtypeUpsert = (type: MainDocumentType, header: any, documentId: str
   }
 
   if (type === 'deposit_receipt') {
-    return prisma.depositReceiptDocument.upsert({
+    const drData = {
+      documentNumber,
+      receivedDate: parseDate(header.receivedDate),
+      paymentReference: parseString(header.paymentReference),
+      paymentAmount: parseNullableNumber(header.paymentAmount),
+      paymentType: parseString(header.paymentType),
+      linkedQuotationId: parseString(header.linkedQuotationId),
+      linkedQuotationNumber: parseString(header.linkedQuotationNumber),
+      linkedSOId: parseString(header.linkedSOId),
+      linkedDIId: parseString(header.linkedDIId),
+      linkedDINumber: parseString(header.linkedDINumber),
+    };
+    const saved = await prisma.depositReceiptDocument.upsert({
       where: { id: documentId },
-      create: {
-        id: documentId,
-        documentNumber,
-        receivedDate: parseDate(header.receivedDate),
-        paymentReference: parseString(header.paymentReference),
-        paymentAmount: parseNullableNumber(header.paymentAmount),
-        paymentType: parseString(header.paymentType),
-        linkedQuotationId: parseString(header.linkedQuotationId),
-        linkedQuotationNumber: parseString(header.linkedQuotationNumber),
-        linkedSOId: parseString(header.linkedSOId),
-      },
-      update: {
-        documentNumber,
-        receivedDate: parseDate(header.receivedDate),
-        paymentReference: parseString(header.paymentReference),
-        paymentAmount: parseNullableNumber(header.paymentAmount),
-        paymentType: parseString(header.paymentType),
-        linkedQuotationId: parseString(header.linkedQuotationId),
-        linkedQuotationNumber: parseString(header.linkedQuotationNumber),
-        linkedSOId: parseString(header.linkedSOId),
-      },
+      create: { id: documentId, ...drData },
+      update: drData,
     });
+    // Back-fill DI with the DR reference
+    const diId = parseString(header.linkedDIId);
+    if (diId) {
+      await prisma.depositInvoiceDocument.updateMany({
+        where: { documentId: diId },
+        data: { linkedDRId: documentId, linkedDRNumber: documentNumber },
+      });
+    }
+    return saved;
   }
 
   if (type === 'deposit_invoice') {
+    const diData = {
+      documentNumber,
+      linkedQuotationId: parseString(header.linkedQuotationId),
+      linkedSOId: parseString(header.linkedSOId),
+      depositPercentage: toNumber(header.depositPercentage) || 30,
+      depositAmount: toNumber(header.depositAmount),
+      balanceAmount: toNumber(header.balanceAmount),
+      linkedDRId: parseString(header.linkedDRId),
+      linkedDRNumber: parseString(header.linkedDRNumber),
+    };
     return prisma.depositInvoiceDocument.upsert({
       where: { documentId },
-      create: {
-        documentId,
-        documentNumber,
-        linkedQuotationId: parseString(header.linkedQuotationId),
-        linkedSOId: parseString(header.linkedSOId),
-        depositPercentage: toNumber(header.depositPercentage) || 30,
-        depositAmount: toNumber(header.depositAmount),
-        balanceAmount: toNumber(header.balanceAmount),
-      },
-      update: {
-        documentNumber,
-        linkedQuotationId: parseString(header.linkedQuotationId),
-        linkedSOId: parseString(header.linkedSOId),
-        depositPercentage: toNumber(header.depositPercentage) || 30,
-        depositAmount: toNumber(header.depositAmount),
-        balanceAmount: toNumber(header.balanceAmount),
-      },
+      create: { documentId, ...diData },
+      update: diData,
     });
   }
 

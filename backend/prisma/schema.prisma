@@ -82,6 +82,7 @@ model Product {
   id            String   @id @map("ID") @db.VarChar(26)
   productCode   String   @map("ProductCode") @db.VarChar(50)
   productName   String   @map("ProductName") @db.VarChar(255)
+  description   String?  @map("Description") @db.VarChar(500)
   category      String   @map("Category") @db.VarChar(255)
   brand         String   @map("Brand") @db.VarChar(255)
   model         String?  @map("Model") @db.VarChar(255)
@@ -311,6 +312,8 @@ model DepositReceiptDocument {
   linkedQuotationId     String?   @map("LinkedQuotationId") @db.VarChar(26)
   linkedQuotationNumber String?   @map("LinkedQuotationNumber") @db.VarChar(50)
   linkedSOId            String?   @map("LinkedSOId") @db.VarChar(191)
+  linkedDIId            String?   @map("LinkedDIId") @db.VarChar(26)
+  linkedDINumber        String?   @map("LinkedDINumber") @db.VarChar(50)
   document              Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
@@ -513,5 +516,7 @@ model DepositInvoiceDocument {
   depositPercentage Decimal  @map("DepositPercentage") @db.Decimal(5, 2)
   depositAmount     Decimal  @map("DepositAmount") @db.Decimal(19, 4)
   balanceAmount     Decimal  @map("BalanceAmount") @db.Decimal(19, 4)
+  linkedDRId        String?  @map("LinkedDRId") @db.VarChar(26)
+  linkedDRNumber    String?  @map("LinkedDRNumber") @db.VarChar(50)
   document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }

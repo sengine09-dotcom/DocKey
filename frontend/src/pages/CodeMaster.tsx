@@ -17,6 +17,7 @@ const AUTO_CODE_PREFIX: Record<string, { prefix: string; idField: string }> = {
   vendor:          { prefix: 'V-', idField: 'vendorCode'   },
   destination:     { prefix: 'D-', idField: 'destId'       },
   'payment-term':  { prefix: 'T-', idField: 'termId'       },
+  'unit-code':     { prefix: 'U-', idField: 'unitCode'     },
 };
 
 const getNextAutoCodePreview = (apiType: string, records: any[]): string => {
@@ -83,18 +84,22 @@ const pageConfigs: Record<string, any> = {
     columns: [
       { key: 'productCode', label: 'Code' },
       { key: 'productName', label: 'Product Name' },
+      { key: 'description', label: 'Description' },
+      { key: 'unitCode', label: 'หน่วยนับ', resolveFrom: 'unitCode' },
       { key: 'category', label: 'Category' },
       { key: 'brand', label: 'Brand' },
     ],
     fields: [
       { key: 'productCode', label: 'Product Code', autoCode: true },
       { key: 'productName', label: 'Product Name', required: true },
+      { key: 'description', label: 'Description' },
+      { key: 'unitCode', label: 'หน่วยนับ', type: 'select', loadOptionsFrom: 'unitCode' },
       { key: 'brand', label: 'Brand' },
       { key: 'category', label: 'Category' },
       { key: 'model', label: 'Model' },
     ],
     initialValues: {
-      productCode: '', productName: '', brand: '', category: '', model: '',
+      productCode: '', productName: '', description: '', unitCode: '', brand: '', category: '', model: '',
     },
   },
   'vendor-code': {
@@ -244,6 +249,33 @@ const pageConfigs: Record<string, any> = {
       termId: '', termName: '', shortName: '', days: '', used: 'Y',
     },
   },
+  'unit-code': {
+    apiType: 'unit-code',
+    title: 'หน่วยนับ (Unit Code)',
+    icon: '📐',
+    cardDescription: 'รหัสหน่วยนับสินค้า เช่น ชิ้น กล่อง อัน เครื่อง',
+    description: 'Master unit codes used for product quantity measurement.',
+    searchPlaceholder: 'ค้นหารหัสหรือชื่อหน่วยนับ',
+    listTitle: 'รายการหน่วยนับ',
+    createLabel: 'เพิ่มหน่วยนับ',
+    idField: 'unitCode',
+    nameField: 'unitName',
+    columns: [
+      { key: 'unitCode',  label: 'รหัส' },
+      { key: 'unitName',  label: 'ชื่อหน่วยนับ' },
+      { key: 'shortName', label: 'ชื่อย่อ' },
+      { key: 'used',      label: 'สถานะ', type: 'status' },
+    ],
+    fields: [
+      { key: 'unitCode',  label: 'รหัสหน่วยนับ', autoCode: true },
+      { key: 'unitName',  label: 'ชื่อหน่วยนับ', required: true },
+      { key: 'shortName', label: 'ชื่อย่อ' },
+      { key: 'used',      label: 'สถานะ', type: 'select', options: usedOptions },
+    ],
+    initialValues: {
+      unitCode: '', unitName: '', shortName: '', used: 'Y',
+    },
+  },
   'end-user-code': {
     apiType: 'end-user',
     title: 'End User Codes',
@@ -302,7 +334,9 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
   const [error, setError] = useState('');
   const [paymentTermOptions, setPaymentTermOptions] = useState<{ value: string; label: string }[]>([]);
   const [isLoadingTerms, setIsLoadingTerms] = useState(false);
-  const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0 });
+  const [unitCodeOptions, setUnitCodeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [isLoadingUnits, setIsLoadingUnits] = useState(false);
+  const [codeCounts, setCodeCounts] = useState({ customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0, unitCode: 0 });
   const [codeCheckStatus, setCodeCheckStatus] = useState<'available' | 'duplicate' | null>(null);
   const [productOptions, setProductOptions] = useState<{ categories: string[]; brands: string[] }>({ categories: [], brands: [] });
   const [openTagDropdown, setOpenTagDropdown] = useState<string | null>(null);
@@ -322,6 +356,8 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
         ? 'paymentTerm'
         : config.apiType === 'end-user'
         ? 'endUser'
+        : config.apiType === 'unit-code'
+        ? 'unitCode'
         : config.apiType;
       setCodeCounts((prev) => ({ ...prev, [countKey]: loaded.length }));
     } catch (loadError: any) {
@@ -349,6 +385,16 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     }).catch(() => {}).finally(() => setIsLoadingTerms(false));
   }, []);
 
+  useEffect(() => {
+    setIsLoadingUnits(true);
+    codeService.getAll('unit-code').then((res) => {
+      const units = res.data.data || [];
+      setUnitCodeOptions(
+        units.map((u: any) => ({ value: u.unitCode, label: `${u.unitCode}${u.unitName ? ` - ${u.unitName}` : ''}`, name: u.unitName || u.unitCode }))
+      );
+    }).catch(() => {}).finally(() => setIsLoadingUnits(false));
+  }, []);
+
   // Fetch distinct product categories & brands for vendor tag inputs
   useEffect(() => {
     axios.get('/api/codes/product-options').then((res) => {
@@ -366,7 +412,8 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
       codeService.getAll('destination'),
       codeService.getAll('payment-term'),
       codeService.getAll('end-user'),
-    ]).then(([cust, prod, vendor, company, dest, term, endUser]) => {
+      codeService.getAll('unit-code'),
+    ]).then(([cust, prod, vendor, company, dest, term, endUser, unit]) => {
       setCodeCounts({
         customer:    cust.status === 'fulfilled' ? (cust.value?.data?.data?.length ?? 0) : 0,
         product:     prod.status === 'fulfilled' ? (prod.value?.data?.data?.length ?? 0) : 0,
@@ -375,6 +422,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
         destination: dest.status === 'fulfilled' ? (dest.value?.data?.data?.length ?? 0) : 0,
         paymentTerm: term.status === 'fulfilled' ? (term.value?.data?.data?.length ?? 0) : 0,
         endUser:     endUser.status === 'fulfilled' ? (endUser.value?.data?.data?.length ?? 0) : 0,
+        unitCode:    unit.status === 'fulfilled' ? (unit.value?.data?.data?.length ?? 0) : 0,
       });
     });
   }, []);
@@ -544,6 +592,7 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
     { id: 'vendor-code', icon: '🚚', label: 'Vendor', count: codeCounts.vendor, description: pageConfigs['vendor-code'].cardDescription },
     { id: 'destination-code', icon: '📍', label: 'Destination', count: codeCounts.destination, description: pageConfigs['destination-code'].cardDescription },
     { id: 'payment-term-code', icon: '💳', label: 'Payment Term', count: codeCounts.paymentTerm, description: pageConfigs['payment-term-code'].cardDescription },
+    { id: 'unit-code', icon: '📐', label: 'หน่วยนับ', count: codeCounts.unitCode, description: pageConfigs['unit-code'].cardDescription },
     { id: 'end-user-code', icon: '👤', label: 'End User', count: codeCounts.endUser, description: pageConfigs['end-user-code'].cardDescription },
   ];
 
@@ -737,6 +786,19 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                                   ))}
                                 </>
                               )
+                            ) : field.loadOptionsFrom === 'unitCode' ? (
+                              isLoadingUnits ? (
+                                <option value="">Loading units...</option>
+                              ) : (
+                                <>
+                                  <option value="">— เลือกหน่วยนับ —</option>
+                                  {unitCodeOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </>
+                              )
                             ) : (
                               (field.options || []).map((option: any) => (
                                 <option key={option.value} value={option.value}>
@@ -912,6 +974,17 @@ export default function CodeMaster({ onNavigate = () => {}, currentPage = 'custo
                 >
                   {config.columns.map((column: any) => {
                     const value = row[column.key];
+
+                    if (column.resolveFrom === 'unitCode') {
+                      const opt = unitCodeOptions.find((o) => o.value === value);
+                      const display = opt ? opt.label : (value || '-');
+                      return (
+                        <div key={column.key} className={darkMode ? 'text-gray-300' : 'text-gray-700'}>
+                          {display}
+                        </div>
+                      );
+                    }
+
                     if (column.type === 'status') {
                       return (
                         <div key={column.key}>

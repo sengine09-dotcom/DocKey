@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Layout from '../../components/Layout/Layout';
@@ -7,10 +7,12 @@ import useThemePreference from '../../hooks/useThemePreference';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import documentService, { MainDocumentType } from '../../services/documentService';
 import soService from '../../services/soService';
+import purchaseService from '../../services/purchaseService';
 import codeService from '../../services/codeService';
 import PRTab from './PRTab';
 import GRTab from './GRTab';
 import SOToPOModal from '../../components/SOToPOModal';
+import PRToPOModal from '../../components/PRToPOModal';
 import {
   createEmptyCollections, DocumentsByType,
   getRecordKey, formatDate, formatCurrency, replaceRecord, loadAllDocuments, getRecordVendorLabel,
@@ -38,10 +40,23 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [isLoading, setIsLoading] = useState(true);
+  const [soCount, setSoCount] = useState(0);
+  const [prCount, setPrCount] = useState(0);
+  const [grCount, setGrCount] = useState(0);
   const [soToPOOpen, setSoToPOOpen] = useState(false);
   const [pendingSOConversion, setPendingSOConversion] = useState<{ soId: string; itemIds: string[] } | null>(null);
+  const [prToPOOpen, setPrToPOOpen] = useState(false);
+  const [pendingPRConversion, setPendingPRConversion] = useState<{ prId: string; itemIds: string[] } | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const codesLoadedRef = useRef(false);
   const navigate = useNavigate();
+
+  const loadCodes = useCallback(async () => {
+    if (codesLoadedRef.current) return;
+    codesLoadedRef.current = true;
+    const vendorRes = await codeService.getAll('vendor');
+    setVendorCodes(vendorRes?.data?.data || []);
+  }, []);
 
   useEffect(() => {
     void axios.get('/api/auth/me').then((res) => {
@@ -53,12 +68,16 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
     const load = async () => {
       setIsLoading(true);
       try {
-        const [d, vendorRes] = await Promise.all([
+        const [d, soRes, prRes, grRes] = await Promise.allSettled([
           loadAllDocuments(),
-          codeService.getAll('vendor'),
+          soService.getAll(),
+          purchaseService.pr.getAll(),
+          purchaseService.gr.getAll(),
         ]);
-        setDocs(d);
-        setVendorCodes(vendorRes?.data?.data || []);
+        if (d.status === 'fulfilled') setDocs(d.value);
+        if (soRes.status === 'fulfilled') setSoCount((soRes.value?.data?.data || []).length);
+        if (prRes.status === 'fulfilled') setPrCount((prRes.value?.data?.data || []).length);
+        if (grRes.status === 'fulfilled') setGrCount((grRes.value?.data?.data || []).length);
       } finally {
         setIsLoading(false);
       }
@@ -71,12 +90,23 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
     window.requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [editorState]);
 
+  const reloadPOData = async () => {
+    setIsLoading(true);
+    try {
+      const d = await loadAllDocuments();
+      setDocs(d);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleTabChange = (tab: PurchaseTab) => {
     setActiveTab(tab);
     setSelectedRecord(null);
     setEditorState(null);
     setSearch('');
     setStatusFilter('All');
+    if (tab === 'po') void reloadPOData();
   };
 
   // ── PO logic ──────────────────────────────────────────────────────────────
@@ -98,9 +128,10 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
     });
   }, [poRecords, search, statusFilter]);
 
-  const handlePoCreate = () => { setSelectedRecord(null); setEditorState({ type: PO_TYPE, initialData: null }); };
+  const handlePoCreate = () => { void loadCodes(); setSelectedRecord(null); setEditorState({ type: PO_TYPE, initialData: null }); };
 
   const handlePoView = async (record: any) => {
+    void loadCodes();
     setEditorState(null);
     try {
       const id = record?.documentId || record?.id || record?.documentNumber;
@@ -110,6 +141,7 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
   };
 
   const handlePoEdit = (record: any) => {
+    void loadCodes();
     setSelectedRecord(null);
     setEditorState({ type: PO_TYPE, initialData: { ...record, __mode: 'edit' } });
   };
@@ -143,8 +175,15 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
             prNumber: s.savedRecord.documentNumber || '',
           });
         }
+        if (pendingPRConversion) {
+          void purchaseService.pr.markItemsConverted(pendingPRConversion.prId, {
+            itemIds: pendingPRConversion.itemIds,
+            poNumber: s.savedRecord.documentNumber || '',
+          });
+        }
       }
       setPendingSOConversion(null);
+      setPendingPRConversion(null);
       setEditorState(null);
       return;
     }
@@ -181,14 +220,15 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
             <div>
               <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>ระบบจัดซื้อ</h1>
-              <p className={`text-sm mt-1 ${textMuted}`}>PR → อนุมัติ → PO → ส่งให้ Supplier → GR → รับเข้าคลัง</p>
+              <p className={`text-sm mt-1 ${textMuted}`}>SO/PR → PO → GR → รับสินค้าเข้าคลัง</p>
             </div>
             {/* Count badges */}
             <div className="flex gap-3">
               {[
-                { label: 'ใบขอซื้อ', count: 0, color: darkMode ? 'text-blue-400' : 'text-blue-700', bg: darkMode ? 'bg-gray-800 border-gray-700' : 'bg-blue-50 border-blue-100' },
+                { label: 'ใบสั่งขาย', count: soCount, color: darkMode ? 'text-amber-400' : 'text-amber-700', bg: darkMode ? 'bg-gray-800 border-gray-700' : 'bg-amber-50 border-amber-100' },
+                { label: 'ใบขอซื้อ', count: prCount, color: darkMode ? 'text-blue-400' : 'text-blue-700', bg: darkMode ? 'bg-gray-800 border-gray-700' : 'bg-blue-50 border-blue-100' },
                 { label: 'ใบสั่งซื้อ', count: poRecords.length, color: darkMode ? 'text-violet-400' : 'text-violet-700', bg: darkMode ? 'bg-gray-800 border-gray-700' : 'bg-violet-50 border-violet-100' },
-                { label: 'ใบรับสินค้า', count: 0, color: darkMode ? 'text-green-400' : 'text-green-700', bg: darkMode ? 'bg-gray-800 border-gray-700' : 'bg-green-50 border-green-100' },
+                { label: 'ใบรับสินค้า', count: grCount, color: darkMode ? 'text-green-400' : 'text-green-700', bg: darkMode ? 'bg-gray-800 border-gray-700' : 'bg-green-50 border-green-100' },
               ].map((b) => (
                 <div key={b.label} className={`rounded-2xl border px-4 py-2.5 text-center min-w-[80px] ${b.bg}`}>
                   <p className={`text-xl font-bold ${b.color}`}>{b.count}</p>
@@ -237,7 +277,8 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
               onEdit={handlePoEdit}
               onDelete={handlePoDelete}
               onCreate={handlePoCreate}
-              onCreateFromSO={() => setSoToPOOpen(true)}
+              onCreateFromSO={() => { void loadCodes(); setSoToPOOpen(true); }}
+              onCreateFromPR={() => { void loadCodes(); setPrToPOOpen(true); }}
               onCloseSelected={() => setSelectedRecord(null)}
               onEditorNavigate={handleEditorNavigate}
               renderStatus={renderPoStatus}
@@ -263,18 +304,40 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
           setEditorState({ type: PO_TYPE, initialData: cleanDraft });
         }}
       />
+
+      <PRToPOModal
+        isOpen={prToPOOpen}
+        darkMode={darkMode}
+        vendorCodes={vendorCodes}
+        onClose={() => setPrToPOOpen(false)}
+        onCreatePO={(draft) => {
+          const { _sourcePRId, _sourcePRItemIds, ...cleanDraft } = draft;
+          setPrToPOOpen(false);
+          setPendingPRConversion(_sourcePRId ? { prId: _sourcePRId, itemIds: _sourcePRItemIds || [] } : null);
+          setActiveTab('po');
+          setSelectedRecord(null);
+          setEditorState({ type: PO_TYPE, initialData: cleanDraft });
+        }}
+      />
     </Layout>
   );
 }
 
 // ── PO Tab ──────────────────────────────────────────────────────────────────
+const TOP_N = 10;
+
 function PoTab({
   darkMode, textMuted, isLoading, records, allCount, search, setSearch,
   statusFilter, setStatusFilter, selectedRecord, editorState, editorRef,
-  onView, onEdit, onDelete, onCreate, onCreateFromSO, onCloseSelected,
+  onView, onEdit, onDelete, onCreate, onCreateFromSO, onCreateFromPR, onCloseSelected,
   onEditorNavigate, renderStatus, getVendorDisplay,
 }: any) {
+  const [showAll, setShowAll] = useState(false);
   const sectionCard = `rounded-2xl border p-5 shadow-sm ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'}`;
+
+  const isFiltered = search.trim() !== '' || statusFilter !== 'All';
+  const displayRecords = (isFiltered || showAll) ? records : records.slice(0, TOP_N);
+  const hasMore = !isFiltered && !showAll && records.length > TOP_N;
 
   return (
     <>
@@ -299,6 +362,10 @@ function PoTab({
               {PO_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s === 'All' ? 'ทุกสถานะ' : s}</option>)}
             </select>
           </div>
+          <button type="button" onClick={onCreateFromPR}
+            className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition whitespace-nowrap">
+            📋 ออก PO จาก ใบขอซื้อ
+          </button>
           <button type="button" onClick={onCreateFromSO}
             className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition whitespace-nowrap">
             📋 ออก PO จาก ใบสั่งขาย
@@ -342,7 +409,7 @@ function PoTab({
                 </tr>
               </thead>
               <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
-                {records.map((record: any) => (
+                {displayRecords.map((record: any) => (
                   <tr key={getRecordKey(record)} className={`transition-colors ${darkMode ? 'hover:bg-gray-700/40' : 'hover:bg-gray-50'}`}>
                     <td className="px-5 py-3.5">
                       <button type="button" onClick={() => onView(record)}
@@ -375,12 +442,18 @@ function PoTab({
         )}
 
         {!isLoading && records.length > 0 && (
-          <div className={`px-5 py-3 border-t text-xs ${darkMode ? 'border-gray-700 text-gray-500' : 'border-gray-100 text-gray-400'}`}>
-            แสดง {records.length} จาก {allCount} รายการ
-            {records.length > 0 && (
-              <span className="ml-3 font-semibold">
-                รวม ฿{formatCurrency(records.reduce((s: number, r: any) => s + Number(r.total || 0), 0))}
+          <div className={`px-5 py-3 border-t flex items-center justify-between text-xs ${darkMode ? 'border-gray-700 text-gray-500' : 'border-gray-100 text-gray-400'}`}>
+            <div className="flex items-center gap-3">
+              <span>แสดง {displayRecords.length} จาก {allCount} รายการ</span>
+              <span className="font-semibold">
+                รวม ฿{formatCurrency(displayRecords.reduce((s: number, r: any) => s + Number(r.total || 0), 0))}
               </span>
+            </div>
+            {hasMore && (
+              <button type="button" onClick={() => setShowAll(true)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${darkMode ? 'bg-gray-700 text-orange-300 hover:bg-gray-600' : 'bg-orange-50 text-orange-700 hover:bg-orange-100'}`}>
+                ดูทั้งหมด {records.length} รายการ →
+              </button>
             )}
           </div>
         )}
@@ -499,6 +572,7 @@ function PoTab({
                         <th className="px-5 py-3 text-left">รหัสสินค้า</th>
                         <th className="px-5 py-3 text-left">รายละเอียด</th>
                         <th className="px-5 py-3 text-right">จำนวน</th>
+                        <th className="px-5 py-3 text-left">หน่วยนับ</th>
                         <th className="px-5 py-3 text-right">ราคาทุน/หน่วย</th>
                         <th className="px-5 py-3 text-right">รวมทุน</th>
                       </tr>
@@ -510,6 +584,7 @@ function PoTab({
                           <td className={`px-5 py-3 ${textMuted}`}>{item.productCode || '-'}</td>
                           <td className={`px-5 py-3 font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.productName || item.description || '-'}</td>
                           <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>{Number(item.quantity || item.qty || 0).toLocaleString()}</td>
+                          <td className={`px-5 py-3 ${textMuted}`}>{item.unitName || item.unitCode || '-'}</td>
                           <td className={`px-5 py-3 text-right ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>฿{formatCurrency(Number(item.sellingPrice || item.cost || 0))}</td>
                           <td className={`px-5 py-3 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatCurrency(Number(item.totalSellingPrice || item.totalCost || 0))}</td>
                         </tr>

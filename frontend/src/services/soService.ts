@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const BASE = '/api/so';
 
-export type SOStatus = 'DRAFT' | 'CONFIRMED' | 'IN_PROGRESS' | 'PARTIALLY_DELIVERED' | 'DELIVERED' | 'CANCELLED';
+export type SOStatus = 'DRAFT' | 'CONFIRMED' | 'IN_PROGRESS' | 'PARTIALLY_DELIVERED' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
 
 export interface SOItemPayload {
   productCode?: string;
@@ -93,6 +93,20 @@ export async function fetchSOWorkflowStatus(soId: string): Promise<SOWorkflowSta
   return res.data.data;
 }
 
+export interface SOItemGRStatus {
+  poNumber: string | null;
+  grNumber: string | null;
+  grStatus: string | null;
+  grReceived: boolean;
+}
+
+export async function fetchSOItemsGRStatus(soId: string): Promise<Record<string, SOItemGRStatus>> {
+  const res = await axios.get<{ success: boolean; data: Record<string, SOItemGRStatus> }>(
+    `${BASE}/${encodeURIComponent(soId)}/items-gr-status`
+  );
+  return res.data.data;
+}
+
 const soService = {
   getAll: () => axios.get<{ success: boolean; data: SaleOrder[] }>(BASE),
   getById: (id: string) => axios.get<{ success: boolean; data: SaleOrder }>(`${BASE}/${encodeURIComponent(id)}`),
@@ -101,6 +115,7 @@ const soService = {
   delete: (id: string) => axios.delete(`${BASE}/${encodeURIComponent(id)}`),
   confirm: (id: string) => axios.patch(`${BASE}/${encodeURIComponent(id)}/confirm`),
   cancel: (id: string) => axios.patch(`${BASE}/${encodeURIComponent(id)}/cancel`),
+  complete: (id: string) => axios.patch<{ success: boolean; data: SaleOrder }>(`${BASE}/${encodeURIComponent(id)}/complete`),
   markItemsConverted: (id: string, data: { itemIds: string[]; prNumber: string }) =>
     axios.patch(`${BASE}/${encodeURIComponent(id)}/mark-items-converted`, data),
 };

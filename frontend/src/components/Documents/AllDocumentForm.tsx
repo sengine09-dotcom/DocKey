@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ProductSelectionModal from '../ProductSelectionModal';
 import VendorPickerModal from '../VendorPickerModal';
+import CustomerPickerModal from '../CustomerPickerModal';
 import documentService, { MainDocumentType } from '../../services/documentService';
 import codeService from '../../services/codeService';
 import purchaseService from '../../services/purchaseService';
@@ -121,7 +122,7 @@ const createEmptyItem = () => (
     model: '',
     price: '',
     cost: '',
-    quantity: '',
+    quantity: '1',
     margin: '',
     sellingPrice: '',
     totalCost: '',
@@ -320,6 +321,7 @@ export default function AllDocumentForm({
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
   const [vendorModalOpen, setVendorModalOpen] = useState(false);
+  const [customerModalOpen, setCustomerModalOpen] = useState(false);
 
   const buildConfirmedQuotationItems = (quotations: any[]) =>
     quotations
@@ -475,7 +477,7 @@ export default function AllDocumentForm({
       referenceNo: initialData.referenceNo || '',
       status: initialData.status || DOCUMENT_DEFAULT_STATUS[documentType],
       remark: initialData.remark || '',
-      margin: String(getEmptyHeader(documentType).margin) || '',
+      margin: String(initialData.margin ?? getEmptyHeader(documentType).margin),
       taxRate: String(initialData.taxRate ?? getEmptyHeader(documentType).taxRate),
       dueDate: initialData.dueDate ? String(initialData.dueDate).slice(0, 10) : '',
       linkedQuotationId: initialData.linkedQuotationId || '',
@@ -531,11 +533,12 @@ export default function AllDocumentForm({
   }, [documentType, initialData, suggestedDocumentNumber]);
 
   const isViewMode = mode === 'view';
+  const isReceiptLocked   = documentType === 'receipt';
   const isPendingApproval = documentType === 'quotation' && header.status === 'Pending Approval';
   const isApprovedStatus  = documentType === 'quotation' && header.status === 'Approved';
   const isSentStatus      = documentType === 'quotation' && header.status === 'Sent';
   const isConfirmedStatus = documentType === 'quotation' && header.status === 'Confirmed';
-  const isItemLocked      = isApprovedStatus || isSentStatus || isConfirmedStatus || documentType === 'deposit_invoice' || documentType === 'deposit_receipt';
+  const isItemLocked      = isApprovedStatus || isSentStatus || isConfirmedStatus || documentType === 'deposit_invoice' || documentType === 'deposit_receipt' || isReceiptLocked;
   const typeLabel = DOCUMENT_TYPE_LABELS[documentType];
   const subtypeFields = useMemo(() => getSubtypeFields(documentType), [documentType]);
   const taxRate = Number(header.taxRate || 0);
@@ -626,6 +629,17 @@ export default function AllDocumentForm({
           ...prev,
           vendorCode: value,
           supplierName: selectedVendor?.name || prev.supplierName,
+        };
+      }
+
+      if (documentType === 'quotation' && field === 'customer') {
+        const selectedCustomer = customerCodes.find((c) => c.customerCode === value);
+        const autoTerm = selectedCustomer?.idTerm || '';
+        const termExists = autoTerm && paymentTermCodes.some((t) => t.termId === autoTerm);
+        return {
+          ...prev,
+          customer: value,
+          paymentTerm: termExists ? autoTerm : prev.paymentTerm,
         };
       }
 
@@ -1415,9 +1429,20 @@ export default function AllDocumentForm({
                   : 'จัดการข้อมูลเอกสารรวมโดยแยกประเภทด้วย DocumentType'}
               </p>
             </div>
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isViewMode ? (darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700') : (darkMode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700')}`}>
-              {isViewMode ? 'View Mode' : mode === 'edit' ? 'Edit Mode' : 'Create Mode'}
-            </span>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {isViewMode && documentType === 'quotation' && (
+                <button
+                  type="button"
+                  disabled={!isConfirmedStatus}
+                  onClick={() => onNavigate('so', { fromQuotation: { ...header, items } })}
+                  className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${isConfirmedStatus ? (darkMode ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white') : (darkMode ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed')}`}>
+                  🛒 สร้างใบสั่งขาย
+                </button>
+              )}
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isViewMode ? (darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700') : (darkMode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700')}`}>
+                {isViewMode ? 'View Mode' : mode === 'edit' ? 'Edit Mode' : 'Create Mode'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1439,7 +1464,7 @@ export default function AllDocumentForm({
               <span><strong>Approved</strong> — ราคาขายถูกล็อกแล้ว สามารถเปลี่ยนสถานะเป็น <strong>Sent</strong> เพื่อส่งให้ลูกค้าได้</span>
             </div>
           )}
-          <fieldset disabled={isViewMode} className={isViewMode ? 'opacity-95' : ''}>
+          <fieldset disabled={isViewMode || isReceiptLocked} className={`min-w-0 w-full ${(isViewMode || isReceiptLocked) ? 'opacity-95' : ''}`}>
             {documentType === 'quotation' ? (
               <div className={`overflow-hidden rounded-2xl border mb-6 ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/70 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50'}`}>
                 <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
@@ -1588,7 +1613,8 @@ export default function AllDocumentForm({
                     Document Date
                   </span>
                   <input type="date"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    readOnly={isItemLocked}
+                    className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
                     value={header.documentDate} onChange={(e) => handleHeaderChange('documentDate', e.target.value)} />
                 </label>
                 <label className="space-y-2 md:col-span-2">
@@ -1596,7 +1622,9 @@ export default function AllDocumentForm({
                     className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     Title
                   </span>
-                  <input className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                  <input
+                    readOnly={isItemLocked}
+                    className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
                     value={header.title} onChange={(e) => handleHeaderChange('title', e.target.value)} />
                 </label>
                 <label className="space-y-2 md:col-span-2">
@@ -1631,21 +1659,31 @@ export default function AllDocumentForm({
                         </button>
                       </div>
                     )
-                  ) : isViewMode ? (
+                  ) : (isViewMode || isItemLocked) ? (
                     <input
                       readOnly
                       className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-600"
                       value={customerDisplay || header.customer || ''}
                     />
                   ) : (
-                    <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
-                      value={header.customer} onChange={(e) => handleHeaderChange('customer', e.target.value)}>
-                      <option value="">{isLoadingCodes ? 'Loading customers...' : 'Select customer code'}</option>
-                      {customerCodes.map((customer) =>
-                        <option key={customer.customerCode}
-                          value={customer.customerCode}>{customer.customerName || customer.shortName || customer.customerCode || 'Unnamed'}
-                        </option>)}
-                    </select>
+                    <div className="flex gap-2">
+                      <div className="flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900 min-h-[38px] flex items-center">
+                        {header.customer ? (
+                          <span>
+                            <span className="font-semibold text-blue-700">{header.customer}</span>
+                            {' — '}
+                            <span>{customerDisplay || header.customer}</span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">{isLoadingCodes ? 'กำลังโหลดลูกค้า...' : 'เลือกลูกค้า'}</span>
+                        )}
+                      </div>
+                      <button type="button" onClick={() => setCustomerModalOpen(true)}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition"
+                        title="เลือกลูกค้า">
+                        ...
+                      </button>
+                    </div>
                   )}
                 </label>
                 <label className="space-y-2">
@@ -1711,7 +1749,8 @@ export default function AllDocumentForm({
                     Tax Rate (%)
                   </span>
                   <input type="number" step="0.01"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                    readOnly={isItemLocked}
+                    className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
                     value={header.taxRate} onChange={(e) => handleHeaderChange('taxRate', e.target.value)} />
                 </label>
               </div>
@@ -1728,7 +1767,9 @@ export default function AllDocumentForm({
                     className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     Payment Term
                   </span>
-                  <select className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                  <select
+                    disabled={isItemLocked}
+                    className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
                     value={header.paymentTerm}
                     onChange={(e) => handleHeaderChange('paymentTerm', e.target.value)}>
                     <option value="">{isLoadingCodes ? 'Loading payment terms...' : 'Select payment term'}</option>
@@ -1812,7 +1853,8 @@ export default function AllDocumentForm({
                   ) : (
                     <input
                       type={field.type}
-                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black"
+                      readOnly={isItemLocked}
+                      className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm ${isItemLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-black'}`}
                       value={(header as any)[field.key]}
                       onChange={(e) => handleHeaderChange(field.key, e.target.value)}
                     />
@@ -1967,6 +2009,8 @@ export default function AllDocumentForm({
                   {printItems.length || items.length} item(s)
                 </div>
               </div>
+              <div className="overflow-x-auto">
+              <div className="min-w-max">
               {documentType === 'deposit_invoice' ? (
                 <>
                   {/* Deposit Invoice — always display-only, no editable inputs */}
@@ -2113,7 +2157,7 @@ export default function AllDocumentForm({
                     </div>
                   </div>
                 </>
-              ) : isViewMode && documentType === 'quotation' ? (
+              ) : documentType === 'quotation' && (isViewMode || isItemLocked) ? (
                 <>
                   {/* View-mode read-only table for Quotation */}
                   <div
@@ -2383,6 +2427,8 @@ export default function AllDocumentForm({
                   </div>
                 </>
               )}
+              </div>
+              </div>
             </div>
 
             {documentType === 'receipt' && header.linkedDepositReceiptId && (
@@ -2424,8 +2470,8 @@ export default function AllDocumentForm({
                 Save {typeLabel}
               </button>
             )}
-            {/* View Mode: แก้ไข */}
-            {isViewMode && (
+            {/* View Mode: แก้ไข — hidden for receipt (immutable document) */}
+            {isViewMode && !isReceiptLocked && (
               <button
                 type="button"
                 onClick={() => setMode('edit')}
@@ -2445,15 +2491,6 @@ export default function AllDocumentForm({
                 Print PDF
               </button>
             )}
-            {/* Convert to SO */}
-            {isViewMode && isConfirmedStatus && (
-              <button
-                type="button"
-                onClick={() => onNavigate('so', { fromQuotation: { ...header, items } })}
-                className="rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700">
-                Convert to SO →
-              </button>
-            )}
             {/* View Mode: ลบ */}
             {isViewMode && (
               <button
@@ -2463,8 +2500,8 @@ export default function AllDocumentForm({
                 ลบ
               </button>
             )}
-            {/* Edit Mode: Cancel */}
-            {!isViewMode && (
+            {/* Edit Mode: Cancel — hidden for receipt (confirm-and-save only) */}
+            {!isViewMode && !isReceiptLocked && (
               <button
                 type="button"
                 onClick={async () => {
@@ -2505,6 +2542,16 @@ export default function AllDocumentForm({
         onSelect={(v) => handleHeaderChange('vendorCode', v.vendorCode)}
         onClear={() => handleHeaderChange('vendorCode', '')}
         onClose={() => setVendorModalOpen(false)}
+        darkMode={darkMode}
+      />
+
+      <CustomerPickerModal
+        isOpen={customerModalOpen}
+        customers={customerCodes}
+        selectedCode={header.customer || ''}
+        onSelect={(c) => { handleHeaderChange('customer', c.customerCode); setCustomerModalOpen(false); }}
+        onClear={() => { handleHeaderChange('customer', ''); setCustomerModalOpen(false); }}
+        onClose={() => setCustomerModalOpen(false)}
         darkMode={darkMode}
       />
     </>

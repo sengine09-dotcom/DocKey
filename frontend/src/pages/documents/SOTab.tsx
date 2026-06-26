@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
-import soService, { SOPayload, SaleOrder, SOWorkflowStatus, fetchSOWorkflowStatus } from '../../services/soService';
+import soService, { SOPayload, SaleOrder, SOWorkflowStatus, SOItemGRStatus, fetchSOWorkflowStatus, fetchSOItemsGRStatus } from '../../services/soService';
 import codeService from '../../services/codeService';
 import CustomerPickerModal from '../../components/CustomerPickerModal';
 import ProductSelectionModal from '../../components/ProductSelectionModal';
 
-const SO_STATUS_OPTIONS = ['All', 'DRAFT', 'CONFIRMED', 'IN_PROGRESS', 'PARTIALLY_DELIVERED', 'DELIVERED', 'CANCELLED'];
+const SO_STATUS_OPTIONS = ['All', 'DRAFT', 'CONFIRMED', 'IN_PROGRESS', 'PARTIALLY_DELIVERED', 'DELIVERED', 'COMPLETED', 'CANCELLED'];
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
@@ -13,16 +13,18 @@ const STATUS_LABEL: Record<string, string> = {
   IN_PROGRESS: 'กำลังดำเนินการ',
   PARTIALLY_DELIVERED: 'ส่งบางส่วน',
   DELIVERED: 'ส่งครบแล้ว',
+  COMPLETED: 'เสร็จสมบูรณ์',
   CANCELLED: 'ยกเลิก',
 };
 
 const STATUS_TONE: Record<string, [string, string]> = {
-  DRAFT:                ['bg-gray-500/15 text-gray-300',   'bg-gray-100 text-gray-600'],
-  CONFIRMED:            ['bg-blue-500/15 text-blue-300',   'bg-blue-100 text-blue-700'],
-  IN_PROGRESS:          ['bg-amber-500/15 text-amber-300', 'bg-amber-100 text-amber-700'],
+  DRAFT:                ['bg-gray-500/15 text-gray-300',    'bg-gray-100 text-gray-600'],
+  CONFIRMED:            ['bg-blue-500/15 text-blue-300',    'bg-blue-100 text-blue-700'],
+  IN_PROGRESS:          ['bg-amber-500/15 text-amber-300',  'bg-amber-100 text-amber-700'],
   PARTIALLY_DELIVERED:  ['bg-orange-500/15 text-orange-300','bg-orange-100 text-orange-700'],
-  DELIVERED:            ['bg-green-500/15 text-green-300', 'bg-green-100 text-green-700'],
-  CANCELLED:            ['bg-red-500/15 text-red-300',     'bg-red-100 text-red-700'],
+  DELIVERED:            ['bg-green-500/15 text-green-300',  'bg-green-100 text-green-700'],
+  COMPLETED:            ['bg-emerald-500/15 text-emerald-300','bg-emerald-100 text-emerald-700'],
+  CANCELLED:            ['bg-red-500/15 text-red-300',      'bg-red-100 text-red-700'],
 };
 
 const emptyItem = () => ({ productCode: '', description: '', qty: 1, unit: 'ชิ้น', unitPrice: 0, discount: 0, amount: 0, remark: '' });
@@ -39,12 +41,14 @@ interface Props {
   onLinkToBalanceInvoice?: (so: any) => void;
   onNavigateToDI?: (diDocumentNumber: string) => void;
   onNavigateToInvoice?: (invDocumentNumber: string) => void;
+  onCountChange?: (count: number) => void;
 }
 
-export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice }: Props) {
+export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice, onCountChange }: Props) {
   const [sos, setSos] = useState<SaleOrder[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [paymentTermCodes, setPaymentTermCodes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -55,6 +59,7 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
   const [form, setForm] = useState<SOPayload>(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState<SOWorkflowStatus | null>(null);
+  const [itemGRStatus, setItemGRStatus] = useState<Record<string, SOItemGRStatus>>({});
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
@@ -63,18 +68,33 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
 
   const textMuted = darkMode ? 'text-gray-400' : 'text-gray-500';
   const sectionCard = `rounded-2xl border p-5 shadow-sm ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'}`;
-  const inputCls = `w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${darkMode ? 'bg-gray-800 text-white placeholder-gray-400 border-gray-600 focus:border-gray-400' : 'bg-white text-gray-900 border-gray-300 focus:border-gray-400'}`;
+  const inputCls = `w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-black bg-white outline-none transition focus:border-gray-400 placeholder-gray-400`;
   const labelCls = `text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`;
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => { onCountChange?.(sos.length); }, [sos.length, onCountChange]);
   useEffect(() => {
     if (mode !== 'list') window.requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [mode]);
   useEffect(() => {
-    if (mode !== 'view' || !viewing) { setWorkflowStatus(null); return; }
-    fetchSOWorkflowStatus(viewing.id)
-      .then(setWorkflowStatus)
-      .catch(() => setWorkflowStatus(null));
+    if (mode !== 'view' || !viewing) { setWorkflowStatus(null); setItemGRStatus({}); return; }
+    fetchSOWorkflowStatus(viewing.id).then((ws) => {
+      setWorkflowStatus(ws);
+      // Auto-complete: when Receipt exists and SO is not yet COMPLETED
+      if (ws?.receipt && viewing.status !== 'COMPLETED') {
+        soService.complete(viewing.id)
+          .then((res) => {
+            if (res.data?.data) {
+              setViewing(res.data.data);
+              setSos((prev) => prev.map((s) => s.id === res.data.data.id ? res.data.data : s));
+            }
+          })
+          .catch(() => {/* silent — status update is best-effort */});
+      }
+    }).catch(() => setWorkflowStatus(null));
+    fetchSOItemsGRStatus(viewing.id)
+      .then(setItemGRStatus)
+      .catch(() => setItemGRStatus({}));
   }, [mode, viewing?.id]);
   useEffect(() => {
     if (!initialQuotation) return;
@@ -120,8 +140,12 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
   const load = async () => {
     setIsLoading(true);
     try {
-      const soRes = await soService.getAll();
+      const [soRes, ptRes] = await Promise.all([
+        soService.getAll(),
+        codeService.getAll('payment-term'),
+      ]);
       setSos(soRes?.data?.data || []);
+      setPaymentTermCodes(ptRes?.data?.data || []);
     } finally { setIsLoading(false); }
   };
 
@@ -429,13 +453,13 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                 </button>
                 <input value={item.description} onChange={(e) => setItem(idx, 'description', e.target.value)}
                   placeholder="ระบุรายละเอียด *"
-                  className={`rounded-lg border px-3 py-1.5 text-sm outline-none transition ${darkMode ? 'bg-gray-800 text-white border-gray-600 placeholder-gray-500' : 'bg-white text-gray-900 border-gray-300'}`} />
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-black bg-white outline-none transition placeholder-gray-400" />
                 <input type="number" min={0} value={item.qty} onChange={(e) => setItem(idx, 'qty', e.target.value)}
-                  className={`rounded-lg border px-2 py-1.5 text-sm text-right outline-none transition ${darkMode ? 'bg-gray-800 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'}`} />
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-right text-black bg-white outline-none transition" />
                 <input value={item.unit || ''} onChange={(e) => setItem(idx, 'unit', e.target.value)} placeholder="ชิ้น"
-                  className={`rounded-lg border px-2 py-1.5 text-sm outline-none transition ${darkMode ? 'bg-gray-800 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'}`} />
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-black bg-white outline-none transition placeholder-gray-400" />
                 <input type="number" min={0} value={item.unitPrice} onChange={(e) => setItem(idx, 'unitPrice', e.target.value)}
-                  className={`rounded-lg border px-2 py-1.5 text-sm text-right outline-none transition ${darkMode ? 'bg-gray-800 text-white border-gray-600' : 'bg-white text-gray-900 border-gray-300'}`} />
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-right text-black bg-white outline-none transition" />
                 <div className={`text-sm text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                   {formatCurrency(Number(item.amount) || 0)}
                 </div>
@@ -489,6 +513,12 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
   // ── VIEW mode ────────────────────────────────────────────────────────────────
   if (mode === 'view' && viewing) {
     const vTotal = totalAmount(viewing);
+    const paymentTermDisplay = (() => {
+      const id = String(viewing.paymentTerm || '').trim();
+      if (!id) return '-';
+      const found = paymentTermCodes.find((t) => t.termId === id);
+      return found ? (found.termCode || found.termName || found.shortName || id) : id;
+    })();
     return (
       <div ref={formRef} className="space-y-4">
         <div className={`rounded-2xl border shadow-sm ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
@@ -502,180 +532,158 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                 <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{viewing.customerName}</p>
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
-                <StatusBadge status={viewing.status} />
                 {viewing.status === 'DRAFT' && (
-                  <>
-                    <button type="button" onClick={() => openEdit(viewing)}
-                      className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                      แก้ไข
-                    </button>
-                    <button type="button" onClick={() => handleConfirm(viewing)}
-                      className="rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition">
-                      ยืนยัน SO
-                    </button>
-                  </>
-                )}
-                {['DRAFT', 'CONFIRMED'].includes(viewing.status) && (
-                  <button type="button" onClick={() => handleCancel(viewing)}
-                    className="rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition">
-                    ยกเลิก
+                  <button type="button" onClick={() => handleConfirm(viewing)}
+                    className="rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition">
+                    ยืนยัน SO
                   </button>
                 )}
-                {viewing.status === 'CONFIRMED' && onLinkToDI && (
+                {viewing.status === 'CONFIRMED' && onLinkToDI && !workflowStatus?.di && (
                   <button type="button" onClick={() => onLinkToDI(viewing)}
-                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
+                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-teal-700 hover:bg-teal-600 text-white' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}>
                     📋 สร้างใบแจ้งหนี้มัดจำ
                   </button>
                 )}
-                {viewing.status === 'CONFIRMED' && onLinkToBalanceInvoice && (
+                {viewing.status === 'IN_PROGRESS' && onLinkToBalanceInvoice && !workflowStatus?.invoice && (
                   <button type="button" onClick={() => onLinkToBalanceInvoice(viewing)}
-                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                    title="ต้องมี GR และใบรับมัดจำก่อน">
-                    🧾 สร้าง Balance Invoice
+                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-violet-700 hover:bg-violet-600 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white'}`}>
+                    📄 สร้างใบแจ้งหนี้
                   </button>
                 )}
-                {(viewing.status === 'DRAFT' || isAdmin) && (
-                  <button type="button" onClick={() => handleDelete(viewing)}
-                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
-                    ลบ
-                  </button>
-                )}
-                <button type="button" onClick={backToList}
-                  className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                  ปิด
-                </button>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
+                  View Mode
+                </span>
               </div>
             </div>
           </div>
 
           <div className="px-6 py-6 space-y-6">
-            {/* Detail info */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'เลขที่ SO', value: viewing.soNumber },
-                { label: 'ลูกค้า', value: `${viewing.customerCode ? viewing.customerCode + ' — ' : ''}${viewing.customerName}` },
-                { label: 'พนักงานขาย', value: viewing.salesPerson || '-' },
-                { label: 'วันที่ SO', value: formatDate(viewing.soDate) },
-                { label: 'วันที่ต้องการรับ', value: formatDate(viewing.requiredDate) },
-                { label: 'เงื่อนไขชำระ', value: viewing.paymentTerm || '-' },
-                { label: 'สถานะ', value: <StatusBadge status={viewing.status} /> },
-                { label: 'หมายเหตุ', value: viewing.remark || '-' },
-              ].map((f: any) => (
-                <div key={f.label}>
-                  <p className={`text-xs uppercase tracking-wide ${textMuted}`}>{f.label}</p>
-                  <div className={`mt-1 text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{f.value}</div>
+            {/* Overview banner */}
+            <div className={`overflow-hidden rounded-2xl border ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/40 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-sky-50'}`}>
+              <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <p className={`text-xs font-semibold uppercase tracking-[0.24em] ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>SO Overview</p>
+                  <h4 className={`text-2xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>SALE ORDER</h4>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-white/10 text-white' : 'bg-white text-blue-700 border border-blue-200'}`}>
+                      {viewing.soNumber}
+                    </span>
+                    <StatusBadge status={viewing.status} />
+                  </div>
                 </div>
-              ))}
+                <div className="grid grid-cols-2 gap-3 lg:min-w-[280px]">
+                  {[
+                    { label: 'ลูกค้า',       value: viewing.customerName || '-' },
+                    { label: 'วันที่ต้องการ', value: viewing.requiredDate ? formatDate(viewing.requiredDate) : '-' },
+                    { label: 'รายการ',        value: `${viewing.items?.length || 0} รายการ` },
+                    { label: 'ยอดรวม',        value: `฿${formatCurrency(vTotal)}` },
+                  ].map((card) => (
+                    <div key={card.label} className={`rounded-2xl border px-4 py-3 ${darkMode ? 'border-white/10 bg-white/5' : 'border-blue-100 bg-white/80'}`}>
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>{card.label}</p>
+                      <p className={`mt-2 text-sm font-semibold truncate ${darkMode ? 'text-white' : 'text-gray-900'}`}>{card.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {workflowStatus && (workflowStatus.di || workflowStatus.dr || workflowStatus.invoice || workflowStatus.receipt) && (
+                <div className={`border-t px-5 pb-5 pt-4 ${darkMode ? 'border-blue-500/20' : 'border-blue-100'}`}>
+                  <p className={`mb-3 text-xs font-semibold uppercase tracking-wider ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>สถานะการดำเนินการ</p>
+                  <div className="space-y-2">
+                    {workflowStatus.di && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                          <span className={textMuted}>ใบแจ้งหนี้มัดจำ</span>
+                          <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{workflowStatus.di.documentNumber}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${workflowStatus.di.status === 'Paid' ? (darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-700') : (darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700')}`}>{workflowStatus.di.status}</span>
+                          <span className={textMuted}>{workflowStatus.di.depositPercentage}% / ฿{workflowStatus.di.depositAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        {onNavigateToDI && (
+                          <button type="button" onClick={() => onNavigateToDI(workflowStatus.di!.documentNumber)}
+                            className={`ml-2 shrink-0 rounded-lg px-2 py-1 text-xs font-semibold transition ${darkMode ? 'text-blue-300 hover:bg-white/10' : 'text-blue-600 hover:bg-blue-100'}`}>
+                            เปิด →
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {workflowStatus.di && !workflowStatus.dr && (
+                      <div className={`flex items-center gap-2 pl-4 text-sm ${textMuted}`}><span>└─ รอรับมัดจำ</span></div>
+                    )}
+                    {workflowStatus.dr && (
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-4 text-sm">
+                        <span className={textMuted}>ใบรับมัดจำ</span>
+                        <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{workflowStatus.dr.documentNumber}</span>
+                        <span className={textMuted}>฿{workflowStatus.dr.paymentAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        {workflowStatus.dr.receivedDate && <span className={textMuted}>{formatDate(workflowStatus.dr.receivedDate)}</span>}
+                      </div>
+                    )}
+                    {workflowStatus.invoice && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                          <span className={textMuted}>ใบแจ้งหนี้</span>
+                          <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{workflowStatus.invoice.documentNumber}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${workflowStatus.invoice.status === 'Paid' ? (darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-700') : (darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700')}`}>{workflowStatus.invoice.status}</span>
+                          <span className={textMuted}>฿{workflowStatus.invoice.total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        {onNavigateToInvoice && (
+                          <button type="button" onClick={() => onNavigateToInvoice(workflowStatus.invoice!.documentNumber)}
+                            className={`ml-2 shrink-0 rounded-lg px-2 py-1 text-xs font-semibold transition ${darkMode ? 'text-blue-300 hover:bg-white/10' : 'text-blue-600 hover:bg-blue-100'}`}>
+                            เปิด →
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {workflowStatus.receipt && (
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-4 text-sm">
+                        <span className={textMuted}>ใบเสร็จรับเงิน</span>
+                        <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{workflowStatus.receipt.documentNumber}</span>
+                        <span className={textMuted}>฿{workflowStatus.receipt.total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        {workflowStatus.receipt.receivedDate && <span className={textMuted}>{formatDate(workflowStatus.receipt.receivedDate)}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Workflow Status Section */}
-            {workflowStatus && (workflowStatus.di || workflowStatus.dr || workflowStatus.invoice || workflowStatus.receipt) && (
-              <div className={`rounded-2xl border px-5 py-4 ${darkMode ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
-                <p className={`mb-3 text-xs font-semibold uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  สถานะการดำเนินการ
-                </p>
-                <div className="space-y-2">
-                  {/* DI row */}
-                  {workflowStatus.di && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                        <span className={textMuted}>ใบแจ้งหนี้มัดจำ</span>
-                        <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                          {workflowStatus.di.documentNumber}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          workflowStatus.di.status === 'Paid'
-                            ? (darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-700')
-                            : (darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700')
-                        }`}>
-                          {workflowStatus.di.status}
-                        </span>
-                        <span className={textMuted}>
-                          {workflowStatus.di.depositPercentage}% / ฿{workflowStatus.di.depositAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      {onNavigateToDI && (
-                        <button
-                          type="button"
-                          onClick={() => onNavigateToDI(workflowStatus.di!.documentNumber)}
-                          className={`ml-2 shrink-0 rounded-lg px-2 py-1 text-xs font-semibold transition ${darkMode ? 'text-blue-300 hover:bg-gray-700' : 'text-blue-600 hover:bg-gray-100'}`}>
-                          เปิด →
-                        </button>
-                      )}
+            {/* Detail info cards */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Document Info</p>
+                <dl className="space-y-3">
+                  {[
+                    { label: 'เลขที่ SO',        value: viewing.soNumber },
+                    { label: 'วันที่ SO',         value: formatDate(viewing.soDate) || '-' },
+                    { label: 'วันที่ต้องการรับ',  value: formatDate(viewing.requiredDate) || '-' },
+                    { label: 'พนักงานขาย',       value: viewing.salesPerson || '-' },
+                    { label: 'เงื่อนไขชำระ',     value: paymentTermDisplay },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between text-sm">
+                      <dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>{label}</dt>
+                      <dd className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</dd>
                     </div>
-                  )}
-
-                  {/* DR row — waiting placeholder when DI exists but DR doesn't */}
-                  {workflowStatus.di && !workflowStatus.dr && (
-                    <div className={`flex items-center gap-2 pl-4 text-sm ${textMuted}`}>
-                      <span>└─ รอรับมัดจำ</span>
-                    </div>
-                  )}
-                  {workflowStatus.dr && (
-                    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 pl-4 text-sm`}>
-                      <span className={textMuted}>ใบรับมัดจำ</span>
-                      <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                        {workflowStatus.dr.documentNumber}
-                      </span>
-                      <span className={textMuted}>
-                        ฿{workflowStatus.dr.paymentAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                      {workflowStatus.dr.receivedDate && (
-                        <span className={textMuted}>
-                          {formatDate(workflowStatus.dr.receivedDate)}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Invoice row */}
-                  {workflowStatus.invoice && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                        <span className={textMuted}>ใบแจ้งหนี้</span>
-                        <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                          {workflowStatus.invoice.documentNumber}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          workflowStatus.invoice.status === 'Paid'
-                            ? (darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-700')
-                            : (darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700')
-                        }`}>
-                          {workflowStatus.invoice.status}
-                        </span>
-                        <span className={textMuted}>
-                          ฿{workflowStatus.invoice.total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      {onNavigateToInvoice && (
-                        <button
-                          type="button"
-                          onClick={() => onNavigateToInvoice(workflowStatus.invoice!.documentNumber)}
-                          className={`ml-2 shrink-0 rounded-lg px-2 py-1 text-xs font-semibold transition ${darkMode ? 'text-blue-300 hover:bg-gray-700' : 'text-blue-600 hover:bg-gray-100'}`}>
-                          เปิด →
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Receipt row */}
-                  {workflowStatus.receipt && (
-                    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 pl-4 text-sm`}>
-                      <span className={textMuted}>ใบเสร็จรับเงิน</span>
-                      <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                        {workflowStatus.receipt.documentNumber}
-                      </span>
-                      <span className={textMuted}>
-                        ฿{workflowStatus.receipt.total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                      {workflowStatus.receipt.receivedDate && (
-                        <span className={textMuted}>
-                          {formatDate(workflowStatus.receipt.receivedDate)}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  ))}
+                  <div className="flex items-center justify-between text-sm">
+                    <dt className={darkMode ? 'text-gray-400' : 'text-gray-500'}>สถานะ</dt>
+                    <dd><StatusBadge status={viewing.status} /></dd>
+                  </div>
+                </dl>
+              </div>
+              <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>ลูกค้า</p>
+                <dl className="space-y-3">
+                  <div className="flex items-start justify-between gap-4 text-sm">
+                    <dt className={`shrink-0 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>รหัส / ชื่อ</dt>
+                    <dd className={`text-right font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      {viewing.customerCode ? `${viewing.customerCode} — ` : ''}{viewing.customerName || '-'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+            {viewing.remark && (
+              <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Remark / Notes</p>
+                <p className={`whitespace-pre-wrap text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{viewing.remark}</p>
               </div>
             )}
 
@@ -698,28 +706,47 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                       <th className="px-5 py-3 text-right">ราคา/หน่วย</th>
                       <th className="px-5 py-3 text-right">ส่วนลด%</th>
                       <th className="px-5 py-3 text-right">รวม</th>
-                      <th className="px-5 py-3 text-left">สถานะ PR</th>
+                      <th className="px-5 py-3 text-left">สถานะ PO</th>
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-100'}`}>
-                    {(viewing.items || []).map((item, idx) => (
-                      <tr key={item.id} className={item.convertedToPr ? (darkMode ? 'bg-green-900/10' : 'bg-green-50/60') : (darkMode ? 'hover:bg-gray-700/30' : 'hover:bg-gray-50')}>
+                    {(viewing.items || []).map((item, idx) => {
+                      const grInfo = item.prNumber ? itemGRStatus[item.prNumber] : null;
+                      const hasGR = grInfo?.grReceived ?? false;
+                      const hasPO = !!(grInfo?.poNumber);
+                      return (
+                      <tr key={item.id} className={hasGR ? (darkMode ? 'bg-emerald-900/10' : 'bg-emerald-50/40') : hasPO ? (darkMode ? 'bg-amber-900/10' : 'bg-amber-50/40') : (darkMode ? 'hover:bg-gray-700/30' : 'hover:bg-gray-50')}>
                         <td className={`px-5 py-3 ${textMuted}`}>{idx + 1}</td>
                         <td className={`px-5 py-3 ${textMuted}`}>{item.productCode || '-'}</td>
-                        <td className={`px-5 py-3 font-medium ${item.convertedToPr ? 'text-gray-400 line-through' : (darkMode ? 'text-white' : 'text-gray-900')}`}>{item.description}</td>
+                        <td className={`px-5 py-3 font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.description}</td>
                         <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>{Number(item.qty).toLocaleString()}</td>
                         <td className={`px-5 py-3 ${textMuted}`}>{item.unit || '-'}</td>
                         <td className={`px-5 py-3 text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatCurrency(Number(item.unitPrice))}</td>
                         <td className={`px-5 py-3 text-right ${textMuted}`}>{Number(item.discount) > 0 ? `${item.discount}%` : '-'}</td>
                         <td className={`px-5 py-3 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>฿{formatCurrency(Number(item.amount))}</td>
                         <td className="px-5 py-3">
-                          {item.convertedToPr
-                            ? <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${darkMode ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700'}`}>✓ {item.prNumber || 'แปลงแล้ว'}</span>
-                            : <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>รอดำเนินการ</span>
-                          }
+                          {hasGR ? (
+                            <div className="space-y-0.5">
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${darkMode ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>
+                                ✅ รับสินค้าแล้ว
+                              </span>
+                              {grInfo?.grNumber && <p className={`text-[10px] ${textMuted}`}>{grInfo.grNumber}</p>}
+                              {grInfo?.poNumber && <p className={`text-[10px] ${textMuted}`}>{grInfo.poNumber}</p>}
+                            </div>
+                          ) : hasPO ? (
+                            <div className="space-y-0.5">
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${darkMode ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>
+                                📦 รอรับสินค้า
+                              </span>
+                              <p className={`text-[10px] ${textMuted}`}>{grInfo!.poNumber}</p>
+                            </div>
+                          ) : (
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>รอดำเนินการ</span>
+                          )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                   <tfoot>
                     <tr className={`font-bold ${darkMode ? 'bg-gray-700/30 text-white' : 'bg-blue-50 text-gray-900'}`}>
@@ -729,6 +756,37 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                   </tfoot>
                 </table>
               </div>
+            </div>
+          </div>
+
+          {/* Bottom controls */}
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <button
+              type="button"
+              onClick={backToList}
+              className={`flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${darkMode ? 'border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              กลับ
+            </button>
+            <div className="flex flex-wrap gap-3">
+              {viewing.status === 'DRAFT' && (
+                <button
+                  type="button"
+                  onClick={() => openEdit(viewing)}
+                  className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600">
+                  แก้ไข
+                </button>
+              )}
+              {(viewing.status === 'DRAFT' || isAdmin) && (
+                <button
+                  type="button"
+                  onClick={() => handleDelete(viewing)}
+                  className="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700">
+                  ลบ
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -832,19 +890,6 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                             className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
                             ยกเลิก
                           </button>
-                          {onLinkToDI && (
-                            <button type="button" onClick={() => onLinkToDI(so)}
-                              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-teal-900/40 text-teal-300 hover:bg-teal-800/60' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}>
-                              📋 แจ้งหนี้มัดจำ
-                            </button>
-                          )}
-                          {onLinkToBalanceInvoice && (
-                            <button type="button" onClick={() => onLinkToBalanceInvoice(so)}
-                              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                              title="ต้องมี GR และใบรับมัดจำก่อน">
-                              🧾 Balance Invoice
-                            </button>
-                          )}
                         </>
                       )}
                       <button type="button" onClick={() => openView(so)}

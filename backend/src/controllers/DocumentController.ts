@@ -1,8 +1,44 @@
 import { Request, Response } from 'express';
 import { deleteDocumentByType, getDocumentById, isMainDocumentType, listDocumentsByType, saveDocumentByType } from '../lib/mainDocuments';
 import { resolveCompanyContext } from '../lib/companyContext';
+import { prisma } from '../lib/prisma';
 
 class DocumentController {
+  static async getCounts(req: Request, res: Response) {
+    try {
+      const ctx = await resolveCompanyContext(req);
+      if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+      const [docGroups, soCount] = await Promise.all([
+        prisma.document.groupBy({
+          by: ['documentType'],
+          where: { companyId: ctx.companyId },
+          _count: { _all: true },
+        }),
+        prisma.saleOrder.count({ where: { companyId: ctx.companyId } }),
+      ]);
+
+      const PRISMA_TO_APP: Record<string, string> = {
+        QUOTATION: 'quotation',
+        DEPOSIT_INVOICE: 'deposit_invoice',
+        DEPOSIT_RECEIPT: 'deposit_receipt',
+        INVOICE: 'invoice',
+        RECEIPT: 'receipt',
+      };
+
+      const counts: Record<string, number> = { so: soCount };
+      for (const g of docGroups) {
+        const key = PRISMA_TO_APP[String(g.documentType)];
+        if (key) counts[key] = g._count._all;
+      }
+
+      return res.json({ success: true, data: counts });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+
   static async getAll(req: Request, res: Response) {
     try {
       const ctx = await resolveCompanyContext(req);

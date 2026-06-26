@@ -38,6 +38,7 @@ const pageRouteMap: Record<string, string> = {
   'vendor-code': '/codes/vendor',
   'destination-code': '/codes/destination',
   'payment-term-code': '/codes/payment-term',
+  'unit-code': '/codes/unit',
   'end-user-code': '/codes/end-user',
   'user-management': '/users',
   'token-status': '/token-status',
@@ -185,6 +186,10 @@ function ActivationAwareRoutes() {
       <Route
         path="/codes/payment-term"
         element={<RoutedPage component={CodeMaster} currentPage="payment-term-code" />}
+      />
+      <Route
+        path="/codes/unit"
+        element={<RoutedPage component={CodeMaster} currentPage="unit-code" />}
       />
       <Route
         path="/codes/end-user"

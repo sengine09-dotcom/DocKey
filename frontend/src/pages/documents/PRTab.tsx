@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import purchaseService, { PRPayload } from '../../services/purchaseService';
 import codeService from '../../services/codeService';
@@ -56,22 +56,23 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
 
   useEffect(() => { void load(); }, []);
 
+  const productsLoadedRef = useRef(false);
+  const loadProducts = useCallback(async () => {
+    if (productsLoadedRef.current) return;
+    productsLoadedRef.current = true;
+    const res = await codeService.getAll('product');
+    setProducts(res?.data?.data || []);
+  }, []);
+
   const load = async () => {
     setIsLoading(true);
     try {
-      const [prRes, vendorRes, productRes] = await Promise.allSettled([
+      const [prRes, vendorRes] = await Promise.allSettled([
         purchaseService.pr.getAll(),
         codeService.getAll('vendor'),
-        codeService.getAll('product'),
       ]);
       if (prRes.status === 'fulfilled') setPrs(prRes.value.data?.data || []);
       if (vendorRes.status === 'fulfilled') setVendors(vendorRes.value.data?.data || []);
-      if (productRes.status === 'fulfilled') {
-        const productData = productRes.value.data?.data || [];
-        setProducts(productData);
-      } else {
-        console.error('[PRTab] products load failed:', productRes.reason);
-      }
     } finally {
       setIsLoading(false);
     }
@@ -124,9 +125,10 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
   };
 
   // ── Actions ──────────────────────────────────────────────────────────────────
-  const openCreate = () => { setForm(emptyForm()); setEditingId(null); setMode('create'); };
+  const openCreate = () => { void loadProducts(); setForm(emptyForm()); setEditingId(null); setMode('create'); };
 
   const openEdit = (pr: any) => {
+    void loadProducts();
     setForm({
       title: pr.title || '',
       vendorCode: pr.vendorCode || '',
@@ -158,14 +160,19 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
     const payload: PRPayload = { ...form, items: form.items.filter((i) => i.description.trim()) };
     setIsSaving(true);
     try {
+      let saved: any;
       if (editingId) {
         const res = await purchaseService.pr.update(editingId, payload);
-        setPrs((prev) => prev.map((p) => p.id === editingId ? res.data.data : p));
+        saved = res.data.data;
+        setPrs((prev) => prev.map((p) => p.id === editingId ? saved : p));
       } else {
         const res = await purchaseService.pr.create(payload);
-        setPrs((prev) => [res.data.data, ...prev]);
+        saved = res.data.data;
+        setPrs((prev) => [saved, ...prev]);
       }
-      backToList();
+      setEditingId(null);
+      setViewing(saved);
+      setMode('view');
     } catch {
       await showAppAlert({ title: 'บันทึกไม่สำเร็จ', message: 'เกิดข้อผิดพลาด กรุณาลองใหม่', tone: 'danger' });
     } finally {

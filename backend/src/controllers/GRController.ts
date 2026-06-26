@@ -140,15 +140,56 @@ const GRController = {
     const ctx = await resolveCompanyContext(req);
     if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
+    const isAdmin = String(ctx.role || '').toLowerCase() === 'admin';
+
     const gr = await prisma.goodsReceipt.findFirst({
       where: { id: req.params.id, companyId: ctx.companyId },
+      include: { items: true },
     });
     if (!gr) return res.status(404).json({ success: false, message: 'Not found' });
-    if (gr.status === 'CONFIRMED') {
-      return res.status(400).json({ success: false, message: 'CONFIRMED GRs cannot be deleted' });
+    if (gr.status === 'CONFIRMED' && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบใบรับสินค้าที่ยืนยันแล้วได้' });
     }
 
-    await prisma.goodsReceipt.delete({ where: { id: gr.id } });
+    if (gr.status === 'CONFIRMED') {
+      // Reverse stock IN and reset PO status
+      const stockItems = gr.items
+        .filter((item) => item.productCode && Number(item.receivedQty) > 0)
+        .map((item) => ({ productCode: item.productCode!, qty: Number(item.receivedQty) }));
+
+      const productRows = await prisma.product.findMany({
+        where: { companyId: ctx.companyId, productCode: { in: stockItems.map((i) => i.productCode) } },
+        select: { id: true, productCode: true },
+      });
+      const productIdMap = new Map(productRows.map((p) => [p.productCode, p.id]));
+      const moveItems = stockItems
+        .map((i) => ({ ...i, productId: productIdMap.get(i.productCode) || '' }))
+        .filter((i) => i.productId);
+
+      await prisma.$transaction(async (tx) => {
+        if (moveItems.length > 0) {
+          await recordStockMove(tx, {
+            items: moveItems,
+            docNumber: gr.grNumber,
+            docType: 'GR_VOID',
+            direction: 'OUT',
+            companyId: ctx.companyId,
+            docId: gr.id,
+            userId: ctx.userName,
+          });
+        }
+        if (gr.poId) {
+          await tx.document.update({
+            where: { id: gr.poId },
+            data: { status: 'Open' },
+          });
+        }
+        await tx.goodsReceipt.delete({ where: { id: gr.id } });
+      });
+    } else {
+      await prisma.goodsReceipt.delete({ where: { id: gr.id } });
+    }
+
     return res.json({ success: true });
   },
 
@@ -196,6 +237,14 @@ const GRController = {
           companyId: ctx.companyId,
           docId: gr.id,
           userId: ctx.userName,
+        });
+      }
+
+      // Update PO status to Completed
+      if (gr.poId) {
+        await tx.document.update({
+          where: { id: gr.poId },
+          data: { status: 'Completed' },
         });
       }
 

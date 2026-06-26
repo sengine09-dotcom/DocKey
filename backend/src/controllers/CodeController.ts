@@ -27,6 +27,7 @@ const AUTO_CODE_CONFIG: Record<string, { prefix: string; dbField: string; payloa
   vendor:         { prefix: 'V-', dbField: 'vendorCode',      payloadKey: 'vendorCode'   },
   destination:    { prefix: 'D-', dbField: 'destinationCode', payloadKey: 'destId'       },
   'payment-term': { prefix: 'T-', dbField: 'termCode',        payloadKey: 'termId'       },
+  'unit-code':    { prefix: 'U-', dbField: 'unitCode',        payloadKey: 'unitCode'     },
 };
 
 const generateNextCode = async (
@@ -65,6 +66,8 @@ const mapCustomer = (row: any) => ({
 const mapProduct = (row: any) => ({
   productCode: row.productCode || '',
   productName: row.productName || '',
+  description: row.description || '',
+  unitCode: row.unitCode || '',
   marking: row.brand || '',
   type: row.category || '',
   bagSize: row.model || '',
@@ -145,6 +148,13 @@ const mapCompany = (row: any) => ({
   updatedAt: row.updatedAt,
 });
 
+const mapUnitCode = (row: any) => ({
+  unitCode:  row.unitCode  || '',
+  unitName:  row.unitName  || '',
+  shortName: row.shortName || '',
+  used:      row.used      || 'Y',
+});
+
 const mapEndUser = (row: any) => ({
   eUserId: row.eUserId,
   eUserName: row.eUserName || '',
@@ -167,7 +177,7 @@ const deleteEndUser = async (_eUserId: string) => {
 };
 
 // Types that are scoped per company
-const COMPANY_SCOPED_TYPES = new Set(['customer', 'product', 'vendor', 'destination', 'payment-term']);
+const COMPANY_SCOPED_TYPES = new Set(['customer', 'product', 'vendor', 'destination', 'payment-term', 'unit-code']);
 
 const codeConfigs: Record<string, any> = {
   customer: {
@@ -197,6 +207,8 @@ const codeConfigs: Record<string, any> = {
     toData: (payload: any) => ({
       productCode: parseString(payload.productCode),
       productName: parseString(payload.productName),
+      description: parseString(payload.description) || null,
+      unitCode: parseString(payload.unitCode) || null,
       category: parseString(payload.category) || 'General',
       brand: parseString(payload.brand) || 'General',
       model: parseString(payload.model),
@@ -255,6 +267,18 @@ const codeConfigs: Record<string, any> = {
       note: parseString(payload.note),
       categories: Array.isArray(payload.categories) ? JSON.stringify(payload.categories) : null,
       brands: Array.isArray(payload.brands) ? JSON.stringify(payload.brands) : null,
+    }),
+  },
+  'unit-code': {
+    model: prisma.unitCode,
+    idField: 'unitCode',
+    orderBy: { unitCode: 'asc' },
+    mapRecord: mapUnitCode,
+    toData: (payload: any) => ({
+      unitCode:  parseString(payload.unitCode),
+      unitName:  parseString(payload.unitName),
+      shortName: parseString(payload.shortName),
+      used:      parseString(payload.used) || 'Y',
     }),
   },
   company: {

@@ -359,12 +359,61 @@ export const buildDPFromDepositInvoice = (di: any) => {
     linkedQuotationId: di?.linkedQuotationId || '',
     linkedQuotationNumber: di?.linkedQuotationNumber || '',
     linkedSOId: di?.linkedSOId || '',
+    linkedDIId: di?.documentId || '',
+    linkedDINumber: di?.documentNumber || '',
     items: (di?.items || []).map((item: any) => ({
       id: item?.id || '', productCode: item?.productCode || '',
       productName: item?.productName || '', quantity: item?.quantity || '',
       cost: item?.cost || '', margin: item?.margin || '',
       sellingPrice: item?.sellingPrice || '', totalCost: item?.totalCost || '',
       totalSellingPrice: item?.totalSellingPrice || '', unitId: item?.unitId || '',
+    })),
+  };
+};
+
+export const buildInvoiceFromSO = (so: any, di?: any) => {
+  const soNum = String(so?.soNumber || '').trim();
+  const today = toDateInputValue(new Date());
+  const soTotal = (so?.items || []).reduce((s: number, i: any) => {
+    return s + (Number(i?.amount || 0) || Number(i?.qty || 0) * Number(i?.unitPrice || 0));
+  }, 0);
+  const diNum = di ? String(di?.documentNumber || '').trim() : '';
+  const depositAmt = di ? Number(di?.depositAmount || di?.total || 0) : 0;
+  const balanceAmt = Math.round((soTotal - depositAmt) * 100) / 100;
+
+  return {
+    __mode: 'create',
+    title: `ใบแจ้งหนี้ — ${so?.customerName || soNum}`,
+    documentDate: today,
+    customer: so?.customerCode || '',
+    billTo: so?.customerName || '',
+    paymentTerm: so?.paymentTerm || '',
+    paymentMethod: 'Bank Transfer',
+    referenceNo: soNum,
+    status: 'Pending',
+    remark: di
+      ? `ใบแจ้งหนี้ หักมัดจำ ${depositAmt.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท ตาม ${diNum} อ้างอิงใบสั่งขาย ${soNum}`
+      : `อ้างอิงใบสั่งขาย ${soNum}`,
+    taxRate: String(7),
+    linkedSOId: so?.id || '',
+    linkedSONumber: soNum,
+    linkedQuotationId: '',
+    linkedQuotationNumber: '',
+    depositAmountDeducted: String(depositAmt),
+    linkedDepositReceiptId: di?.documentId || di?.id || '',
+    linkedDepositReceiptNumber: diNum,
+    total: String(di ? balanceAmt : soTotal),
+    items: (so?.items || []).map((item: any) => ({
+      id: '',
+      productCode: item?.productCode || '',
+      productName: item?.description || item?.productName || '',
+      quantity: String(item?.qty || item?.quantity || ''),
+      cost: '',
+      margin: '',
+      sellingPrice: String(item?.unitPrice || item?.sellingPrice || ''),
+      totalCost: '',
+      totalSellingPrice: String(item?.amount || item?.totalSellingPrice || ''),
+      unitId: item?.unit || '',
     })),
   };
 };
