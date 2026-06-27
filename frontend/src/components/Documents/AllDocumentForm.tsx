@@ -2607,7 +2607,22 @@ export default function AllDocumentForm({
                     companyAddress: String(companyInfo?.address || ''),
                     companyTaxId: String(companyInfo?.taxId || ''),
                   });
-                  void printDocumentContent(String(header.documentNumber || 'invoice'), html, { bodyPadding: '0' });
+                  const tab = window.open('', '_blank');
+                  if (tab) {
+                    tab.document.write(`<!DOCTYPE html><html><head>
+                      <meta charset="UTF-8">
+                      <title>${String(header.documentNumber || 'invoice')}</title>
+                      <style>
+                        *{box-sizing:border-box;}
+                        body{margin:0;padding:0;background:#fff;}
+                        @media print{
+                          @page{size:A4;margin:0;}
+                          body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+                        }
+                      </style>
+                    </head><body>${html}</body></html>`);
+                    tab.document.close();
+                  }
                 }}
                 className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}
               >
