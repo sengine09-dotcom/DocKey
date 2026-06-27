@@ -10,7 +10,7 @@ import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import { getQuotationStatusStyle } from '../../pages/documents/documentShared';
 import DepositDeductionSummary from './DepositDeductionSummary';
 import InvoiceSummary from './InvoiceSummary';
-import InvoicePrintLayout from './InvoicePrintLayout';
+import { buildInvoicePrintHtml } from './InvoicePrintLayout';
 import { bahttext } from 'bahttext';
 
 const getTodayDateInputValue = () => new Date().toISOString().slice(0, 10);
@@ -2572,7 +2572,43 @@ export default function AllDocumentForm({
             {documentType === 'invoice' && isViewMode && (
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  const depositAmt = parseFloat(header.depositAmountDeducted) || 0;
+                  const grandTotalAmt = total;
+                  const netPay = grandTotalAmt - depositAmt;
+                  const html = buildInvoicePrintHtml({
+                    invoiceNo: String(header.documentNumber || ''),
+                    invoiceDate: String(header.documentDate || ''),
+                    dueDate: String((header as any).dueDate || ''),
+                    customerName: String(header.billTo || ''),
+                    customerAddress: String(header.shipTo || header.billTo || ''),
+                    customerTaxId: String((header as any).customerTaxId || ''),
+                    customerBranch: String((header as any).customerBranch || ''),
+                    paymentTerm: String(header.paymentTerm || ''),
+                    items: items.map((item: any, i: number) => ({
+                      lineNo: i + 1,
+                      productCode: item.productCode || '',
+                      productName: item.productName || '',
+                      quantity: Number(item.quantity || 0),
+                      unit: (unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '',
+                      unitPrice: Number(item.sellingPrice || 0),
+                      totalAmount: Number(item.totalSellingPrice || 0),
+                    })),
+                    subtotal: totalSellingPrice,
+                    vatRate: taxRate,
+                    vatAmount: tax,
+                    grandTotal: grandTotalAmt,
+                    depositAmount: depositAmt,
+                    netPayable: netPay,
+                    netPayableText: bahttext(Math.round(netPay * 100) / 100),
+                    referenceNo: String((header as any).linkedSONumber || header.referenceNo || ''),
+                    depositReceiptNumber: (header as any).linkedDepositReceiptNumber || undefined,
+                    companyName: String(companyInfo?.name || companyInfo?.nameEn || ''),
+                    companyAddress: String(companyInfo?.address || ''),
+                    companyTaxId: String(companyInfo?.taxId || ''),
+                  });
+                  void printDocumentContent(String(header.documentNumber || 'invoice'), html, { bodyPadding: '0' });
+                }}
                 className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}
               >
                 พิมพ์ (3 ชุด)
@@ -2610,41 +2646,6 @@ export default function AllDocumentForm({
         </div>
       </div>
 
-      {documentType === 'invoice' && (
-        <div className="invoice-print-root" style={{ display: 'none' }}>
-          <InvoicePrintLayout
-            invoiceNo={String((header as any).documentNumber || '')}
-            invoiceDate={String((header as any).documentDate || '')}
-            dueDate={String((header as any).dueDate || '')}
-            customerName={String((header as any).billTo || '')}
-            customerAddress={String((header as any).shipTo || (header as any).billTo || '')}
-            customerTaxId={String((header as any).customerTaxId || '')}
-            customerBranch={String((header as any).customerBranch || '')}
-            paymentTerm={String((header as any).paymentTerm || '')}
-            items={items.map((item: any, i: number) => ({
-              lineNo: i + 1,
-              productCode: item.productCode || '',
-              productName: item.productName || '',
-              quantity: Number(item.quantity || 0),
-              unit: item.unitId || '',
-              unitPrice: Number(item.sellingPrice || 0),
-              totalAmount: Number(item.totalSellingPrice || 0),
-            }))}
-            subtotal={Number((header as any).totalSellingPrice || 0)}
-            vatRate={Number((header as any).taxRate || 7)}
-            vatAmount={Number((header as any).taxAmount || 0)}
-            grandTotal={Number((header as any).totalAmount || 0)}
-            depositAmount={Number((header as any).depositAmountDeducted || 0)}
-            netPayable={Number((header as any).totalAmount || 0) - Number((header as any).depositAmountDeducted || 0)}
-            netPayableText={bahttext(Math.round((Number((header as any).totalAmount || 0) - Number((header as any).depositAmountDeducted || 0)) * 100) / 100)}
-            referenceNo={String((header as any).linkedSONumber || (header as any).referenceNo || '')}
-            depositReceiptNumber={(header as any).linkedDepositReceiptNumber || undefined}
-            companyName={String(companyInfo?.name || companyInfo?.nameEn || '')}
-            companyAddress={String(companyInfo?.address || '')}
-            companyTaxId={String(companyInfo?.taxId || '')}
-          />
-        </div>
-      )}
 
       <ProductSelectionModal
         isOpen={productModalOpen}
