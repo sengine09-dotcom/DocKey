@@ -1044,6 +1044,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
   if (type === 'receipt' && existing === null) {
     let linkedSOId = parseString(header.linkedSOId);
     let linkedQTId = parseString(header.linkedQuotationId);
+    let isCashPaymentTerm = false;
 
     // If not in header, try to derive from linked DP
     if (!linkedSOId && header.linkedDepositReceiptId) {
@@ -1072,8 +1073,23 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
       if (diDoc?.linkedQuotationId) linkedQTId = diDoc.linkedQuotationId;
     }
 
-    if (linkedSOId && linkedQTId) {
-      // DI→DR→INV→RC path: compare DP+RC total vs QT total
+    // Determine credit/no-credit from SO payment term (เงินสด Days=0 = ไม่มีเครดิต)
+    if (linkedSOId) {
+      const soRecord = await prisma.saleOrder.findFirst({
+        where: { id: linkedSOId, companyId },
+        select: { paymentTerm: true },
+      });
+      if (soRecord?.paymentTerm) {
+        const ptRecord = await prisma.paymentTerm.findFirst({
+          where: { termCode: soRecord.paymentTerm, companyId },
+          select: { days: true },
+        });
+        isCashPaymentTerm = Number(ptRecord?.days ?? 0) === 0;
+      }
+    }
+
+    if (linkedSOId && isCashPaymentTerm && linkedQTId) {
+      // No-credit path (เงินสด): SO→DI→DR→INV→RC — compare DP+RC total vs QT total
       const qt = await prisma.document.findFirst({
         where: { id: linkedQTId, companyId, documentType: 'QUOTATION' },
         select: { id: true, totalAmount: true },
@@ -1134,7 +1150,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
         }
       }
     } else if (linkedSOId) {
-      // Credit-term path: SO→INV→RC (no deposit). Complete SO when RC covers the invoice.
+      // Credit-term path OR cash without QT: complete SO when RC covers the invoice total.
       const linkedInvoiceNumber = parseString(header.linkedInvoiceNumber);
       if (linkedInvoiceNumber) {
         const invDoc = await prisma.document.findFirst({

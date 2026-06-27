@@ -288,6 +288,11 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       customerBranch: customer?.shortName || '',
     };
 
+    // Determine credit/no-credit from SO payment term (เงินสด Days=0 = ไม่มีเครดิต)
+    const termCode = String(so.paymentTerm || '').trim();
+    const pt = paymentTermCodes.find((t: any) => String(t.termId || '').trim() === termCode);
+    const isCash = !pt || Number(pt.days || 0) === 0;
+
     // 1. Check for deposit receipt (DR) — most complete path
     const drRes = await documentService.getAll('deposit_receipt');
     const drList: any[] = drRes?.data?.data || [];
@@ -317,7 +322,18 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     loadedTabsRef.current.add('deposit_invoice');
     const di = diList.find((d: any) => d.linkedSOId === so.id);
 
-    // 3. Build invoice (with DI deduction if found, otherwise full invoice)
+    // 3. Cash customer with no DI yet → must create DI first
+    if (isCash && !di) {
+      await showAppAlert({
+        title: 'ต้องออกใบแจ้งหนี้มัดจำก่อน',
+        message: 'ใบสั่งขายนี้ใช้เงื่อนไขชำระเงินสด ต้องออกใบแจ้งหนี้มัดจำ (DI) ก่อน',
+        tone: 'warning',
+      });
+      void handleSOtoDI(so);
+      return;
+    }
+
+    // 4. Build invoice (with DI deduction if found; credit customer may skip DI)
     setActiveTab('invoice');
     setSelectedRecord(null);
     setEditorState({ type: 'invoice', initialData: buildInvoiceFromSO(so, di || undefined, customerExtra) });
