@@ -17,13 +17,13 @@ export const printDocumentContent = async (title: string = '', html: string, opt
     .replace(/[\\/:*?"<>|]+/g, '-') || 'document';
 
   renderHost.setAttribute('aria-hidden', 'true');
-  renderHost.style.position = 'fixed';
-  renderHost.style.left = '0';
+  renderHost.style.position = 'absolute';
+  renderHost.style.left = '-9999px';
   renderHost.style.top = '0';
   renderHost.style.width = '210mm';
   renderHost.style.background = '#ffffff';
   renderHost.style.pointerEvents = 'none';
-  renderHost.style.zIndex = '-1';
+  renderHost.style.overflow = 'visible';
   renderHost.innerHTML = `
     <style>
       .pdf-print-root {
