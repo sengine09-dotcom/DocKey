@@ -224,6 +224,7 @@ export const buildReceiptDraftFromInvoice = (invoice: any) => {
     paymentReference: '',
     linkedInvoiceId: invoice?.documentId || invoice?.id || '',
     linkedInvoiceNumber: invNum,
+    linkedSOId: invoice?.linkedSOId || '',
     items: (invoice?.items || []).map((item: any) => ({
       id: item?.id || '', productCode: item?.productCode || '', productName: item?.productName || '',
       quantity: item?.quantity || '', margin: item?.margin || '', sellingPrice: item?.sellingPrice || '',

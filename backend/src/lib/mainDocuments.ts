@@ -1054,6 +1054,15 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
       if (dpDoc?.linkedSOId) linkedSOId = dpDoc.linkedSOId;
     }
 
+    // Fallback: derive linkedSOId from linked invoice (credit-term flow: SO→INV→RC)
+    if (!linkedSOId && header.linkedInvoiceId) {
+      const invSubDoc = await prisma.invoiceDocument.findFirst({
+        where: { id: String(header.linkedInvoiceId) },
+        select: { linkedSOId: true },
+      });
+      if (invSubDoc?.linkedSOId) linkedSOId = invSubDoc.linkedSOId;
+    }
+
     // If still missing QT, try to find it from the Deposit Invoice linked to this SO
     if (!linkedQTId && linkedSOId) {
       const diDoc = await prisma.depositInvoiceDocument.findFirst({
@@ -1064,6 +1073,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     }
 
     if (linkedSOId && linkedQTId) {
+      // DI→DR→INV→RC path: compare DP+RC total vs QT total
       const qt = await prisma.document.findFirst({
         where: { id: linkedQTId, companyId, documentType: 'QUOTATION' },
         select: { id: true, totalAmount: true },
@@ -1121,6 +1131,21 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
               });
             }
           }
+        }
+      }
+    } else if (linkedSOId) {
+      // Credit-term path: SO→INV→RC (no deposit). Complete SO when RC covers the invoice.
+      const linkedInvoiceNumber = parseString(header.linkedInvoiceNumber);
+      if (linkedInvoiceNumber) {
+        const invDoc = await prisma.document.findFirst({
+          where: { companyId, documentNumber: linkedInvoiceNumber, documentType: 'INVOICE' },
+          select: { totalAmount: true },
+        });
+        if (invDoc && toNumber(header.total) >= toNumber(invDoc.totalAmount)) {
+          await prisma.saleOrder.update({
+            where: { id: linkedSOId },
+            data: { status: 'COMPLETED' },
+          });
         }
       }
     }
