@@ -91,7 +91,7 @@ const buildPage = (p: InvoicePrintProps, docType: string, copy: string): string 
     : '';
 
   return `
-  <div style="width:210mm;min-height:297mm;padding:12mm 14mm 16mm;box-sizing:border-box;page-break-after:always;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;line-height:1.5;background:#ffffff;position:relative">
+  <div style="width:210mm;padding:12mm 14mm 16mm;box-sizing:border-box;page-break-after:always;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#0f172a;line-height:1.5;background:#ffffff;position:relative">
 
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:14px;border-bottom:2px solid #1d4ed8;margin-bottom:14px">

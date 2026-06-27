@@ -67,7 +67,8 @@ export const printDocumentContent = async (title: string = '', html: string, opt
           format: 'a4',
           orientation: 'portrait',
         },
-      })
+        pagebreak: { mode: 'css' },
+      } as any)
       .from(pdfRoot);
 
     const pdfBlob = await worker.outputPdf('blob');
