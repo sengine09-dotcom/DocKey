@@ -1621,6 +1621,138 @@ export default function AllDocumentForm({
                   </div>
                 )}
               </div>
+            ) : isViewMode && (documentType === 'invoice' || documentType === 'deposit_invoice' || documentType === 'deposit_receipt' || documentType === 'receipt') ? (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {/* Card 1: Document Info */}
+                  <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                    <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>ข้อมูลเอกสาร</p>
+                    <dl className="space-y-3">
+                      {([
+                        { label: 'เลขที่เอกสาร', value: header.documentNumber || '-' },
+                        { label: 'วันที่', value: formatPrintDate(header.documentDate) || '-' },
+                        { label: 'สถานะ', value: header.status || '-' },
+                        ...(documentType === 'invoice' || documentType === 'deposit_invoice' ? [
+                          { label: 'Tax Rate', value: `${header.taxRate || '7'}%` },
+                        ] : []),
+                        ...(documentType === 'invoice' ? [
+                          { label: 'Due Date', value: formatPrintDate((header as any).dueDate) || '-' },
+                          { label: 'DO No', value: (header as any).doNo || '-' },
+                        ] : []),
+                        ...(documentType === 'deposit_invoice' ? [
+                          { label: 'อ้างอิง SO', value: (header as any).linkedSONumber || '-' },
+                        ] : []),
+                        ...(documentType === 'receipt' || documentType === 'deposit_receipt' ? [
+                          { label: 'Received Date', value: formatPrintDate((header as any).receivedDate) || '-' },
+                          { label: 'Payment Reference', value: (header as any).paymentReference || '-' },
+                        ] : []),
+                        ...(documentType === 'deposit_receipt' ? [
+                          { label: 'Payment Amount', value: `฿${formatDisplayAmount(parseFloat((header as any).paymentAmount) || 0)}` },
+                          { label: 'Payment Type', value: (header as any).paymentType || '-' },
+                        ] : []),
+                        ...(documentType === 'receipt' ? [
+                          { label: 'อ้างอิงใบรับมัดจำ', value: (header as any).linkedDepositReceiptNumber || '-' },
+                        ] : []),
+                        ...(header.title ? [{ label: 'Title', value: header.title }] : []),
+                      ] as { label: string; value: string }[]).map(({ label, value }) => (
+                        <div key={label} className="flex items-center justify-between text-sm">
+                          <dt className={`${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{label}</dt>
+                          <dd className={`font-medium text-right ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                  {/* Card 2: Customer Info */}
+                  <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                    <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>ข้อมูลลูกค้า</p>
+                    <dl className="space-y-3">
+                      {([
+                        { label: 'ลูกค้า', value: customerDisplay || header.customer || '-' },
+                        { label: 'Bill To', value: header.billTo || '-' },
+                        ...(header.shipTo && header.shipTo !== header.billTo ? [{ label: 'Ship To', value: header.shipTo }] : []),
+                        { label: 'เงื่อนไขชำระ', value: paymentTermDisplay || '-' },
+                        ...(documentType === 'invoice' ? [
+                          { label: 'เลขผู้เสียภาษี', value: (header as any).customerTaxId || '-' },
+                          { label: 'สาขา', value: (header as any).customerBranch || 'สำนักงานใหญ่' },
+                        ] : []),
+                      ] as { label: string; value: string }[]).map(({ label, value }) => (
+                        <div key={label} className="flex items-start justify-between gap-4 text-sm">
+                          <dt className={`shrink-0 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{label}</dt>
+                          <dd className={`text-right font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                </div>
+                {/* Card 3: Invoice payment status */}
+                {documentType === 'invoice' && (() => {
+                  const ps = (header as any).paymentStatus || 'PENDING';
+                  const badge = ps === 'PAID'
+                    ? { label: 'ชำระแล้ว', cls: darkMode ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-700' }
+                    : ps === 'OVERDUE'
+                    ? { label: 'เกินกำหนด', cls: darkMode ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-700' }
+                    : { label: 'รอชำระ', cls: darkMode ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700' };
+                  return (
+                    <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                      <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>สถานะชำระเงิน</p>
+                      <div className="flex items-center gap-3">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badge.cls}`}>{badge.label}</span>
+                        {ps !== 'PAID' && ((header as any).documentId || (header as any).id) && (
+                          <button type="button"
+                            onClick={async () => {
+                              if (!window.confirm('ยืนยันการชำระเงิน?')) return;
+                              const docId = (header as any).documentId || (header as any).id;
+                              const res = await fetch(`/api/documents/${docId}/mark-paid`, { method: 'PATCH' });
+                              if (!res.ok) { alert('ไม่สามารถอัปเดตสถานะได้ กรุณาลองใหม่'); return; }
+                              setHeader((h: any) => ({ ...h, paymentStatus: 'PAID' }));
+                            }}
+                            className="rounded-lg bg-green-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-green-700">
+                            Mark Paid
+                          </button>
+                        )}
+                        {(header as any).linkedSONumber && (
+                          <span className={`ml-auto text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            SO: <span className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{(header as any).linkedSONumber}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Card 3: Deposit Invoice — deposit details */}
+                {documentType === 'deposit_invoice' && (() => {
+                  const pct = Number((header as any).depositPercentage) || 30;
+                  const qtTotal = totalSellingPrice + tax;
+                  const depositAmt = Math.round(qtTotal * pct / 100 * 100) / 100;
+                  const balanceAmt = Math.round((qtTotal - depositAmt) * 100) / 100;
+                  return (
+                    <div className={`rounded-2xl border p-5 ${darkMode ? 'border-teal-700/60 bg-gray-900/80' : 'border-teal-200 bg-teal-50/40'} shadow-sm`}>
+                      <p className={`mb-4 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-teal-400' : 'text-teal-600'}`}>ข้อมูลมัดจำ</p>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                          <p className={`text-xs font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>มัดจำ (%)</p>
+                          <p className={`mt-1 font-bold ${darkMode ? 'text-teal-300' : 'text-teal-700'}`}>{pct}%</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>ยอดมัดจำ</p>
+                          <p className={`mt-1 font-bold ${darkMode ? 'text-teal-300' : 'text-teal-700'}`}>฿{formatDisplayAmount(depositAmt)}</p>
+                        </div>
+                        <div>
+                          <p className={`text-xs font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>ยอดคงเหลือ</p>
+                          <p className={`mt-1 font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>฿{formatDisplayAmount(balanceAmt)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Remark */}
+                {header.remark && (
+                  <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
+                    <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Remark / Notes</p>
+                    <p className={`whitespace-pre-wrap text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{header.remark}</p>
+                  </div>
+                )}
+              </div>
             ) : (<>
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <div className={`rounded-2xl border p-5 ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'} shadow-sm`}>
@@ -2317,6 +2449,56 @@ export default function AllDocumentForm({
                   </div>
                   {items.map((item, index) => (
                     <div key={`inv-item-${index}`}
+                      className={`grid items-center gap-1 px-4 py-3
+                        ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
+                      style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                    >
+                      <div className={`text-sm font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{index + 1}</div>
+                      <div className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>{item.productCode || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        {getProductDisplayName(item.productCode, item.productName) || item.productName || '-'}
+                      </div>
+                      <div className={`text-right text-sm ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.quantity || '-'}</div>
+                      <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {(unitCodes.find((u: any) => u.unitCode === item.unitCode)?.unitName) || item.unitCode || '-'}
+                      </div>
+                      <div className={`text-right text-sm font-medium ${darkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                        {formatDisplayAmount(parseFloat(item.sellingPrice) || 0)}
+                      </div>
+                      <div className={`text-right text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        ฿{formatDisplayAmount(parseFloat(item.totalSellingPrice) || 0)}
+                      </div>
+                    </div>
+                  ))}
+                  <InvoiceSummary
+                    subtotal={totalSellingPrice}
+                    vat={tax}
+                    grandTotal={totalSellingPrice + tax}
+                    taxRate={taxRate}
+                    depositAmount={parseFloat(header.depositAmountDeducted) > 0
+                      ? parseFloat(header.depositAmountDeducted) : undefined}
+                    depositReceiptNumber={header.linkedDepositReceiptNumber || undefined}
+                    darkMode={darkMode}
+                  />
+                </>
+              ) : documentType === 'receipt' ? (
+                <>
+                  {/* Receipt — display-only, no editable inputs */}
+                  <div
+                    className={`grid px-4 py-3 text-xs font-semibold uppercase tracking-wide
+                      ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-gray-50 text-gray-600'}`}
+                    style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
+                  >
+                    <div>#</div>
+                    <div>Code</div>
+                    <div>Description</div>
+                    <div className="text-right">Qty</div>
+                    <div>หน่วยนับ</div>
+                    <div className="text-right">Unit Price</div>
+                    <div className="text-right">Line Total</div>
+                  </div>
+                  {items.map((item, index) => (
+                    <div key={`rc-item-${index}`}
                       className={`grid items-center gap-1 px-4 py-3
                         ${darkMode ? 'border-t border-gray-700 bg-gray-900' : 'border-t border-gray-200 bg-white'}`}
                       style={{ gridTemplateColumns: '36px 100px minmax(200px,2fr) 70px 80px 120px 130px' }}
