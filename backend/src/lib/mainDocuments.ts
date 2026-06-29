@@ -1046,7 +1046,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     }
   }
 
-  // RE completion trigger: stock OUT + QT/SO Completed when DP+RE >= QT total
+  // RE completion trigger: QT/SO Completed when DP+RE >= QT total (stock-out is DO's job only)
   if (type === 'receipt' && existing === null) {
     let linkedSOId = parseString(header.linkedSOId);
     let linkedQTId = parseString(header.linkedQuotationId);
