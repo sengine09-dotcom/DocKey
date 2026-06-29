@@ -11,6 +11,7 @@ import DocumentsHub from './pages/documents/DocumentsHub';
 import SalesDocuments from './pages/documents/SalesDocuments';
 import PurchaseDocuments from './pages/documents/PurchaseDocuments';
 import OperationsDocuments from './pages/documents/OperationsDocuments';
+import DODocuments from './pages/documents/DODocuments';
 import StockInventory from './pages/inventory/StockInventory';
 import InvoiceHome from './pages/InvoiceHome';
 import KeyInvoice from './pages/KeyInvoice';
@@ -28,6 +29,7 @@ const pageRouteMap: Record<string, string> = {
   'documents-sales': '/documents/sales',
   'documents-purchase': '/documents/purchase',
   'documents-operations': '/documents/operations',
+  'documents-operations-do': '/documents/operations/do',
   'stock-inventory': '/inventory/stock',
   'stocks': '/inventory/stock',
   'invoice-home': '/documents/invoice',
@@ -144,6 +146,10 @@ function ActivationAwareRoutes() {
       <Route
         path="/documents/operations"
         element={<RoutedPage component={OperationsDocuments} currentPage="documents-operations" />}
+      />
+      <Route
+        path="/documents/operations/do"
+        element={<RoutedPage component={DODocuments} currentPage="documents-operations-do" />}
       />
       <Route
         path="/inventory/stock"

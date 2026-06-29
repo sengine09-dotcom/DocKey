@@ -43,12 +43,13 @@ const SYSTEMS = [
     icon: '🛠️',
     title: 'ระบบหลังบ้าน',
     subtitle: 'Operations System',
-    description: 'จัดการใบสั่งงานและการดำเนินงานภายใน',
+    description: 'จัดการใบสั่งงาน ใบส่งสินค้า และการดำเนินงานภายใน',
     color: 'rose',
     types: [
-      { key: 'work_order', label: 'ใบสั่งงาน', icon: '🛠️' },
+      { key: 'work_order',     label: 'ใบสั่งงาน',   icon: '🛠️' },
+      { key: 'delivery_order', label: 'ใบส่งสินค้า', icon: '🚚' },
     ],
-    flow: 'สร้างงาน → มอบหมาย → ปิดงาน',
+    flow: 'สร้างงาน → มอบหมาย → ส่งสินค้า (ตัดสต๊อก) → ปิดงาน',
   },
 ];
 

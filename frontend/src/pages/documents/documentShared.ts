@@ -33,7 +33,7 @@ export const getQuotationStatusStyle = (status: string): { backgroundColor: stri
 
 export const SALES_TYPES: MainDocumentType[] = ['quotation', 'deposit_receipt', 'deposit_invoice', 'invoice', 'receipt'];
 export const PURCHASE_TYPES: MainDocumentType[] = ['purchase_order'];
-export const OPERATIONS_TYPES: MainDocumentType[] = ['work_order'];
+export const OPERATIONS_TYPES: MainDocumentType[] = ['work_order', 'delivery_order'];
 
 export type DocumentsByType = Record<MainDocumentType, any[]>;
 
@@ -57,6 +57,7 @@ export const accentClasses: Record<string, { tab: string; activeTab: string; btn
   amber:   { tab: 'border-amber-500',   activeTab: 'bg-amber-500 text-white border-amber-500',  btn: 'bg-amber-500 hover:bg-amber-600',  badge: 'bg-amber-100 text-amber-700' },
   violet:  { tab: 'border-violet-500',  activeTab: 'bg-violet-600 text-white border-violet-600', btn: 'bg-violet-600 hover:bg-violet-700', badge: 'bg-violet-100 text-violet-700' },
   rose:    { tab: 'border-rose-500',    activeTab: 'bg-rose-600 text-white border-rose-600',    btn: 'bg-rose-600 hover:bg-rose-700',    badge: 'bg-rose-100 text-rose-700' },
+  orange:  { tab: 'border-orange-500',  activeTab: 'bg-orange-600 text-white border-orange-600', btn: 'bg-orange-600 hover:bg-orange-700', badge: 'bg-orange-100 text-orange-700' },
 };
 
 export const createEmptyCollections = (): DocumentsByType => ({
