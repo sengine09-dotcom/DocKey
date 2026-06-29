@@ -9,7 +9,7 @@ const TOKEN_EXPIRY_CACHE_PREFIX = 'doc-key-token-expiry-v3';
 // Module-level sidebar counts cache — survives Layout remounts during navigation
 type SidebarCounts = {
   quotation: number; depositReceipt: number; invoice: number; receipt: number; so: number;
-  pr: number; purchaseOrder: number; gr: number; workOrder: number;
+  pr: number; purchaseOrder: number; gr: number; workOrder: number; deliveryOrder: number;
   customer: number; product: number; vendor: number; company: number; destination: number; paymentTerm: number; endUser: number; unitCode: number;
 };
 let _sidebarCountsCache: SidebarCounts | null = null;
@@ -128,7 +128,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
   });
   const [sidebarCounts, setSidebarCounts] = useState({
     quotation: 0, depositReceipt: 0, invoice: 0, receipt: 0, so: 0,
-    pr: 0, purchaseOrder: 0, gr: 0, workOrder: 0,
+    pr: 0, purchaseOrder: 0, gr: 0, workOrder: 0, deliveryOrder: 0,
     customer: 0, product: 0, vendor: 0, company: 0, destination: 0, paymentTerm: 0, endUser: 0, unitCode: 0,
   });
   const [user, setUser] = useState({
@@ -268,6 +268,14 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       count: sidebarCounts.workOrder,
       isActive: currentPage === 'documents-operations',
     },
+    {
+      id: 'documents-operations-do',
+      label: 'ใบส่งสินค้า (DO)',
+      icon: '🚚',
+      href: '/documents/operations/do',
+      count: sidebarCounts.deliveryOrder,
+      isActive: currentPage === 'documents-operations-do',
+    },
   ];
 
   const codeSubmenu = [
@@ -285,6 +293,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     currentPage === 'documents-sales' ||
     currentPage === 'documents-purchase' ||
     currentPage === 'documents-operations' ||
+    currentPage === 'documents-operations-do' ||
     currentPage === 'invoice-home' ||
     currentPage === 'key-invoice';
 
@@ -328,6 +337,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
           purchaseOrder:  d.purchase_order ?? 0,
           gr:             d.gr ?? 0,
           workOrder:      d.work_order ?? 0,
+          deliveryOrder:  d.delivery_order ?? 0,
           customer:       d.customer ?? 0,
           product:        d.product ?? 0,
           vendor:         d.vendor ?? 0,
@@ -369,6 +379,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('documents-purchase');
     } else if (id === 'documents-operations') {
       onNavigate('documents-operations');
+    } else if (id === 'documents-operations-do') {
+      onNavigate('documents-operations-do');
     } else if (id === 'stocks' || id === 'stock-inventory') {
       onNavigate('stock-inventory');
     } else if (id === 'customer-code') {
