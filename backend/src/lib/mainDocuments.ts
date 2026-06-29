@@ -1094,6 +1094,16 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
       }
     }
 
+    // DO gate: SO must have a DO before RC can be created
+    if (linkedSOId) {
+      const doForSO = await prisma.deliveryOrderDocument.findFirst({
+        where: { linkedSOId },
+      });
+      if (!doForSO) {
+        throw new Error('กรุณาออกใบส่งสินค้า (DO) ก่อน');
+      }
+    }
+
     if (linkedSOId && isCashPaymentTerm && linkedQTId) {
       // No-credit path (เงินสด): SO→DI→DR→INV→RC — compare DP+RC total vs QT total
       const qt = await prisma.document.findFirst({
@@ -1120,39 +1130,6 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
             where: { id: linkedSOId },
             data: { status: 'COMPLETED' },
           });
-
-          const stockItems = validItems
-            .map((item: any) => ({
-              productCode: String(parseString(item.productCode) || ''),
-              qty: toNumber(item.quantity),
-            }))
-            .filter((i) => i.productCode && i.qty > 0);
-
-          if (stockItems.length > 0) {
-            const productRows = await prisma.product.findMany({
-              where: { companyId, productCode: { in: stockItems.map((i) => i.productCode) } },
-              select: { id: true, productCode: true },
-            });
-            const productIdMap = new Map(productRows.map((p) => [p.productCode, p.id]));
-
-            const moveItems = stockItems
-              .map((i) => ({ ...i, productId: productIdMap.get(i.productCode) || '' }))
-              .filter((i) => i.productId);
-
-            if (moveItems.length > 0) {
-              await prisma.$transaction(async (tx) => {
-                await recordStockMove(tx, {
-                  items: moveItems,
-                  docNumber: documentNumber,
-                  docType: 'RECEIPT',
-                  direction: 'OUT',
-                  companyId,
-                  docId: documentId,
-                  userId: parseString(header.createdBy) ?? undefined,
-                });
-              });
-            }
-          }
         }
       }
     } else if (linkedSOId) {
