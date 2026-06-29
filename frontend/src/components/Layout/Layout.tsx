@@ -261,12 +261,22 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       isActive: currentPage === 'documents-purchase',
     },
     {
-      id: 'documents-operations',
+      id: 'documents-operations-header',
       label: 'ระบบหลังบ้าน',
       icon: '🛠️',
+      href: '',
+      count: 0,
+      isActive: false,
+      header: true,
+    },
+    {
+      id: 'documents-operations',
+      label: 'ใบสั่งงาน (WO)',
+      icon: '🔧',
       href: '/documents/operations',
       count: sidebarCounts.workOrder,
       isActive: currentPage === 'documents-operations',
+      indent: true,
     },
     {
       id: 'documents-operations-do',
@@ -275,6 +285,7 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       href: '/documents/operations/do',
       count: sidebarCounts.deliveryOrder,
       isActive: currentPage === 'documents-operations-do',
+      indent: true,
     },
   ];
 
@@ -377,6 +388,8 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
       onNavigate('documents-sales');
     } else if (id === 'documents-purchase') {
       onNavigate('documents-purchase');
+    } else if (id === 'documents-operations-header') {
+      // section label — no navigation
     } else if (id === 'documents-operations') {
       onNavigate('documents-operations');
     } else if (id === 'documents-operations-do') {
@@ -410,26 +423,36 @@ export default function Layout({ children, darkMode, setDarkMode, onNavigate = (
     }
   };
 
-  const renderSubmenu = (items: { id: string; label: string; icon: string; href: string; count: number; isActive: boolean }[]) => (
+  const renderSubmenu = (items: { id: string; label: string; icon: string; href: string; count: number; isActive: boolean; header?: boolean; indent?: boolean }[]) => (
     <div className="ml-3 space-y-1">
-      {items.map((submenu) => (
-        <button
-          key={submenu.id}
-          onClick={() => handleMenuClick(submenu.id)}
-          className={`flex w-full items-center gap-4 rounded-lg px-4 py-3 text-left transition-all duration-200 group ${getMenuItemClasses(submenu.isActive)}`}
-        >
-          <span className="text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
-            {submenu.icon}
-          </span>
-          <span className="font-medium whitespace-nowrap text-sm">{submenu.label}</span>
-          <span className={`ml-auto text-xs font-semibold px-1.5 py-0.5 rounded-full ${
-            submenu.isActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
-          }`}>
-            {submenu.count}
-          </span>
-          {submenu.isActive && <div className="w-1 h-6 bg-white rounded-full"></div>}
-        </button>
-      ))}
+      {items.map((submenu) => {
+        if (submenu.header) {
+          return (
+            <div key={submenu.id} className={`flex items-center gap-2 px-4 pt-3 pb-1`}>
+              <span className="text-base">{submenu.icon}</span>
+              <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{submenu.label}</span>
+            </div>
+          );
+        }
+        return (
+          <button
+            key={submenu.id}
+            onClick={() => handleMenuClick(submenu.id)}
+            className={`flex w-full items-center gap-4 rounded-lg px-4 py-3 text-left transition-all duration-200 group ${submenu.indent ? 'ml-4' : ''} ${getMenuItemClasses(submenu.isActive)}`}
+          >
+            <span className="text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
+              {submenu.icon}
+            </span>
+            <span className="font-medium whitespace-nowrap text-sm">{submenu.label}</span>
+            <span className={`ml-auto text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+              submenu.isActive ? 'bg-white/20 text-white' : darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+            }`}>
+              {submenu.count}
+            </span>
+            {submenu.isActive && <div className="w-1 h-6 bg-white rounded-full"></div>}
+          </button>
+        );
+      })}
     </div>
   );
 
