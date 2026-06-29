@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { resolveCompanyContext } from '../lib/companyContext';
 import { recordStockMove } from '../lib/stockService';
+import { validateAndRegisterSerialNumbers } from '../lib/grService';
 
 const generateGRNumber = async (companyId: string): Promise<string> => {
   const yy = String(new Date().getFullYear()).slice(-2);
@@ -87,6 +88,7 @@ const GRController = {
             unit: item.unit?.trim() || null,
             unitPrice: Number(item.unitPrice) || 0,
             remark: item.remark?.trim() || null,
+            serialNumber: item.serialNumber?.trim() || null,
           })),
         },
       },
@@ -126,6 +128,7 @@ const GRController = {
               unit: item.unit?.trim() || null,
               unitPrice: Number(item.unitPrice) || 0,
               remark: item.remark?.trim() || null,
+              serialNumber: item.serialNumber?.trim() || null,
             })),
           },
         },
@@ -228,6 +231,9 @@ const GRController = {
       .filter((i) => i.productId);
 
     const updated = await prisma.$transaction(async (tx) => {
+      // Validate and register serial numbers (throws on missing/duplicate S/N)
+      await validateAndRegisterSerialNumbers(tx, gr, ctx.companyId);
+
       if (moveItems.length > 0) {
         await recordStockMove(tx, {
           items: moveItems,
