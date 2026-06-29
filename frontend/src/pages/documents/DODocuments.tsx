@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout/Layout';
 import AllDocumentForm from '../../components/Documents/AllDocumentForm';
 import useThemePreference from '../../hooks/useThemePreference';
-import { showAppConfirm } from '../../services/dialogService';
+import { showAppAlert, showAppConfirm } from '../../services/dialogService';
 import documentService, { MainDocumentType } from '../../services/documentService';
 import {
   documentTypeConfigs, accentClasses, createEmptyCollections, DocumentsByType,
@@ -78,7 +78,9 @@ export default function DODocuments({ onNavigate = () => { }, currentPage = 'doc
       await documentService.delete(TYPE, getRecordKey(record));
       setDocs((prev) => ({ ...prev, [TYPE]: prev[TYPE].filter((r) => getRecordKey(r) !== getRecordKey(record)) }));
       if (getRecordKey(selectedRecord) === getRecordKey(record)) setSelectedRecord(null);
-    } catch { /* ignore */ }
+    } catch {
+      await showAppAlert({ title: 'ลบไม่สำเร็จ', message: 'ไม่สามารถลบเอกสารได้', tone: 'danger' });
+    }
   };
 
   const handleEditorNavigate = (page: string, state?: unknown) => {
