@@ -2796,6 +2796,31 @@ export default function AllDocumentForm({
                 พิมพ์ (3 ชุด)
               </button>
             )}
+            {/* Receipt View Mode: พิมพ์ DO — only when RC was created via pay-full (has linkedDOId) */}
+            {documentType === 'receipt' && isViewMode && initialData?.linkedDOId && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await documentService.getById('delivery_order', initialData.linkedDOId);
+                    const doDoc = res?.data?.data;
+                    if (doDoc) {
+                      const printWindow = window.open('', '_blank');
+                      if (printWindow) {
+                        printWindow.document.write(`<html><head><title>DO ${escapeHtml(doDoc.documentNumber)}</title></head><body>`);
+                        printWindow.document.write(`<h2>ใบส่งสินค้า ${escapeHtml(doDoc.documentNumber)}</h2>`);
+                        printWindow.document.write(`<p>ลูกค้า: ${escapeHtml(doDoc.billTo || '-')}</p>`);
+                        printWindow.document.write(`<p>อ้างอิง SO: ${escapeHtml(doDoc.referenceNo || '-')}</p>`);
+                        printWindow.document.close();
+                        printWindow.print();
+                      }
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="rounded-xl px-3 py-1.5 text-sm font-semibold border border-orange-400 text-orange-600 hover:bg-orange-50 transition">
+                🚚 พิมพ์ใบส่งสินค้า (DO)
+              </button>
+            )}
             {/* View Mode: ลบ */}
             {isViewMode && (
               <button

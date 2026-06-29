@@ -280,6 +280,38 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     });
   };
 
+  const handlePayFull = async (so: any) => {
+    const confirmed = await showAppConfirm({
+      title: 'ยืนยันรับชำระเงินเต็มจำนวน',
+      message: `ยืนยันรับชำระเงินเต็มจำนวนสำหรับ ${so.soNumber}?\nระบบจะออกใบแจ้งหนี้ ใบเสร็จ และใบส่งสินค้าให้อัตโนมัติ`,
+      confirmText: 'ยืนยัน',
+      cancelText: 'ยกเลิก',
+      tone: 'info',
+    });
+    if (!confirmed) return;
+    try {
+      const res = await soService.payFull(so.id);
+      const { rcId } = res.data.data;
+      // Switch to receipt tab and show the newly created RC
+      setActiveTab('receipt');
+      loadedTabsRef.current.delete('receipt'); // force reload
+      const [rcRes, rows] = await Promise.all([
+        documentService.getById('receipt', rcId),
+        loadTabDocuments('receipt'),
+      ]);
+      setDocs((prev) => ({ ...prev, receipt: rows }));
+      loadedTabsRef.current.add('receipt');
+      setSelectedRecord(rcRes?.data?.data || null);
+      setEditorState(null);
+    } catch (err: any) {
+      await showAppAlert({
+        title: 'เกิดข้อผิดพลาด',
+        message: err?.response?.data?.message || 'ไม่สามารถดำเนินการได้',
+        tone: 'danger',
+      });
+    }
+  };
+
   const handleSOtoBalanceInvoice = async (so: any) => {
     // Lookup customer tax data from already-loaded codes (no extra API call)
     const customer = customerCodes.find((c: any) => c.customerCode === so.customerCode);
@@ -557,6 +589,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               onNavigateToDI={handleNavigateToDI}
               onNavigateToInvoice={handleNavigateToInvoice}
               onCountChange={setSoCount}
+              onPayFull={handlePayFull}
             />
           )}
 

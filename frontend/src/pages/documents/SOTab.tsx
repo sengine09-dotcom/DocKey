@@ -42,9 +42,10 @@ interface Props {
   onNavigateToDI?: (diDocumentNumber: string) => void;
   onNavigateToInvoice?: (invDocumentNumber: string) => void;
   onCountChange?: (count: number) => void;
+  onPayFull?: (so: any) => void;
 }
 
-export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice, onCountChange }: Props) {
+export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice, onCountChange, onPayFull }: Props) {
   const [sos, setSos] = useState<SaleOrder[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -553,6 +554,19 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                     ออกใบกำกับภาษี
                   </button>
                 )}
+                {(() => {
+                  if (viewing.status !== 'CONFIRMED' || !onPayFull || workflowStatus?.di || workflowStatus?.receipt) return null;
+                  const termCode = String(viewing.paymentTerm || '').trim();
+                  const pt = paymentTermCodes.find((t: any) => String(t.termId || '').trim() === termCode);
+                  const isCash = termCode && (!pt || Number(pt.days ?? -1) === 0);
+                  if (!isCash) return null;
+                  return (
+                    <button type="button" onClick={() => onPayFull(viewing)}
+                      className="rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 transition">
+                      ✓ จ่ายเต็ม
+                    </button>
+                  );
+                })()}
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${darkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
                   View Mode
                 </span>
