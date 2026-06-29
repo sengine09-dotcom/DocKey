@@ -32,6 +32,19 @@ export async function recordStockMove(
 
     const signed = direction === 'OUT' ? -Math.abs(item.qty) : Math.abs(item.qty);
 
+    // Guard: ห้ามตัดสต๊อกติดลบ (เฉพาะ OUT)
+    if (direction === 'OUT') {
+      const current = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { stockQty: true, productCode: true },
+      });
+      if (!current || current.stockQty < item.qty) {
+        throw new Error(
+          `สต๊อกไม่เพียงพอ: ${item.productCode} มีสต๊อก ${current?.stockQty ?? 0} ชิ้น ต้องการตัด ${item.qty} ชิ้น`
+        );
+      }
+    }
+
     await tx.stockTransaction.create({
       data: {
         id: ulid(),
