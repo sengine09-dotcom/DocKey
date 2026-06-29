@@ -128,7 +128,7 @@ const isAutoDocumentNumber = (type: MainDocumentType, value: string | null) => {
   return new RegExp(`^${DOCUMENT_PREFIX[type]}-\\d{2}-\\d{6}$`).test(documentNumber);
 };
 
-const buildFallbackDocumentNumber = async (type: MainDocumentType, companyId: string) => {
+export const buildFallbackDocumentNumber = async (type: MainDocumentType, companyId: string) => {
   const yearPart = String(new Date().getFullYear()).slice(-2);
   const prefix = `${DOCUMENT_PREFIX[type]}-${yearPart}-`;
   const latestDocument = await prisma.document.findFirst({
