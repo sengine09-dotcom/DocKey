@@ -2813,9 +2813,13 @@ export default function AllDocumentForm({
                         printWindow.document.write(`<p>อ้างอิง SO: ${escapeHtml(doDoc.referenceNo || '-')}</p>`);
                         printWindow.document.close();
                         printWindow.print();
+                      } else {
+                        await showAppAlert({ title: 'Popup ถูกบล็อก', message: 'กรุณาอนุญาต popup ในเบราว์เซอร์แล้วลองใหม่', tone: 'warning' });
                       }
                     }
-                  } catch { /* ignore */ }
+                  } catch {
+                    await showAppAlert({ title: 'เกิดข้อผิดพลาด', message: 'ไม่สามารถโหลดข้อมูลใบส่งสินค้าได้', tone: 'danger' });
+                  }
                 }}
                 className="rounded-xl px-3 py-1.5 text-sm font-semibold border border-orange-400 text-orange-600 hover:bg-orange-50 transition">
                 🚚 พิมพ์ใบส่งสินค้า (DO)

@@ -46,6 +46,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   const [statusFilter, setStatusFilter] = useState('All');
   const [isTabLoading, setIsTabLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPayingFull, setIsPayingFull] = useState(false);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const loadedTabsRef = useRef<Set<SalesTabId>>(new Set());
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -281,14 +282,16 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   };
 
   const handlePayFull = async (so: any) => {
+    const total = (so.items ?? []).reduce((s: number, i: any) => s + Number(i.totalSellingPrice || 0), 0);
     const confirmed = await showAppConfirm({
       title: 'ยืนยันรับชำระเงินเต็มจำนวน',
-      message: `ยืนยันรับชำระเงินเต็มจำนวนสำหรับ ${so.soNumber}?\nระบบจะออกใบแจ้งหนี้ ใบเสร็จ และใบส่งสินค้าให้อัตโนมัติ`,
+      message: `ยืนยันรับชำระเงินเต็มจำนวน ฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำหรับ ${so.soNumber}?\nระบบจะออกใบแจ้งหนี้ ใบเสร็จ และใบส่งสินค้าให้อัตโนมัติ`,
       confirmText: 'ยืนยัน',
       cancelText: 'ยกเลิก',
       tone: 'info',
     });
     if (!confirmed) return;
+    setIsPayingFull(true);
     try {
       const res = await soService.payFull(so.id);
       const { rcId } = res.data.data;
@@ -309,6 +312,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
         message: err?.response?.data?.message || 'ไม่สามารถดำเนินการได้',
         tone: 'danger',
       });
+    } finally {
+      setIsPayingFull(false);
     }
   };
 
@@ -590,6 +595,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               onNavigateToInvoice={handleNavigateToInvoice}
               onCountChange={setSoCount}
               onPayFull={handlePayFull}
+              payingFull={isPayingFull}
             />
           )}
 

@@ -43,9 +43,10 @@ interface Props {
   onNavigateToInvoice?: (invDocumentNumber: string) => void;
   onCountChange?: (count: number) => void;
   onPayFull?: (so: any) => void;
+  payingFull?: boolean;
 }
 
-export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice, onCountChange, onPayFull }: Props) {
+export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice, onCountChange, onPayFull, payingFull }: Props) {
   const [sos, setSos] = useState<SaleOrder[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -562,7 +563,8 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                   if (!isCash) return null;
                   return (
                     <button type="button" onClick={() => onPayFull(viewing)}
-                      className="rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 transition">
+                      disabled={payingFull}
+                      className={`rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-green-600 transition ${payingFull ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-700'}`}>
                       ✓ จ่ายเต็ม
                     </button>
                   );
