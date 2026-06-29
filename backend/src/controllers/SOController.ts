@@ -233,7 +233,8 @@ const SOController = {
     const ctx = await resolveCompanyContext(req);
     if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
     try {
-      const result = await payFullSO(req.params.id, ctx.companyId, ctx.userName ?? undefined);
+      const serialNumbers: string[] = req.body?.serialNumbers ?? [];
+      const result = await payFullSO(req.params.id, ctx.companyId, serialNumbers, ctx.userName ?? undefined);
       return res.json({ success: true, data: result });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err?.message || 'Pay full failed' });

@@ -1254,6 +1254,7 @@ export const isMainDocumentType = (value: string) => parseDocumentType(value) !=
 export async function payFullSO(
   soId: string,
   companyId: string,
+  serialNumbers: string[],
   userName?: string,
 ): Promise<{ rcId: string; doId: string; invId: string }> {
   const so = await prisma.saleOrder.findFirst({
@@ -1274,6 +1275,11 @@ export async function payFullSO(
     where: { linkedSOId: soId },
   });
   if (existingDI) throw new Error('SO นี้มีใบแจ้งหนี้มัดจำแล้ว ให้ใช้ flow มัดจำแทน');
+
+  const existingRC = await prisma.receiptDocument.findFirst({
+    where: { linkedSOId: soId },
+  });
+  if (existingRC) throw new Error(`SO นี้มีใบเสร็จรับเงินอยู่แล้ว (${existingRC.documentNumber})`);
 
   // Generate document numbers before transaction to avoid async issues inside tx
   const [invNumber, doNumber, rcNumber] = await Promise.all([
@@ -1327,6 +1333,22 @@ export async function payFullSO(
     }));
 
   await prisma.$transaction(async (tx) => {
+    // 0. Validate Serial Numbers (inside tx to prevent race conditions)
+    const totalQty = soItems.reduce((sum, i) => sum + (i.productCode ? Number(i.qty) : 0), 0);
+    if (serialNumbers.length !== totalQty) {
+      throw new Error(`จำนวน Serial Number (${serialNumbers.length}) ไม่ตรงกับจำนวนสินค้า (${totalQty})`);
+    }
+    for (const sn of serialNumbers) {
+      const snRecord = await tx.serialNumber.findUnique({
+        where: { companyId_serialNumber: { companyId, serialNumber: sn } },
+        select: { id: true, status: true },
+      });
+      if (!snRecord) throw new Error(`ไม่พบ Serial Number '${sn}' ในระบบ`);
+      if (snRecord.status !== 'AVAILABLE') {
+        throw new Error(`Serial Number '${sn}' ไม่มีสถานะ AVAILABLE (ปัจจุบัน: ${snRecord.status})`);
+      }
+    }
+
     // 1. Create INV
     await tx.document.create({
       data: {
@@ -1383,6 +1405,24 @@ export async function payFullSO(
       data: { id: doId, documentNumber: doNumber, linkedSOId: soId },
     });
 
+    // 2b. Mark Serial Numbers as SOLD
+    if (serialNumbers.length > 0) {
+      const now = new Date();
+      for (const sn of serialNumbers) {
+        await tx.serialNumber.update({
+          where: { companyId_serialNumber: { companyId, serialNumber: sn } },
+          data: {
+            status: 'SOLD',
+            doId,
+            doNumber,
+            soId,
+            soNumber: so.soNumber,
+            soldAt: now,
+          },
+        });
+      }
+    }
+
     // 3. Stock OUT via DO
     if (moveItems.length > 0) {
       await recordStockMove(tx, {
@@ -1431,7 +1471,7 @@ export async function payFullSO(
       where: { id: soId },
       data: { status: 'COMPLETED' },
     });
-  });
+  }, { maxWait: 5000, timeout: 15000, isolationLevel: 'ReadCommitted' });
 
   return { rcId, doId, invId };
 }
