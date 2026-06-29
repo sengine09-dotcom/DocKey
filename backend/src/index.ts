@@ -12,6 +12,7 @@ import dashboardRoutes from './routes/dashboard';
 import purchaseRoutes from './routes/purchase';
 import stockRoutes from './routes/stock';
 import soRoutes from './routes/so';
+import serialNumberRoutes from './routes/serialNumbers';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/api', dashboardRoutes);
 app.use('/api', purchaseRoutes);
 app.use('/api', stockRoutes);
 app.use('/api', soRoutes);
+app.use('/api', serialNumberRoutes);
 app.use('/api', userRoutes);
 
 // Health check
