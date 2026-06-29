@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import axios from 'axios';
+import { useEffect, useRef, useState } from 'react';
 
 interface Props {
   isOpen: boolean;
@@ -10,16 +9,6 @@ interface Props {
   darkMode: boolean;
 }
 
-interface FieldState {
-  value: string;
-  valid: boolean | null; // null = unchecked, true = valid, false = invalid
-  error: string;
-}
-
-function makeFields(count: number): FieldState[] {
-  return Array.from({ length: count }, () => ({ value: '', valid: null, error: '' }));
-}
-
 export default function SerialNumberInputModal({
   isOpen,
   requiredCount,
@@ -28,20 +17,15 @@ export default function SerialNumberInputModal({
   onCancel,
   darkMode,
 }: Props) {
-  const [fields, setFields] = useState<FieldState[]>(() => makeFields(requiredCount));
+  const [fields, setFields] = useState<{ value: string }[]>([]);
   const [submitError, setSubmitError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const debounceTimers = useRef<(ReturnType<typeof setTimeout> | null)[]>([]);
 
   // Reset fields whenever the modal opens or requiredCount changes
   useEffect(() => {
     if (isOpen) {
-      setFields(makeFields(requiredCount));
+      setFields(Array.from({ length: requiredCount }, () => ({ value: '' })));
       setSubmitError('');
-      setIsSubmitting(false);
-      debounceTimers.current.forEach((t) => t && clearTimeout(t));
-      debounceTimers.current = Array(requiredCount).fill(null);
     }
   }, [isOpen, requiredCount]);
 
@@ -57,50 +41,13 @@ export default function SerialNumberInputModal({
     }
   }, [isOpen]);
 
-  const validateField = useCallback(async (index: number, value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      setFields((prev) => {
-        const next = [...prev];
-        next[index] = { value, valid: null, error: '' };
-        return next;
-      });
-      return;
-    }
-
-    try {
-      const res = await axios.get<{ valid: boolean; error?: string }>(
-        `/api/serial-numbers/validate`,
-        { params: { sn: trimmed } },
-      );
-      const { valid, error } = res.data;
-      setFields((prev) => {
-        const next = [...prev];
-        next[index] = { value, valid: valid ? true : false, error: valid ? '' : (error ?? 'S/N ไม่ถูกต้อง') };
-        return next;
-      });
-    } catch {
-      setFields((prev) => {
-        const next = [...prev];
-        next[index] = { value, valid: false, error: 'ตรวจสอบ S/N ไม่ได้ — กรุณาลองใหม่' };
-        return next;
-      });
-    }
-  }, []);
-
   const handleChange = (index: number, value: string) => {
     setSubmitError('');
     setFields((prev) => {
       const next = [...prev];
-      next[index] = { value, valid: null, error: '' };
+      next[index] = { value };
       return next;
     });
-
-    // Debounce validation by 400 ms
-    if (debounceTimers.current[index]) clearTimeout(debounceTimers.current[index]!);
-    debounceTimers.current[index] = setTimeout(() => {
-      void validateField(index, value);
-    }, 400);
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -113,47 +60,21 @@ export default function SerialNumberInputModal({
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     setSubmitError('');
     const values = fields.map((f) => f.value.trim());
 
-    // Validate no blanks
-    if (values.some((v) => !v)) {
+    // Check for blank fields
+    const empties = values.map((v, i) => i + 1).filter((i) => !values[i - 1]);
+    if (empties.length > 0) {
       setSubmitError('กรุณากรอก Serial Number ทุกช่อง');
       return;
     }
 
-    // Validate no duplicates within modal
-    const unique = new Set(values);
-    if (unique.size !== values.length) {
+    // Check for duplicates within the modal
+    const dupes = values.filter((v, i) => values.indexOf(v) !== i);
+    if (dupes.length > 0) {
       setSubmitError('Serial Number ซ้ำกัน — กรุณาตรวจสอบ');
-      return;
-    }
-
-    // Validate all fields passed server check
-    const anyInvalid = fields.some((f) => f.valid === false);
-    if (anyInvalid) {
-      setSubmitError('Serial Number บางช่องไม่ผ่านการตรวจสอบ — กรุณาแก้ไข');
-      return;
-    }
-
-    // If any field still unchecked (valid === null, value is set), wait / re-run validation
-    const unchecked = fields.filter((f) => f.value.trim() && f.valid === null);
-    if (unchecked.length > 0) {
-      setIsSubmitting(true);
-      try {
-        await Promise.all(
-          fields.map((f, i) => (f.value.trim() && f.valid === null ? validateField(i, f.value) : Promise.resolve()))
-        );
-      } finally {
-        setIsSubmitting(false);
-      }
-      // Re-check after validation
-      setFields((prev) => {
-        const stillInvalid = prev.some((f) => f.valid === false);
-        if (stillInvalid) setSubmitError('Serial Number บางช่องไม่ผ่านการตรวจสอบ — กรุณาแก้ไข');
-        return prev;
-      });
       return;
     }
 
@@ -170,10 +91,8 @@ export default function SerialNumberInputModal({
   const inputNeutral = darkMode
     ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
     : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400';
-  const inputValid = darkMode ? 'border-green-500 bg-green-900/20 text-white' : 'border-green-500 bg-green-50 text-gray-900';
-  const inputInvalid = darkMode ? 'border-red-500 bg-red-900/20 text-white' : 'border-red-500 bg-red-50 text-gray-900';
 
-  const allFilledAndValid = fields.every((f) => f.value.trim() && f.valid === true);
+  const allFilled = fields.every((f) => f.value.trim() !== '');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -220,25 +139,10 @@ export default function SerialNumberInputModal({
                     onChange={(e) => handleChange(i, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(i, e)}
                     placeholder={`S/N รายการที่ ${i + 1}`}
-                    className={`${inputBase} ${
-                      field.valid === true
-                        ? inputValid
-                        : field.valid === false
-                        ? inputInvalid
-                        : inputNeutral
-                    }`}
+                    className={`${inputBase} ${inputNeutral}`}
                   />
-                  {field.valid === true && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 font-bold text-base">✓</span>
-                  )}
-                  {field.valid === false && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500 font-bold text-base">✗</span>
-                  )}
                 </div>
               </div>
-              {field.error && (
-                <p className="ml-8 mt-1 text-xs text-red-500">{field.error}</p>
-              )}
             </div>
           ))}
         </div>
@@ -258,15 +162,15 @@ export default function SerialNumberInputModal({
             </button>
             <button
               type="button"
-              onClick={() => { void handleSubmit(); }}
-              disabled={isSubmitting || !allFilledAndValid}
+              onClick={handleSubmit}
+              disabled={!allFilled}
               className={`rounded-xl px-5 py-2 text-sm font-semibold text-white transition ${
-                isSubmitting || !allFilledAndValid
+                !allFilled
                   ? 'bg-green-400 cursor-not-allowed opacity-60'
                   : 'bg-green-600 hover:bg-green-700'
               }`}
             >
-              {isSubmitting ? 'กำลังตรวจสอบ...' : 'ยืนยันชำระ'}
+              ยืนยันชำระ
             </button>
           </div>
         </div>

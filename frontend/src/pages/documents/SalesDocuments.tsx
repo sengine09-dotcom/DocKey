@@ -285,7 +285,9 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   };
 
   const handlePayFull = (so: any) => {
-    const requiredCount = (so.items ?? []).reduce((s: number, i: any) => s + Number(i.qty || 0), 0);
+    const requiredCount = (so.items ?? [])
+      .filter((i: any) => i.productCode)
+      .reduce((s: number, i: any) => s + Number(i.qty || 0), 0);
     const productSummary = (so.items ?? [])
       .filter((i: any) => i.productCode)
       .map((i: any) => `${i.description || i.productCode} × ${i.qty}`)
@@ -314,7 +316,6 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       setEditorState(null);
     } catch (err: any) {
       setIsSnModalOpen(true); // reopen modal so user sees the error
-      setSnModalData((prev) => prev); // keep existing data
       await showAppAlert({
         title: 'เกิดข้อผิดพลาด',
         message: err?.response?.data?.message || 'ไม่สามารถดำเนินการได้',
