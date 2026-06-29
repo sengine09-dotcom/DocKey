@@ -461,7 +461,7 @@ const fetchDocumentRecord = async (type: MainDocumentType, identifier: string, c
   return mapDocumentRecord(document, customerNameMap, productNameMap, unitNameMap);
 };
 
-const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentId: string, documentNumber: string) => {
+const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentId: string, documentNumber: string, companyId: string) => {
   
   if (type === 'invoice') {
     return prisma.invoiceDocument.upsert({
@@ -632,12 +632,14 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         quotationId: parseString(header.quotationId),
         quotationNumber: parseString(header.quotationNumber),
         linkedSOId: parseString(header.linkedSOId),
+        companyId,
       },
       update: {
         documentNumber,
         quotationId: parseString(header.quotationId),
         quotationNumber: parseString(header.quotationNumber),
         linkedSOId: parseString(header.linkedSOId),
+        companyId,
       },
     });
   }
@@ -991,7 +993,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
   } else {
   }
 
-  await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber);
+  await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber, companyId);
 
   // Auto-update linked DI status to Paid when DR is saved
   if (type === 'deposit_receipt') {
@@ -1097,7 +1099,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
     // DO gate: SO must have a DO before RC can be created
     if (linkedSOId) {
       const doForSO = await prisma.deliveryOrderDocument.findFirst({
-        where: { linkedSOId },
+        where: { linkedSOId, companyId },
       });
       if (!doForSO) {
         throw new Error('กรุณาออกใบส่งสินค้า (DO) ก่อน');
@@ -1402,7 +1404,7 @@ export async function payFullSO(
     });
     await tx.documentItem.createMany({ data: buildItemRows(doId, doNumber, 'DELIVERY_ORDER') });
     await tx.deliveryOrderDocument.create({
-      data: { id: doId, documentNumber: doNumber, linkedSOId: soId },
+      data: { id: doId, documentNumber: doNumber, linkedSOId: soId, companyId },
     });
 
     // 2b. Mark Serial Numbers as SOLD

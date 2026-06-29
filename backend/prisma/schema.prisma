@@ -478,7 +478,10 @@ model DeliveryOrderDocument {
   quotationId     String?  @map("QuotationId") @db.VarChar(26)
   quotationNumber String?  @map("QuotationNumber") @db.VarChar(50)
   linkedSOId      String?  @map("LinkedSOId") @db.VarChar(191)
+  companyId       String?  @map("CompanyID") @db.VarChar(191)
   document        Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([companyId, linkedSOId])
 }
 
 model CustomerReturnDocument {
