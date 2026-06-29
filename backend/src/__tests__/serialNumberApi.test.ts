@@ -176,4 +176,36 @@ describe('GET /api/serial-numbers/validate — SerialNumberController.validate',
       })
     );
   });
+
+  it('ตรวจสอบว่า companyId จาก query param ถูกละเว้น (ใช้ auth context เท่านั้น)', async () => {
+    mockedResolveCompanyContext.mockResolvedValue({ companyId: 'test-company', userId: 'u1', userName: 'Test', role: 'admin' });
+    mockedPrisma.serialNumber.findUnique.mockResolvedValue({
+      status: 'AVAILABLE',
+      productCode: 'GPU-4090',
+      soNumber: null,
+      doNumber: null,
+      soId: null,
+      doId: null,
+      soldAt: null,
+    });
+
+    const req = makeReq({ sn: 'SN-001', companyId: 'ATTACKER-COMPANY' });
+    const res = makeRes();
+
+    await SerialNumberController.validate(req, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      valid: true,
+      serialNumber: 'SN-001',
+      status: 'AVAILABLE',
+      productCode: 'GPU-4090',
+    });
+
+    expect(mockedPrisma.serialNumber.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { companyId_serialNumber: { companyId: 'test-company', serialNumber: 'SN-001' } },
+      })
+    );
+  });
 });

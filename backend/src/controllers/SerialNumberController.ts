@@ -12,7 +12,7 @@ export const SerialNumberController = {
 
       const ctx = await resolveCompanyContext(req);
       if (!ctx) {
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
+        return res.status(401).json({ success: false, error: 'ไม่ได้รับสิทธิ์เข้าถึง' });
       }
 
       const record = await prisma.serialNumber.findUnique({
