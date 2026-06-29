@@ -91,11 +91,10 @@ describe('validateAndRegisterSerialNumbers', () => {
       { productCode: 'CPU-7950X', serialNumber: null },
     ]);
 
-    await validateAndRegisterSerialNumbers(tx as any, gr as any, 'company-1');
-
     // ไม่ควรเรียก findFirst หรือ createMany เลย
     expect(tx.serialNumber.findFirst).not.toHaveBeenCalled();
     expect(tx.serialNumber.createMany).not.toHaveBeenCalled();
+    await expect(validateAndRegisterSerialNumbers(tx as any, gr as any, 'company-1')).resolves.toBeUndefined();
   });
 
   it('สร้าง SerialNumber records สถานะ AVAILABLE เมื่อ S/N ถูกต้องทั้งหมด', async () => {
@@ -125,5 +124,7 @@ describe('validateAndRegisterSerialNumbers', () => {
       productId: 'prod-2',
       status: 'AVAILABLE',
     });
+    const firstRecord = (tx.serialNumber.createMany as jest.Mock).mock.calls[0][0].data[0];
+    expect(firstRecord.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
   });
 });

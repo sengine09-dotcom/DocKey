@@ -1,8 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { monotonicFactory } from 'ulid';
 
-const ulid = monotonicFactory();
-
 type GRItemWithSN = {
   id: string;
   lineNo: number;
@@ -103,6 +101,7 @@ export async function validateAndRegisterSerialNumbers(
   }
 
   // 5. สร้าง SerialNumber records สถานะ AVAILABLE
+  const ulid = monotonicFactory();
   await tx.serialNumber.createMany({
     data: snItems.map((item) => ({
       id: ulid(),
