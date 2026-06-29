@@ -1250,3 +1250,188 @@ export const deleteDocumentByType = async (typeInput: string, identifier: string
 };
 
 export const isMainDocumentType = (value: string) => parseDocumentType(value) != null;
+
+export async function payFullSO(
+  soId: string,
+  companyId: string,
+  userName?: string,
+): Promise<{ rcId: string; doId: string; invId: string }> {
+  const so = await prisma.saleOrder.findFirst({
+    where: { id: soId, companyId },
+    include: { items: { orderBy: { lineNo: 'asc' } } },
+  });
+  if (!so) throw new Error('SO not found');
+  if (so.status !== 'CONFIRMED') throw new Error('SO ต้องอยู่ในสถานะ CONFIRMED');
+
+  if (!so.paymentTerm) throw new Error('SO ไม่มีเงื่อนไขการชำระเงิน');
+  const pt = await prisma.paymentTerm.findFirst({
+    where: { termCode: so.paymentTerm, companyId },
+    select: { days: true },
+  });
+  if (Number(pt?.days ?? -1) !== 0) throw new Error('ใช้ได้เฉพาะ SO ที่มีเงื่อนไขชำระเงินสด (Days=0)');
+
+  const existingDI = await prisma.depositInvoiceDocument.findFirst({
+    where: { linkedSOId: soId },
+  });
+  if (existingDI) throw new Error('SO นี้มีใบแจ้งหนี้มัดจำแล้ว ให้ใช้ flow มัดจำแทน');
+
+  // Generate document numbers before transaction to avoid async issues inside tx
+  const [invNumber, doNumber, rcNumber] = await Promise.all([
+    buildFallbackDocumentNumber('invoice', companyId),
+    buildFallbackDocumentNumber('delivery_order', companyId),
+    buildFallbackDocumentNumber('receipt', companyId),
+  ]);
+
+  const invId = ulid();
+  const doId = ulid();
+  const rcId = ulid();
+  const today = new Date();
+
+  // Calculate totals from SO items
+  const soItems = so.items;
+  const subtotal = soItems.reduce((sum, i) => sum + Number(i.amount), 0);
+  const TAX_RATE = 7;
+  const taxAmount = Math.round(subtotal * TAX_RATE / 100 * 100) / 100;
+  const totalAmt = Math.round((subtotal + taxAmount) * 100) / 100;
+
+  // Resolve product IDs for stock move
+  const stockCandidates = soItems.filter((i) => i.productCode && Number(i.qty) > 0);
+  let productIdMap = new Map<string, string>();
+  if (stockCandidates.length > 0) {
+    const products = await prisma.product.findMany({
+      where: { companyId, productCode: { in: stockCandidates.map((i) => i.productCode!) } },
+      select: { id: true, productCode: true },
+    });
+    productIdMap = new Map(products.map((p) => [p.productCode, p.id]));
+  }
+  const moveItems = stockCandidates
+    .map((i) => ({ productCode: i.productCode!, qty: Number(i.qty), productId: productIdMap.get(i.productCode!) || '' }))
+    .filter((i) => i.productId);
+
+  // Map SO items to DocumentItem fields
+  const buildItemRows = (docId: string, docNumber: string, docType: 'INVOICE' | 'DELIVERY_ORDER' | 'RECEIPT') =>
+    soItems.map((i, idx) => ({
+      id: ulid(),
+      documentId: docId,
+      documentNumber: docNumber,
+      documentType: docType as any,
+      lineNo: idx + 1,
+      productCode: i.productCode || null,
+      quantity: Number(i.qty),
+      sellingPrice: Number(i.unitPrice),
+      totalSellingPrice: Number(i.amount),
+      unitId: i.unit || null,
+      cost: null,
+      margin: null,
+      totalCost: null,
+    }));
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Create INV
+    await tx.document.create({
+      data: {
+        id: invId,
+        documentType: 'INVOICE',
+        documentNumber: invNumber,
+        title: `ใบแจ้งหนี้ — ${so.customerName}`,
+        documentDate: today,
+        customerId: so.customerCode,
+        billTo: so.customerName,
+        status: 'Pending',
+        companyId,
+        taxRate: TAX_RATE,
+        taxAmount,
+        totalAmount: totalAmt,
+        totalSellingPrice: subtotal,
+        referenceNo: so.soNumber,
+      },
+    });
+    await tx.documentItem.createMany({ data: buildItemRows(invId, invNumber, 'INVOICE') });
+    await tx.invoiceDocument.create({
+      data: {
+        id: invId,
+        documentNumber: invNumber,
+        linkedSOId: soId,
+        paymentStatus: 'PAID',
+        linkedReceiptId: rcId,
+        linkedReceiptNumber: rcNumber,
+      },
+    });
+
+    // 2. Create DO
+    await tx.document.create({
+      data: {
+        id: doId,
+        documentType: 'DELIVERY_ORDER',
+        documentNumber: doNumber,
+        title: `ใบส่งสินค้า — ${so.customerName}`,
+        documentDate: today,
+        customerId: so.customerCode,
+        billTo: so.customerName,
+        status: 'Draft',
+        companyId,
+        remark: 'auto:pay-full',
+        referenceNo: so.soNumber,
+        taxRate: TAX_RATE,
+        taxAmount,
+        totalAmount: totalAmt,
+        totalSellingPrice: subtotal,
+      },
+    });
+    await tx.documentItem.createMany({ data: buildItemRows(doId, doNumber, 'DELIVERY_ORDER') });
+    await tx.deliveryOrderDocument.create({
+      data: { id: doId, documentNumber: doNumber, linkedSOId: soId },
+    });
+
+    // 3. Stock OUT via DO
+    if (moveItems.length > 0) {
+      await recordStockMove(tx, {
+        items: moveItems,
+        docNumber: doNumber,
+        docType: 'DELIVERY_ORDER',
+        direction: 'OUT',
+        companyId,
+        docId: doId,
+        userId: userName,
+      });
+    }
+
+    // 4. Create RC
+    await tx.document.create({
+      data: {
+        id: rcId,
+        documentType: 'RECEIPT',
+        documentNumber: rcNumber,
+        title: `ใบเสร็จรับเงิน — ${so.customerName}`,
+        documentDate: today,
+        customerId: so.customerCode,
+        billTo: so.customerName,
+        status: 'Received',
+        companyId,
+        taxRate: TAX_RATE,
+        taxAmount,
+        totalAmount: totalAmt,
+        totalSellingPrice: subtotal,
+        referenceNo: invNumber,
+      },
+    });
+    await tx.documentItem.createMany({ data: buildItemRows(rcId, rcNumber, 'RECEIPT') });
+    await tx.receiptDocument.create({
+      data: {
+        id: rcId,
+        documentNumber: rcNumber,
+        receivedDate: today,
+        linkedSOId: soId,
+        linkedDOId: doId,
+      },
+    });
+
+    // 5. Complete SO
+    await tx.saleOrder.update({
+      where: { id: soId },
+      data: { status: 'COMPLETED' },
+    });
+  });
+
+  return { rcId, doId, invId };
+}

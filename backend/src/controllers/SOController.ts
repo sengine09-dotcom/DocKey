@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { resolveCompanyContext } from '../lib/companyContext';
+import { payFullSO } from '../lib/mainDocuments';
 
 const generateSONumber = async (companyId: string): Promise<string> => {
   const yy = String(new Date().getFullYear()).slice(-2);
@@ -226,6 +227,17 @@ const SOController = {
       include: itemsInclude,
     });
     return res.json({ success: true, data: updated });
+  },
+
+  async payFull(req: Request, res: Response) {
+    const ctx = await resolveCompanyContext(req);
+    if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    try {
+      const result = await payFullSO(req.params.id, ctx.companyId, ctx.userName ?? undefined);
+      return res.json({ success: true, data: result });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err?.message || 'Pay full failed' });
+    }
   },
 
   async complete(req: Request, res: Response) {
