@@ -40,6 +40,15 @@ enum DepositInvoiceStatus {
   PAID            @map("Paid")
 }
 
+enum SerialNumberStatus {
+  AVAILABLE
+  SOLD
+  RESERVED
+  DAMAGED
+
+  @@map("SerialNumberStatus")
+}
+
 model User {
   id        String   @id @map("ID") @db.Char(26)
   email     String   @unique @map("Email") @db.VarChar(191)
@@ -97,6 +106,7 @@ model Product {
   updatedAt         DateTime           @updatedAt @map("UpdatedAt")
   company           Company            @relation("ProductCompany", fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   stockTransactions StockTransaction[]
+  serialNumbers     SerialNumber[]
 
   @@unique([companyId, productCode])
   @@index([companyId])
@@ -198,6 +208,7 @@ model Company {
   goodsReceipts         GoodsReceipt[]         @relation("GRCompany")
   stockTransactions     StockTransaction[]     @relation("StockTransactionCompany")
   saleOrders            SaleOrder[]            @relation("SOCompany")
+  serialNumbers         SerialNumber[]         @relation("SerialNumberCompany")
 
   @@index([companyCode])
 }
@@ -417,20 +428,48 @@ model GoodsReceipt {
 }
 
 model GRItem {
-  id          String       @id @default(cuid()) @map("ID") @db.VarChar(191)
-  grId        String       @map("GRID") @db.VarChar(191)
-  lineNo      Int          @map("LineNo")
-  productCode String?      @map("ProductCode") @db.VarChar(50)
-  description String       @map("Description") @db.VarChar(255)
-  poQty       Decimal      @default(0) @map("POQty") @db.Decimal(18, 2)
-  receivedQty Decimal      @default(0) @map("ReceivedQty") @db.Decimal(18, 2)
-  unit        String?      @map("Unit") @db.VarChar(50)
-  unitPrice   Decimal      @default(0) @map("UnitPrice") @db.Decimal(19, 4)
-  remark      String?      @map("Remark") @db.VarChar(255)
-  gr          GoodsReceipt @relation(fields: [grId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid()) @map("ID") @db.VarChar(191)
+  grId         String       @map("GRID") @db.VarChar(191)
+  lineNo       Int          @map("LineNo")
+  productCode  String?      @map("ProductCode") @db.VarChar(50)
+  description  String       @map("Description") @db.VarChar(255)
+  poQty        Decimal      @default(0) @map("POQty") @db.Decimal(18, 2)
+  receivedQty  Decimal      @default(0) @map("ReceivedQty") @db.Decimal(18, 2)
+  unit         String?      @map("Unit") @db.VarChar(50)
+  unitPrice    Decimal      @default(0) @map("UnitPrice") @db.Decimal(19, 4)
+  remark       String?      @map("Remark") @db.VarChar(255)
+  serialNumber String?      @map("SerialNumber") @db.VarChar(100)
+  gr           GoodsReceipt @relation(fields: [grId], references: [id], onDelete: Cascade)
 
   @@index([grId])
   @@map("GRItem")
+}
+
+model SerialNumber {
+  id           String             @id @map("ID") @db.VarChar(26)
+  serialNumber String             @map("SerialNumber") @db.VarChar(100)
+  productId    String             @map("ProductID") @db.VarChar(26)
+  productCode  String             @map("ProductCode") @db.VarChar(50)
+  companyId    String             @map("CompanyID") @db.VarChar(191)
+  status       SerialNumberStatus @default(AVAILABLE) @map("Status")
+  grId         String?            @map("GRID") @db.VarChar(191)
+  grNumber     String?            @map("GRNumber") @db.VarChar(50)
+  grItemId     String?            @map("GRItemID") @db.VarChar(191)
+  doId         String?            @map("DOID") @db.VarChar(26)
+  doNumber     String?            @map("DONumber") @db.VarChar(50)
+  soId         String?            @map("SOID") @db.VarChar(191)
+  soNumber     String?            @map("SONumber") @db.VarChar(50)
+  soldAt       DateTime?          @map("SoldAt")
+  createdAt    DateTime           @default(now()) @map("CreatedAt")
+  updatedAt    DateTime           @updatedAt @map("UpdatedAt")
+  product      Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  company      Company            @relation("SerialNumberCompany", fields: [companyId], references: [id])
+
+  @@unique([companyId, serialNumber])
+  @@index([companyId, productCode, status])
+  @@index([companyId, status])
+  @@index([grId])
+  @@map("SerialNumber")
 }
 
 model DeliveryOrderDocument {
