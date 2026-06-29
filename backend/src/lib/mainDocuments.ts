@@ -1279,7 +1279,7 @@ export async function payFullSO(
   if (existingDI) throw new Error(`SO ${so.soNumber} มีใบแจ้งหนี้มัดจำแล้ว ให้ใช้ flow มัดจำแทน`);
 
   const existingRC = await prisma.receiptDocument.findFirst({
-    where: { linkedSOId: soId, companyId },
+    where: { linkedSOId: soId },
     select: { documentNumber: true },
   });
   if (existingRC) throw new Error(`SO ${so.soNumber} มีใบเสร็จรับเงินอยู่แล้ว (${existingRC.documentNumber}) ไม่สามารถชำระซ้ำได้`);
