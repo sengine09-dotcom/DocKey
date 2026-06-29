@@ -295,13 +295,14 @@ model InvoiceDocument {
 }
 
 model ReceiptDocument {
-  id               String    @id @map("ID") @db.Char(26)
-  documentNumber   String    @map("DocumentNumber") @db.Char(26)
-  receivedDate     DateTime? @map("ReceivedDate")
+  id                     String    @id @map("ID") @db.Char(26)
+  documentNumber         String    @map("DocumentNumber") @db.Char(26)
+  receivedDate           DateTime? @map("ReceivedDate")
   paymentReference       String?   @map("PaymentReference") @db.VarChar(100)
   linkedDepositReceiptId String?   @map("LinkedDepositReceiptId") @db.VarChar(26)
   linkedSOId             String?   @map("LinkedSOId") @db.VarChar(191)
   depositAmountDeducted  Decimal?  @map("DepositAmountDeducted") @db.Decimal(19, 4)
+  linkedDOId             String?   @map("LinkedDOId") @db.VarChar(26)
   document               Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
@@ -437,6 +438,7 @@ model DeliveryOrderDocument {
   documentNumber  String   @map("DocumentNumber") @db.Char(26)
   quotationId     String?  @map("QuotationId") @db.VarChar(26)
   quotationNumber String?  @map("QuotationNumber") @db.VarChar(50)
+  linkedSOId      String?  @map("LinkedSOId") @db.VarChar(191)
   document        Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 

@@ -367,6 +367,7 @@ const mapDocumentRecord = (
       linkedDepositReceiptId: document.receiptDocument?.linkedDepositReceiptId || '',
       linkedSOId: document.receiptDocument?.linkedSOId || '',
       depositAmountDeducted: parseNullableNumber(document.receiptDocument?.depositAmountDeducted),
+      linkedDOId: document.receiptDocument?.linkedDOId || '',
     };
   }
 
@@ -421,6 +422,7 @@ const mapDocumentRecord = (
       ...baseRecord,
       quotationId: document.deliveryOrderDocument?.quotationId || '',
       quotationNumber: document.deliveryOrderDocument?.quotationNumber || '',
+      linkedSOId: document.deliveryOrderDocument?.linkedSOId || '',
     };
   }
 
@@ -522,6 +524,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
         linkedSOId: parseString(header.linkedSOId),
         depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
+        linkedDOId: parseString(header.linkedDOId),
       },
       update: {
         documentNumber,
@@ -530,6 +533,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         linkedDepositReceiptId: parseString(header.linkedDepositReceiptId),
         linkedSOId: parseString(header.linkedSOId),
         depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
+        linkedDOId: parseString(header.linkedDOId),
       },
     });
   }
@@ -627,11 +631,13 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         documentNumber,
         quotationId: parseString(header.quotationId),
         quotationNumber: parseString(header.quotationNumber),
+        linkedSOId: parseString(header.linkedSOId),
       },
       update: {
         documentNumber,
         quotationId: parseString(header.quotationId),
         quotationNumber: parseString(header.quotationNumber),
+        linkedSOId: parseString(header.linkedSOId),
       },
     });
   }
