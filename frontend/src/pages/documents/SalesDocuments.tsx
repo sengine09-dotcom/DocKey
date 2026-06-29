@@ -22,6 +22,7 @@ import {
 } from './documentShared';
 import soService from '../../services/soService';
 import SOTab from './SOTab';
+import SerialNumberInputModal from '../../components/Documents/SerialNumberInputModal';
 
 type SalesTabId = MainDocumentType | 'so';
 
@@ -47,6 +48,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
   const [isTabLoading, setIsTabLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPayingFull, setIsPayingFull] = useState(false);
+  const [isSnModalOpen, setIsSnModalOpen] = useState(false);
+  const [snModalData, setSnModalData] = useState<{ soId: string; requiredCount: number; productSummary: string } | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const loadedTabsRef = useRef<Set<SalesTabId>>(new Set());
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -281,19 +284,22 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     });
   };
 
-  const handlePayFull = async (so: any) => {
-    const total = (so.items ?? []).reduce((s: number, i: any) => s + Number(i.totalSellingPrice || 0), 0);
-    const confirmed = await showAppConfirm({
-      title: 'ยืนยันรับชำระเงินเต็มจำนวน',
-      message: `ยืนยันรับชำระเงินเต็มจำนวน ฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })} สำหรับ ${so.soNumber}?\nระบบจะออกใบแจ้งหนี้ ใบเสร็จ และใบส่งสินค้าให้อัตโนมัติ`,
-      confirmText: 'ยืนยัน',
-      cancelText: 'ยกเลิก',
-      tone: 'info',
-    });
-    if (!confirmed) return;
+  const handlePayFull = (so: any) => {
+    const requiredCount = (so.items ?? []).reduce((s: number, i: any) => s + Number(i.qty || 0), 0);
+    const productSummary = (so.items ?? [])
+      .filter((i: any) => i.productCode)
+      .map((i: any) => `${i.description || i.productCode} × ${i.qty}`)
+      .join(', ');
+    setSnModalData({ soId: so.id, requiredCount, productSummary });
+    setIsSnModalOpen(true);
+  };
+
+  const handleSnConfirm = async (sns: string[]) => {
+    if (!snModalData) return;
+    setIsSnModalOpen(false);
     setIsPayingFull(true);
     try {
-      const res = await soService.payFull(so.id);
+      const res = await soService.payFull(snModalData.soId, sns);
       const { rcId } = res.data.data;
       // Switch to receipt tab and show the newly created RC
       setActiveTab('receipt');
@@ -307,6 +313,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       setSelectedRecord(rcRes?.data?.data || null);
       setEditorState(null);
     } catch (err: any) {
+      setIsSnModalOpen(true); // reopen modal so user sees the error
+      setSnModalData((prev) => prev); // keep existing data
       await showAppAlert({
         title: 'เกิดข้อผิดพลาด',
         message: err?.response?.data?.message || 'ไม่สามารถดำเนินการได้',
@@ -906,6 +914,18 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
           )}
         </div>
       </div>
+
+      {/* Serial Number scan modal — shown when user clicks จ่ายเต็ม */}
+      {snModalData && (
+        <SerialNumberInputModal
+          isOpen={isSnModalOpen}
+          requiredCount={snModalData.requiredCount}
+          productSummary={snModalData.productSummary}
+          onConfirm={(sns) => { void handleSnConfirm(sns); }}
+          onCancel={() => setIsSnModalOpen(false)}
+          darkMode={darkMode}
+        />
+      )}
     </Layout>
   );
 }

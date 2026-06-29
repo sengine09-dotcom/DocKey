@@ -118,9 +118,10 @@ const soService = {
   complete: (id: string) => axios.patch<{ success: boolean; data: SaleOrder }>(`${BASE}/${encodeURIComponent(id)}/complete`),
   markItemsConverted: (id: string, data: { itemIds: string[]; prNumber: string }) =>
     axios.patch(`${BASE}/${encodeURIComponent(id)}/mark-items-converted`, data),
-  payFull: (id: string) =>
+  payFull: (id: string, serialNumbers: string[]) =>
     axios.post<{ success: boolean; data: { rcId: string; doId: string; invId: string } }>(
-      `${BASE}/${encodeURIComponent(id)}/pay-full`
+      `${BASE}/${encodeURIComponent(id)}/pay-full`,
+      { serialNumbers },
     ),
 };
 
