@@ -296,8 +296,12 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     setIsSnModalOpen(true);
   };
 
+  const payingRef = useRef(false);
+
   const handleSnConfirm = async (sns: string[]) => {
     if (!snModalData) return;
+    if (payingRef.current) return; // guard double-submit
+    payingRef.current = true;
     setIsSnModalOpen(false);
     setIsPayingFull(true);
     try {
@@ -322,6 +326,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
         tone: 'danger',
       });
     } finally {
+      payingRef.current = false;
       setIsPayingFull(false);
     }
   };

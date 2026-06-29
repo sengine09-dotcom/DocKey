@@ -213,59 +213,71 @@ const GRController = {
       return res.status(400).json({ success: false, message: 'GR must have at least one item' });
     }
 
-    const stockItems = gr.items
-      .filter((item) => item.productCode && Number(item.receivedQty) > 0)
-      .map((item) => ({
-        productCode: item.productCode!,
-        qty: Number(item.receivedQty),
-      }));
+    try {
+      const stockItems = gr.items
+        .filter((item) => item.productCode && Number(item.receivedQty) > 0)
+        .map((item) => ({
+          productCode: item.productCode!,
+          qty: Number(item.receivedQty),
+        }));
 
-    const productRows = await prisma.product.findMany({
-      where: { companyId: ctx.companyId, productCode: { in: stockItems.map((i) => i.productCode) } },
-      select: { id: true, productCode: true },
-    });
-    const productIdMap = new Map(productRows.map((p) => [p.productCode, p.id]));
-
-    const moveItems = stockItems
-      .map((i) => ({ ...i, productId: productIdMap.get(i.productCode) || '' }))
-      .filter((i) => i.productId);
-
-    const updated = await prisma.$transaction(async (tx) => {
-      // Validate and register serial numbers (throws on missing/duplicate S/N)
-      await validateAndRegisterSerialNumbers(tx, gr, ctx.companyId);
-
-      if (moveItems.length > 0) {
-        await recordStockMove(tx, {
-          items: moveItems,
-          docNumber: gr.grNumber,
-          docType: 'GR',
-          direction: 'IN',
-          companyId: ctx.companyId,
-          docId: gr.id,
-          userId: ctx.userName,
-        });
-      }
-
-      // Update PO status to Completed
-      if (gr.poId) {
-        await tx.document.update({
-          where: { id: gr.poId },
-          data: { status: 'Completed' },
-        });
-      }
-
-      return tx.goodsReceipt.update({
-        where: { id: gr.id },
-        data: {
-          status: 'CONFIRMED',
-          confirmedBy: ctx.userName,
-          confirmedAt: new Date(),
-        },
-        include: { items: { orderBy: { lineNo: 'asc' } } },
+      const productRows = await prisma.product.findMany({
+        where: { companyId: ctx.companyId, productCode: { in: stockItems.map((i) => i.productCode) } },
+        select: { id: true, productCode: true },
       });
-    });
+      const productIdMap = new Map(productRows.map((p) => [p.productCode, p.id]));
 
-    return res.json({ success: true, data: updated });
+      const moveItems = stockItems
+        .map((i) => ({ ...i, productId: productIdMap.get(i.productCode) || '' }))
+        .filter((i) => i.productId);
+
+      const updated = await prisma.$transaction(async (tx) => {
+        // Validate and register serial numbers (throws on missing/duplicate S/N)
+        await validateAndRegisterSerialNumbers(tx, gr, ctx.companyId);
+
+        if (moveItems.length > 0) {
+          await recordStockMove(tx, {
+            items: moveItems,
+            docNumber: gr.grNumber,
+            docType: 'GR',
+            direction: 'IN',
+            companyId: ctx.companyId,
+            docId: gr.id,
+            userId: ctx.userName,
+          });
+        }
+
+        // Update PO status to Completed
+        if (gr.poId) {
+          await tx.document.update({
+            where: { id: gr.poId },
+            data: { status: 'Completed' },
+          });
+        }
+
+        return tx.goodsReceipt.update({
+          where: { id: gr.id },
+          data: {
+            status: 'CONFIRMED',
+            confirmedBy: ctx.userName,
+            confirmedAt: new Date(),
+          },
+          include: { items: { orderBy: { lineNo: 'asc' } } },
+        });
+      });
+
+      return res.json({ success: true, data: updated });
+    } catch (err: any) {
+      const msg: string = err?.message ?? '';
+      // Business logic errors (Thai messages or known keywords) → 400
+      const isBusiness =
+        /^สต๊อก|^Serial Number|^กรุณา|^ไม่พบ/.test(msg);
+      const status = isBusiness ? 400 : 500;
+      const message = isBusiness
+        ? msg
+        : `เกิดข้อผิดพลาดที่ไม่คาดคิด: ${msg || 'กรุณาติดต่อผู้ดูแลระบบ'}`;
+      return res.status(status).json({ success: false, message });
+    }
   },
 };
 

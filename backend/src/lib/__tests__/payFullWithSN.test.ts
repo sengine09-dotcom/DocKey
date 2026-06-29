@@ -182,7 +182,7 @@ describe('payFullSO — Serial Number integration', () => {
     });
 
     await expect(payFullSO('SO-1', 'company-1', ['SN-001'], 'user1'))
-      .rejects.toThrow('SO นี้มีใบเสร็จรับเงินอยู่แล้ว (RC-26-000001)');
+      .rejects.toThrow('มีใบเสร็จรับเงินอยู่แล้ว (RC-26-000001) ไม่สามารถชำระซ้ำได้');
   });
 
   it('succeed ด้วย serialNumbers = [] เมื่อ SO ไม่มีสินค้า (qty รวม = 0)', async () => {

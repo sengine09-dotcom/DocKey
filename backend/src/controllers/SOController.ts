@@ -237,7 +237,15 @@ const SOController = {
       const result = await payFullSO(req.params.id, ctx.companyId, serialNumbers, ctx.userName ?? undefined);
       return res.json({ success: true, data: result });
     } catch (err: any) {
-      return res.status(400).json({ success: false, message: err?.message || 'Pay full failed' });
+      const msg: string = err?.message ?? '';
+      // Business logic errors (Thai messages) → 400; unexpected errors → 500
+      const isBusiness =
+        /^สต๊อก|^Serial Number|^SO|^ไม่พบ|^จำนวน|^กรุณา/.test(msg);
+      const status = isBusiness ? 400 : 500;
+      const message = isBusiness
+        ? msg
+        : `เกิดข้อผิดพลาดที่ไม่คาดคิด: ${msg || 'กรุณาติดต่อผู้ดูแลระบบ'}`;
+      return res.status(status).json({ success: false, message });
     }
   },
 

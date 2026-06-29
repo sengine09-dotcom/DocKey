@@ -1263,25 +1263,26 @@ export async function payFullSO(
     where: { id: soId, companyId },
     include: { items: { orderBy: { lineNo: 'asc' } } },
   });
-  if (!so) throw new Error('SO not found');
-  if (so.status !== 'CONFIRMED') throw new Error('SO ต้องอยู่ในสถานะ CONFIRMED');
+  if (!so) throw new Error(`ไม่พบ SO: ${soId}`);
+  if (so.status !== 'CONFIRMED') throw new Error(`SO ${so.soNumber} อยู่ในสถานะ ${so.status} (ต้องเป็น CONFIRMED)`);
 
-  if (!so.paymentTerm) throw new Error('SO ไม่มีเงื่อนไขการชำระเงิน');
+  if (!so.paymentTerm) throw new Error(`SO ${so.soNumber} ไม่มีเงื่อนไขการชำระเงิน`);
   const pt = await prisma.paymentTerm.findFirst({
     where: { termCode: so.paymentTerm, companyId },
     select: { days: true },
   });
-  if (Number(pt?.days ?? -1) !== 0) throw new Error('ใช้ได้เฉพาะ SO ที่มีเงื่อนไขชำระเงินสด (Days=0)');
+  if (Number(pt?.days ?? -1) !== 0) throw new Error(`SO ${so.soNumber} ใช้เงื่อนไขเครดิต ${pt?.days} วัน — ใช้ Pay-Full ได้เฉพาะเงินสด (Days=0)`);
 
   const existingDI = await prisma.depositInvoiceDocument.findFirst({
     where: { linkedSOId: soId },
   });
-  if (existingDI) throw new Error('SO นี้มีใบแจ้งหนี้มัดจำแล้ว ให้ใช้ flow มัดจำแทน');
+  if (existingDI) throw new Error(`SO ${so.soNumber} มีใบแจ้งหนี้มัดจำแล้ว ให้ใช้ flow มัดจำแทน`);
 
   const existingRC = await prisma.receiptDocument.findFirst({
     where: { linkedSOId: soId },
+    select: { documentNumber: true },
   });
-  if (existingRC) throw new Error(`SO นี้มีใบเสร็จรับเงินอยู่แล้ว (${existingRC.documentNumber})`);
+  if (existingRC) throw new Error(`SO ${so.soNumber} มีใบเสร็จรับเงินอยู่แล้ว (${existingRC.documentNumber}) ไม่สามารถชำระซ้ำได้`);
 
   // Generate document numbers before transaction to avoid async issues inside tx
   const [invNumber, doNumber, rcNumber] = await Promise.all([
