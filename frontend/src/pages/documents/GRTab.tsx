@@ -47,6 +47,8 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
   const [receivedDate, setReceivedDate] = useState(getTodayStr());
   const [remark, setRemark] = useState('');
   const [formItems, setFormItems] = useState<any[]>([]);
+  // per-row S/N duplicate error messages (index → error string | null)
+  const [snErrors, setSnErrors] = useState<Record<number, string | null>>({});
 
   const formRef = useRef<HTMLDivElement>(null);
 
@@ -131,17 +133,20 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
       unit: item.unitID || '',
       unitPrice: Number(item.sellingPrice || item.cost || 0),
       remark: '',
+      serialNumber: '',
     }));
+    setSnErrors({});
     setFormItems(poItems.length > 0 ? poItems : [emptyItem()]);
   };
 
-  const emptyItem = () => ({ productCode: '', description: '', poQty: 0, receivedQty: 0, unit: '', unitPrice: 0, remark: '' });
+  const emptyItem = () => ({ productCode: '', description: '', poQty: 0, receivedQty: 0, unit: '', unitPrice: 0, remark: '', serialNumber: '' });
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     void loadPoList();
     setSelectedPoId(''); setSelectedPoNumber(''); setVendorCode('');
     setReceivedDate(getTodayStr()); setRemark(''); setFormItems([emptyItem()]);
+    setSnErrors({});
     setEditingId(null); setMode('create');
   };
 
@@ -160,13 +165,35 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
       unit: i.unit || '',
       unitPrice: Number(i.unitPrice),
       remark: i.remark || '',
+      serialNumber: i.serialNumber || '',
     })));
+    setSnErrors({});
     setEditingId(gr.id);
     setMode('edit');
   };
 
   const openView = (gr: any) => { setViewing(gr); setMode('view'); };
   const backToList = () => { setMode('list'); setEditingId(null); setViewing(null); };
+
+  // ── S/N duplicate check on blur ────────────────────────────────────────────
+  const handleSnBlur = (idx: number) => {
+    const sn = (formItems[idx]?.serialNumber ?? '').trim();
+    if (!sn) {
+      setSnErrors((prev) => ({ ...prev, [idx]: null }));
+      return;
+    }
+    const duplicate = formItems.findIndex(
+      (item, i) => i !== idx && (item.serialNumber ?? '').trim() === sn
+    );
+    if (duplicate !== -1) {
+      setSnErrors((prev) => ({
+        ...prev,
+        [idx]: `Serial Number นี้ถูกใช้ซ้ำในรายการที่ ${duplicate + 1}`,
+      }));
+    } else {
+      setSnErrors((prev) => ({ ...prev, [idx]: null }));
+    }
+  };
 
   const handleSave = async () => {
     if (!selectedPoId || !selectedPoNumber) {
@@ -175,6 +202,34 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
     const validItems = formItems.filter((i) => i.description.trim() || i.productCode.trim());
     if (validItems.length === 0) {
       await showAppAlert({ title: 'ข้อผิดพลาด', message: 'กรุณาเพิ่มรายการสินค้าอย่างน้อย 1 รายการ', tone: 'warning' }); return;
+    }
+
+    // Validate: every item with a productCode must have a non-empty serialNumber
+    const missingSN = validItems
+      .map((item, i) => ({ item, originalIdx: formItems.indexOf(item), displayIdx: i + 1 }))
+      .filter(({ item }) => item.productCode.trim() && !(item.serialNumber ?? '').trim());
+    if (missingSN.length > 0) {
+      const lineNums = missingSN.map(({ displayIdx }) => displayIdx).join(', ');
+      await showAppAlert({
+        title: 'ข้อผิดพลาด',
+        message: `กรุณากรอก Serial Number ให้ครบทุกรายการ (ขาดที่บรรทัด: ${lineNums})`,
+        tone: 'warning',
+      });
+      return;
+    }
+
+    // Validate: no duplicate S/N values across items
+    const snValues = validItems
+      .filter((i) => i.productCode.trim())
+      .map((i) => (i.serialNumber ?? '').trim());
+    const dupSN = snValues.find((sn, idx) => snValues.indexOf(sn) !== idx);
+    if (dupSN) {
+      await showAppAlert({
+        title: 'ข้อผิดพลาด',
+        message: `Serial Number '${dupSN}' ถูกใช้ซ้ำในรายการ กรุณาตรวจสอบ`,
+        tone: 'warning',
+      });
+      return;
     }
     const payload: GRPayload = {
       poId: selectedPoId,
@@ -252,6 +307,10 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
       next[idx] = { ...next[idx], [field]: value };
       return next;
     });
+    // clear S/N error for this row while user is typing
+    if (field === 'serialNumber') {
+      setSnErrors((prev) => ({ ...prev, [idx]: null }));
+    }
   };
 
   // ── List view ──────────────────────────────────────────────────────────────
@@ -449,6 +508,7 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                       <th className="px-5 py-3 text-left">หน่วย</th>
                       <th className="px-5 py-3 text-right">ราคา/หน่วย</th>
                       <th className="px-5 py-3 text-right">รวม</th>
+                      <th className="px-5 py-3 text-left">Serial Number</th>
                       <th className="px-5 py-3 text-left">หมายเหตุ</th>
                     </tr>
                   </thead>
@@ -475,6 +535,9 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                           <td className={`px-5 py-3 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                             ฿{formatCurrency(Number(item.receivedQty) * Number(item.unitPrice))}
                           </td>
+                          <td className={`px-5 py-3 text-xs font-mono ${item.serialNumber ? (darkMode ? 'text-orange-300' : 'text-orange-700') : textMuted}`}>
+                            {item.serialNumber || '-'}
+                          </td>
                           <td className={`px-5 py-3 text-xs ${textMuted}`}>{item.remark || '-'}</td>
                         </tr>
                       );
@@ -486,7 +549,7 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                       <td className={`px-5 py-3 text-right text-sm ${darkMode ? '' : 'text-green-700'}`}>
                         ฿{formatCurrency(totalReceivedValue(viewing))}
                       </td>
-                      <td />
+                      <td colSpan={2} />
                     </tr>
                   </tfoot>
                 </table>
@@ -605,6 +668,7 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                   <th className="px-3 py-3 text-right w-28">รับจริง *</th>
                   <th className="px-3 py-3 text-left w-20">หน่วย</th>
                   <th className="px-3 py-3 text-right w-28">ราคา/หน่วย</th>
+                  <th className="px-3 py-3 text-left w-40">Serial Number</th>
                   <th className="px-3 py-3 text-left w-32">หมายเหตุ</th>
                   <th className="px-3 py-3 w-10" />
                 </tr>
@@ -643,6 +707,25 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                         <input type="number" min="0" value={item.unitPrice}
                           onChange={(e) => updateFormItem(idx, 'unitPrice', Number(e.target.value))}
                           className={`w-full rounded border px-2 py-1.5 text-xs text-right outline-none ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.productCode.trim() ? (
+                          <div>
+                            <input
+                              type="text"
+                              placeholder="สแกน / กรอก Serial Number"
+                              value={item.serialNumber ?? ''}
+                              onChange={(e) => updateFormItem(idx, 'serialNumber', e.target.value)}
+                              onBlur={() => handleSnBlur(idx)}
+                              className={`w-full rounded border px-2 py-1.5 text-xs font-mono outline-none transition focus:border-orange-400 ${snErrors[idx] ? 'border-red-400' : darkMode ? 'border-gray-600' : 'border-gray-300'} ${darkMode ? 'bg-gray-700 text-white placeholder-gray-400' : 'bg-white text-gray-900'}`}
+                            />
+                            {snErrors[idx] && (
+                              <p className="mt-0.5 text-[10px] text-red-500">{snErrors[idx]}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={`text-xs ${darkMode ? 'text-gray-600' : 'text-gray-300'}`}>—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <input value={item.remark} onChange={(e) => updateFormItem(idx, 'remark', e.target.value)}

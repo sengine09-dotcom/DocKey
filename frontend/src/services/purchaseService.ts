@@ -31,6 +31,7 @@ export interface GRItemPayload {
   unit?: string;
   unitPrice?: number;
   remark?: string;
+  serialNumber?: string;
 }
 
 export interface GRPayload {
