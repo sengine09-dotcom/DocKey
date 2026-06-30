@@ -393,7 +393,7 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                             แก้ไข
                           </button>
                         )}
-                        {(gr.status === 'DRAFT' || isAdmin) && (
+                        {isAdmin && (
                           <button type="button" onClick={() => handleDelete(gr)}
                             className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
                             ลบ

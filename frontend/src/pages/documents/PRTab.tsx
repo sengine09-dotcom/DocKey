@@ -638,7 +638,7 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
                     </button>
                   </>
                 )}
-                {isAdmin && viewing.status !== 'DRAFT' && (
+                {isAdmin && (
                   <button type="button" onClick={async () => { await handleDelete(viewing); backToList(); }}
                     className="rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition">
                     ลบ
@@ -893,7 +893,7 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
                             </button>
                           </>
                         )}
-                        {isAdmin && pr.status !== 'DRAFT' && (
+                        {isAdmin && (
                           <button type="button" onClick={() => handleDelete(pr)}
                             className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
                             ลบ

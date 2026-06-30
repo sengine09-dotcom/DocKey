@@ -137,8 +137,8 @@ class DocumentController {
         return res.status(400).json({ success: false, message: 'Invalid document type' });
       }
 
-      if (type === 'quotation' && ctx.role !== 'admin') {
-        return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบใบเสนอราคาได้' });
+      if (ctx.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบเอกสารได้' });
       }
 
       const deleted = await deleteDocumentByType(type, id, ctx.companyId);

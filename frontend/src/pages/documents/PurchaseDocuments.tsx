@@ -262,6 +262,7 @@ export default function PurchaseDocuments({ onNavigate = () => { }, currentPage 
           {activeTab === 'po' && (
             <PoTab
               darkMode={darkMode}
+              isAdmin={isAdmin}
               textMuted={textMuted}
               isLoading={isLoading}
               records={filteredPoRecords}
@@ -330,7 +331,7 @@ function PoTab({
   darkMode, textMuted, isLoading, records, allCount, search, setSearch,
   statusFilter, setStatusFilter, selectedRecord, editorState, editorRef,
   onView, onEdit, onDelete, onCreate, onCreateFromSO, onCreateFromPR, onCloseSelected,
-  onEditorNavigate, renderStatus, getVendorDisplay,
+  onEditorNavigate, renderStatus, getVendorDisplay, isAdmin,
 }: any) {
   const [showAll, setShowAll] = useState(false);
   const sectionCard = `rounded-2xl border p-5 shadow-sm ${darkMode ? 'border-gray-700 bg-gray-900/80' : 'border-gray-200 bg-white'}`;
@@ -428,8 +429,8 @@ function PoTab({
                       <div className="flex justify-end gap-1.5 flex-wrap">
                         <button type="button" onClick={() => onEdit(record)}
                           className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>แก้ไข</button>
-                        <button type="button" onClick={() => onDelete(record)}
-                          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>ลบ</button>
+                        {isAdmin && <button type="button" onClick={() => onDelete(record)}
+                          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>ลบ</button>}
                         <button type="button" onClick={() => onView(record)}
                           className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>ดู</button>
                       </div>

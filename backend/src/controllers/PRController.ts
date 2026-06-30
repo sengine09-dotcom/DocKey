@@ -136,8 +136,7 @@ const PRController = {
     });
     if (!pr) return res.status(404).json({ success: false, message: 'Not found' });
 
-    const canDelete = pr.status === 'DRAFT' || ctx.role === 'admin';
-    if (!canDelete) return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบเอกสารที่ไม่ใช่ Draft ได้' });
+    if (ctx.role !== 'admin') return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบเอกสารได้' });
 
     await prisma.purchaseRequisition.delete({ where: { id: pr.id } });
     return res.json({ success: true });

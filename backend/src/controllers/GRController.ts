@@ -150,8 +150,8 @@ const GRController = {
       include: { items: true },
     });
     if (!gr) return res.status(404).json({ success: false, message: 'Not found' });
-    if (gr.status === 'CONFIRMED' && !isAdmin) {
-      return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบใบรับสินค้าที่ยืนยันแล้วได้' });
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบเอกสารได้' });
     }
 
     if (gr.status === 'CONFIRMED') {

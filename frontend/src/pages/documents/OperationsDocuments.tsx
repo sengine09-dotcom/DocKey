@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import Layout from '../../components/Layout/Layout';
 import AllDocumentForm from '../../components/Documents/AllDocumentForm';
 import useThemePreference from '../../hooks/useThemePreference';
@@ -20,7 +21,14 @@ const TABS: { id: OperationsTab; label: string; icon: string }[] = [
 export default function OperationsDocuments({ onNavigate = () => { }, currentPage = 'documents' }: any) {
   const [darkMode, setDarkMode] = useThemePreference();
   const [activeTab, setActiveTab] = useState<OperationsTab>('wo');
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    void axios.get('/api/auth/me').then((res) => {
+      setIsAdmin(String(res.data?.user?.role || '').toLowerCase() === 'admin');
+    }).catch(() => {});
+  }, []);
 
   return (
     <Layout darkMode={darkMode} setDarkMode={setDarkMode} onNavigate={onNavigate} currentPage={currentPage} topBarCaption="🛠️ ระบบหลังบ้าน">
@@ -64,8 +72,8 @@ export default function OperationsDocuments({ onNavigate = () => { }, currentPag
           </div>
 
           {/* Tab content */}
-          {activeTab === 'wo' && <WOTab darkMode={darkMode} onNavigate={onNavigate} />}
-          {activeTab === 'do' && <DOTab darkMode={darkMode} onNavigate={onNavigate} />}
+          {activeTab === 'wo' && <WOTab darkMode={darkMode} onNavigate={onNavigate} isAdmin={isAdmin} />}
+          {activeTab === 'do' && <DOTab darkMode={darkMode} onNavigate={onNavigate} isAdmin={isAdmin} />}
 
         </div>
       </div>
@@ -78,7 +86,7 @@ export default function OperationsDocuments({ onNavigate = () => { }, currentPag
 const WO_TYPE: MainDocumentType = 'work_order';
 const WO_STATUS_OPTIONS = ['All', 'Draft', 'Open', 'In Progress', 'On Hold', 'Completed', 'Closed', 'Cancelled'];
 
-function WOTab({ darkMode, onNavigate }: { darkMode: boolean; onNavigate: any }) {
+function WOTab({ darkMode, onNavigate, isAdmin }: { darkMode: boolean; onNavigate: any; isAdmin: boolean }) {
   const [docs, setDocs] = useState<DocumentsByType>(createEmptyCollections());
   const [editorState, setEditorState] = useState<{ type: MainDocumentType; initialData: any } | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
@@ -243,7 +251,7 @@ function WOTab({ darkMode, onNavigate }: { darkMode: boolean; onNavigate: any })
                     <td className="px-5 py-3.5">
                       <div className="flex justify-end gap-2">
                         <button type="button" onClick={() => handleEdit(record)} className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>แก้ไข</button>
-                        <button type="button" onClick={() => handleDelete(record)} className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>ลบ</button>
+                        {isAdmin && <button type="button" onClick={() => handleDelete(record)} className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>ลบ</button>}
                       </div>
                     </td>
                   </tr>
@@ -304,7 +312,7 @@ function WOTab({ darkMode, onNavigate }: { darkMode: boolean; onNavigate: any })
 const DO_TYPE: MainDocumentType = 'delivery_order';
 const DO_STATUS_OPTIONS = ['All', 'Draft', 'Delivered', 'Cancelled'];
 
-function DOTab({ darkMode, onNavigate }: { darkMode: boolean; onNavigate: any }) {
+function DOTab({ darkMode, onNavigate, isAdmin }: { darkMode: boolean; onNavigate: any; isAdmin: boolean }) {
   const [docs, setDocs] = useState<DocumentsByType>(createEmptyCollections());
   const [editorState, setEditorState] = useState<{ type: MainDocumentType; initialData: any } | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
@@ -455,7 +463,7 @@ function DOTab({ darkMode, onNavigate }: { darkMode: boolean; onNavigate: any })
                     <td className="px-5 py-3.5">
                       <div className="flex justify-end gap-2">
                         <button type="button" onClick={() => handleEdit(record)} className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>แก้ไข</button>
-                        <button type="button" onClick={() => handleDelete(record)} className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>ลบ</button>
+                        {isAdmin && <button type="button" onClick={() => handleDelete(record)} className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>ลบ</button>}
                       </div>
                     </td>
                   </tr>
@@ -478,7 +486,7 @@ function DOTab({ darkMode, onNavigate }: { darkMode: boolean; onNavigate: any })
             <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>🚚 {selectedRecord.documentNumber}</h2>
             <div className="flex gap-2">
               <button type="button" onClick={() => handleEdit(selectedRecord)} className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${acc.btn}`}>แก้ไข</button>
-              <button type="button" onClick={() => handleDelete(selectedRecord)} className="rounded-xl px-4 py-2 text-sm font-semibold bg-red-50 text-red-600 hover:bg-red-100 transition">ลบ</button>
+              {isAdmin && <button type="button" onClick={() => handleDelete(selectedRecord)} className="rounded-xl px-4 py-2 text-sm font-semibold bg-red-50 text-red-600 hover:bg-red-100 transition">ลบ</button>}
               <button type="button" onClick={() => setSelectedRecord(null)} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>ปิด</button>
             </div>
           </div>
