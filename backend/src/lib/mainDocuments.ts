@@ -1221,13 +1221,19 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
       });
 
       if (invoiceDoc) {
-        // Update InvoiceDocument with receipt linking data
+        // Update InvoiceDocument with receipt linking data + mark as PAID
         await prisma.invoiceDocument.update({
           where: { id: invoiceDoc.id },
           data: {
             linkedReceiptId: documentId,
             linkedReceiptNumber: documentNumber,
+            paymentStatus: 'PAID',
           } as any,
+        });
+        // Update invoice Document status to Completed
+        await prisma.document.update({
+          where: { id: invoiceDoc.id },
+          data: { status: 'Completed' },
         });
       }
     }
