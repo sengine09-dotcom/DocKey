@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import ProductSelectionModal from '../ProductSelectionModal';
 import VendorPickerModal from '../VendorPickerModal';
 import CustomerPickerModal from '../CustomerPickerModal';
@@ -309,6 +310,7 @@ export default function AllDocumentForm({
   preloadedQuotations?: any[];
   preloadedUnitCodes?: any[];
 }) {
+  const [isAdmin, setIsAdmin] = useState(false);
   const [mode, setMode] = useState('create');
   const [header, setHeader] = useState(getEmptyHeader(documentType));
   const [items, setItems] = useState([createEmptyItem()]);
@@ -347,6 +349,12 @@ export default function AllDocumentForm({
         sourceDocumentId: q?.documentId || q?.id || '',
         sourceCustomer: q?.customerName || q?.customer || '',
       })));
+
+  useEffect(() => {
+    void axios.get('/api/auth/me').then((res) => {
+      setIsAdmin(String(res.data?.user?.role || '').toLowerCase() === 'admin');
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (preloadedCustomers?.length) setCustomerCodes(preloadedCustomers);
@@ -2825,8 +2833,8 @@ export default function AllDocumentForm({
                 🚚 พิมพ์ใบส่งสินค้า (DO)
               </button>
             )}
-            {/* View Mode: ลบ */}
-            {isViewMode && (
+            {/* View Mode: ลบ — Admin เท่านั้น */}
+            {isViewMode && isAdmin && (
               <button
                 type="button"
                 onClick={() => void handleDeleteDocument()}
