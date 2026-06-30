@@ -798,7 +798,7 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                   แก้ไข
                 </button>
               )}
-              {(viewing.status === 'DRAFT' || isAdmin) && (
+              {isAdmin && (
                 <button
                   type="button"
                   onClick={() => handleDelete(viewing)}
@@ -897,7 +897,7 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                           </button>
                         </>
                       )}
-                      {(so.status === 'DRAFT' || isAdmin) && (
+                      {isAdmin && (
                         <button type="button" onClick={() => handleDelete(so)}
                           className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
                           ลบ

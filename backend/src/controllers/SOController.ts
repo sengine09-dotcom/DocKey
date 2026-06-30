@@ -138,8 +138,7 @@ const SOController = {
       where: { id: req.params.id, companyId: ctx.companyId },
     });
     if (!so) return res.status(404).json({ success: false, message: 'Not found' });
-    const canDelete = so.status === 'DRAFT' || ctx.role === 'admin';
-    if (!canDelete) return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบเอกสารที่ไม่ใช่ Draft ได้' });
+    if (ctx.role !== 'admin') return res.status(403).json({ success: false, message: 'เฉพาะ Admin เท่านั้นที่ลบเอกสารได้' });
 
     await prisma.saleOrder.delete({ where: { id: so.id } });
     return res.json({ success: true });

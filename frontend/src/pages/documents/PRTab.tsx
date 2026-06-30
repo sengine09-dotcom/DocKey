@@ -875,10 +875,12 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
                               className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-white bg-amber-500 hover:bg-amber-600 transition">
                               ส่ง
                             </button>
-                            <button type="button" onClick={() => handleDelete(pr)}
-                              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
-                              ลบ
-                            </button>
+                            {isAdmin && (
+                              <button type="button" onClick={() => handleDelete(pr)}
+                                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${darkMode ? 'bg-red-900/40 text-red-300 hover:bg-red-800/60' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}>
+                                ลบ
+                              </button>
+                            )}
                           </>
                         )}
                         {pr.status === 'PENDING_APPROVAL' && isAdmin && (
