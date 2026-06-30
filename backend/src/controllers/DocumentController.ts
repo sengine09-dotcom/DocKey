@@ -120,7 +120,7 @@ class DocumentController {
       if (!isMainDocumentType(type)) {
         return res.status(400).json({ success: false, message: 'Invalid document type' });
       }
-      const data = await saveDocumentByType(type, req.body, ctx.companyId);
+      const data = await saveDocumentByType(type, req.body, ctx.companyId, ctx.userName);
       return res.json({ success: true, data });
     } catch (error: any) {
       return res.status(500).json({ success: false, message: error.message });

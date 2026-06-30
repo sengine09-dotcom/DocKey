@@ -676,6 +676,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                             <th className="px-5 py-3 text-left">วันที่</th>
                             <th className="px-5 py-3 text-right">มูลค่า (฿)</th>
                             <th className="px-5 py-3 text-left">สถานะ</th>
+                            {activeTab === 'quotation' && <th className="px-5 py-3 text-left">สร้างโดย</th>}
+                            {activeTab === 'quotation' && <th className="px-5 py-3 text-left">อนุมัติโดย</th>}
                             <th className="px-5 py-3 text-right">จัดการ</th>
                           </tr>
                         </thead>
@@ -704,6 +706,8 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                               <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.documentDate)}</td>
                               <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(record.total)}</td>
                               <td className="px-5 py-3.5">{renderStatus(record, activeTab === 'quotation', activeTab === 'deposit_invoice')}</td>
+                              {activeTab === 'quotation' && <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.createdBy || '-'}</td>}
+                              {activeTab === 'quotation' && <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.approvedBy || '-'}</td>}
                               <td className="px-5 py-3.5">
                                 <div className="flex justify-end gap-2">
                                   {activeTab === 'deposit_invoice' && (

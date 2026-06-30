@@ -354,6 +354,8 @@ const mapDocumentRecord = (
       attentionTo: document.quotationDocument?.attentionTo || '',
       linkedInvoiceId: document.quotationDocument?.linkedInvoiceId || '',
       linkedInvoiceNumber: document.quotationDocument?.linkedInvoiceNumber || '',
+      createdBy: document.quotationDocument?.createdBy || '',
+      approvedBy: document.quotationDocument?.approvedBy || '',
     };
   }
 
@@ -461,7 +463,7 @@ const fetchDocumentRecord = async (type: MainDocumentType, identifier: string, c
   return mapDocumentRecord(document, customerNameMap, productNameMap, unitNameMap);
 };
 
-const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentId: string, documentNumber: string, companyId: string) => {
+const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentId: string, documentNumber: string, companyId: string, userName?: string) => {
   
   if (type === 'invoice') {
     return prisma.invoiceDocument.upsert({
@@ -505,10 +507,12 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         attentionTo: '',
         linkedInvoiceId: '',
         linkedInvoiceNumber: '',
+        createdBy: userName ?? null,
       },
       update: {
         documentNumber,
         attentionTo: '',
+        ...(header.status === 'Approved' ? { approvedBy: userName ?? null } : {}),
       } as any,
     });
   }
@@ -716,7 +720,7 @@ export const getDocumentById = async (typeInput: string, identifier: string, com
   return fetchDocumentRecord(type, identifier, companyId);
 };
 
-export const saveDocumentByType = async (typeInput: string, payload: any, companyId: string) => {
+export const saveDocumentByType = async (typeInput: string, payload: any, companyId: string, userName?: string) => {
   const type = parseDocumentType(typeInput);
   if (!type) {
     throw new Error('Invalid document type');
@@ -993,7 +997,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
   } else {
   }
 
-  await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber, companyId);
+  await buildSubtypeUpsert(type, { ...header, status }, documentId, documentNumber, companyId, userName);
 
   // Auto-update linked DI status to Paid when DR is saved
   if (type === 'deposit_receipt') {
