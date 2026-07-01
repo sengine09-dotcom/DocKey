@@ -15,5 +15,6 @@ router.patch('/so/:id/cancel', SOController.cancel);
 router.patch('/so/:id/complete', SOController.complete);
 router.patch('/so/:id/mark-items-converted', SOController.markItemsConverted);
 router.post('/so/:id/pay-full', SOController.payFull);
+router.post('/so/:id/create-do', SOController.createDO);
 
 export default router;

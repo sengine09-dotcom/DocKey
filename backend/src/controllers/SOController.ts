@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { resolveCompanyContext } from '../lib/companyContext';
-import { payFullSO } from '../lib/mainDocuments';
+import { payFullSO, saveDocumentByType } from '../lib/mainDocuments';
 
 const generateSONumber = async (companyId: string): Promise<string> => {
   const yy = String(new Date().getFullYear()).slice(-2);
@@ -277,7 +277,7 @@ const SOController = {
     });
     if (!so) return res.status(404).json({ success: false, message: 'Not found' });
 
-    const [diDoc, drDoc, invDoc, reDoc] = await Promise.all([
+    const [diDoc, drDoc, invDoc, reDoc, doDoc] = await Promise.all([
       prisma.document.findFirst({
         where: { depositInvoiceDocument: { linkedSOId: soId }, companyId },
         select: {
@@ -307,6 +307,10 @@ const SOController = {
           receiptDocument: { select: { receivedDate: true } },
         },
       }),
+      prisma.document.findFirst({
+        where: { deliveryOrderDocument: { linkedSOId: soId }, companyId },
+        select: { documentNumber: true, status: true },
+      }),
     ]);
 
     return res.json({
@@ -334,6 +338,10 @@ const SOController = {
           status: reDoc.status,
           total: Number(reDoc.totalAmount ?? 0),
           receivedDate: reDoc.receiptDocument?.receivedDate?.toISOString() ?? null,
+        } : null,
+        do: doDoc ? {
+          documentNumber: doDoc.documentNumber,
+          status: doDoc.status,
         } : null,
       },
     });
@@ -374,6 +382,67 @@ const SOController = {
     }
 
     return res.json({ success: true, data: result });
+  },
+
+  async createDO(req: Request, res: Response) {
+    const ctx = await resolveCompanyContext(req);
+    if (!ctx) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const { companyId, userName } = ctx;
+    const soId = req.params.id;
+
+    try {
+      const so = await prisma.saleOrder.findFirst({
+        where: { id: soId, companyId },
+        include: { items: { orderBy: { lineNo: 'asc' } } },
+      });
+      if (!so) return res.status(404).json({ success: false, message: 'ไม่พบใบสั่งขาย' });
+      if (so.status !== 'CONFIRMED') {
+        return res.status(400).json({ success: false, message: `SO ${so.soNumber} ต้องอยู่ในสถานะ CONFIRMED` });
+      }
+
+      const existingDO = await prisma.deliveryOrderDocument.findFirst({
+        where: { linkedSOId: soId, document: { companyId } },
+        select: { documentNumber: true },
+      });
+      if (existingDO) {
+        return res.status(400).json({ success: false, message: `มีใบส่งสินค้า ${existingDO.documentNumber} อยู่แล้ว` });
+      }
+
+      const subtotal = so.items.reduce((sum, item) => sum + Number(item.amount), 0);
+      const taxAmount = Math.round(subtotal * 7 / 100 * 100) / 100;
+      const totalAmount = subtotal + taxAmount;
+
+      const payload = {
+        header: {
+          title: `ใบส่งสินค้า — ${so.customerName}`,
+          customer: so.customerCode || '',
+          billTo: so.customerName,
+          documentDate: new Date().toISOString().slice(0, 10),
+          linkedSOId: soId,
+          referenceNo: so.soNumber,
+          taxRate: 7,
+          tax: taxAmount,
+          total: totalAmount,
+          totalSellingPrice: subtotal,
+          status: 'Draft',
+        },
+        items: so.items.map((item) => ({
+          productCode: item.productCode || '',
+          quantity: Number(item.qty),
+          sellingPrice: Number(item.unitPrice),
+          totalSellingPrice: Number(item.amount),
+          unitId: item.unit || null,
+        })),
+      };
+
+      const doc = await saveDocumentByType('delivery_order', payload, companyId, userName ?? undefined);
+      return res.json({ success: true, data: { doId: doc.id, doNumber: doc.documentNumber } });
+    } catch (err: any) {
+      const msg: string = err?.message ?? '';
+      const isBusiness = /^สต๊อก|^ไม่พบ|^SO|^มี/.test(msg);
+      return res.status(isBusiness ? 400 : 500).json({ success: false, message: msg || 'เกิดข้อผิดพลาด' });
+    }
   },
 };
 
