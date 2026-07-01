@@ -349,7 +349,12 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     const pt = paymentTermCodes.find((t: any) => String(t.termId || '').trim() === termCode);
     const isCash = !pt || Number(pt.days || 0) === 0;
 
-    // 1. Check for deposit receipt (DR) — most complete path
+    // 1. Look up DO linked to this SO (fetch once, reuse across paths)
+    const doRes = await documentService.getAll('delivery_order');
+    const doList: any[] = doRes?.data?.data || [];
+    const doDoc = doList.find((d: any) => d.linkedSOId === so.id) || null;
+
+    // 2. Check for deposit receipt (DR) — most complete path
     const drRes = await documentService.getAll('deposit_receipt');
     const drList: any[] = drRes?.data?.data || [];
     setDocs((prev) => ({ ...prev, deposit_receipt: drList }));
@@ -362,7 +367,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       setEditorState({
         type: 'invoice',
         initialData: {
-          ...buildBalanceInvoiceFromDP(full),
+          ...buildBalanceInvoiceFromDP(full, doDoc),
           customerTaxId: customerExtra.customerTaxId,
           customerBranch: customerExtra.customerBranch,
           paymentStatus: 'PENDING',
@@ -371,14 +376,14 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       return;
     }
 
-    // 2. No DR — check for deposit invoice (DI) to deduct deposit amount
+    // 3. No DR — check for deposit invoice (DI) to deduct deposit amount
     const diRes = await documentService.getAll('deposit_invoice');
     const diList: any[] = diRes?.data?.data || [];
     setDocs((prev) => ({ ...prev, deposit_invoice: diList }));
     loadedTabsRef.current.add('deposit_invoice');
     const di = diList.find((d: any) => d.linkedSOId === so.id);
 
-    // 3. Cash customer with no DI yet → must create DI first
+    // 4. Cash customer with no DI yet → must create DI first
     if (isCash && !di) {
       await showAppAlert({
         title: 'ต้องออกใบแจ้งหนี้มัดจำก่อน',
@@ -389,10 +394,10 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
       return;
     }
 
-    // 4. Build invoice (with DI deduction if found; credit customer may skip DI)
+    // 5. Build invoice (with DI deduction if found; credit customer may skip DI)
     setActiveTab('invoice');
     setSelectedRecord(null);
-    setEditorState({ type: 'invoice', initialData: buildInvoiceFromSO(so, di || undefined, customerExtra) });
+    setEditorState({ type: 'invoice', initialData: buildInvoiceFromSO(so, di || undefined, customerExtra, doDoc) });
   };
 
   const handleLinkToDPFromDI = async (di: any) => {
@@ -682,7 +687,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                             <th className="px-5 py-3 text-left">วันที่</th>
                             <th className="px-5 py-3 text-right">มูลค่า (฿)</th>
                             <th className="px-5 py-3 text-left">สถานะ</th>
-                            {activeTab === 'quotation' && <th className="px-5 py-3 text-left">สร้างโดย</th>}
+                            <th className="px-5 py-3 text-left">สร้างโดย</th>
                             {activeTab === 'quotation' && <th className="px-5 py-3 text-left">อนุมัติโดย</th>}
                             <th className="px-5 py-3 text-right">จัดการ</th>
                           </tr>
@@ -712,7 +717,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
                               <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.documentDate)}</td>
                               <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(record.total)}</td>
                               <td className="px-5 py-3.5">{renderStatus(record, activeTab === 'quotation', activeTab === 'deposit_invoice')}</td>
-                              {activeTab === 'quotation' && <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.createdBy || '-'}</td>}
+                              <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.createdBy || '-'}</td>
                               {activeTab === 'quotation' && <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.approvedBy || '-'}</td>}
                               <td className="px-5 py-3.5">
                                 <div className="flex justify-end gap-2">

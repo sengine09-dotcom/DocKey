@@ -40,6 +40,22 @@
 	}
 }
 
+.form-view-mode input:disabled,
+.form-view-mode textarea:disabled,
+.form-view-mode select:disabled {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-shadow: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  cursor: default !important;
+  opacity: 1 !important;
+}
+
 @media print {
 	@page {
 		size: A4 portrait;

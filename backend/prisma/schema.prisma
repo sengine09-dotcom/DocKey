@@ -304,6 +304,7 @@ model InvoiceDocument {
   customerTaxId              String?   @map("CustomerTaxId") @db.VarChar(20)
   customerBranch             String?   @map("CustomerBranch") @db.VarChar(100)
   paymentStatus              String    @default("PENDING") @map("PaymentStatus") @db.VarChar(20)
+  createdBy                  String?   @map("CreatedBy") @db.VarChar(255)
   document                   Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
@@ -316,6 +317,7 @@ model ReceiptDocument {
   linkedSOId             String?   @map("LinkedSOId") @db.VarChar(191)
   depositAmountDeducted  Decimal?  @map("DepositAmountDeducted") @db.Decimal(19, 4)
   linkedDOId             String?   @map("LinkedDOId") @db.VarChar(26)
+  createdBy              String?   @map("CreatedBy") @db.VarChar(255)
   document               Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
@@ -331,6 +333,7 @@ model DepositReceiptDocument {
   linkedSOId            String?   @map("LinkedSOId") @db.VarChar(191)
   linkedDIId            String?   @map("LinkedDIId") @db.VarChar(26)
   linkedDINumber        String?   @map("LinkedDINumber") @db.VarChar(50)
+  createdBy             String?   @map("CreatedBy") @db.VarChar(255)
   document              Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
@@ -341,6 +344,7 @@ model PurchaseOrderDocument {
   supplierName      String?   @map("SupplierName") @db.VarChar(255)
   deliveryDate      DateTime? @map("DeliveryDate")
   vendorQuotationNo String?   @map("VendorQuotationNo") @db.VarChar(100)
+  createdBy         String?   @map("CreatedBy") @db.VarChar(255)
   document          Document  @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
@@ -481,6 +485,7 @@ model DeliveryOrderDocument {
   quotationNumber String?  @map("QuotationNumber") @db.VarChar(50)
   linkedSOId      String?  @map("LinkedSOId") @db.VarChar(191)
   companyId       String?  @map("CompanyID") @db.VarChar(191)
+  createdBy       String?  @map("CreatedBy") @db.VarChar(255)
   document        Document @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@index([companyId, linkedSOId])
@@ -567,5 +572,6 @@ model DepositInvoiceDocument {
   balanceAmount     Decimal  @map("BalanceAmount") @db.Decimal(19, 4)
   linkedDRId        String?  @map("LinkedDRId") @db.VarChar(26)
   linkedDRNumber    String?  @map("LinkedDRNumber") @db.VarChar(50)
+  createdBy         String?  @map("CreatedBy") @db.VarChar(255)
   document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }

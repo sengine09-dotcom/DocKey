@@ -344,6 +344,7 @@ const mapDocumentRecord = (
       customerTaxId: document.invoiceDocument?.customerTaxId || '',
       customerBranch: document.invoiceDocument?.customerBranch || '',
       paymentStatus: computePaymentStatus(storedPaymentStatus, dueDate),
+      createdBy: document.invoiceDocument?.createdBy || '',
     };
   }
 
@@ -370,6 +371,7 @@ const mapDocumentRecord = (
       linkedSOId: document.receiptDocument?.linkedSOId || '',
       depositAmountDeducted: parseNullableNumber(document.receiptDocument?.depositAmountDeducted),
       linkedDOId: document.receiptDocument?.linkedDOId || '',
+      createdBy: document.receiptDocument?.createdBy || '',
     };
   }
 
@@ -385,6 +387,7 @@ const mapDocumentRecord = (
       linkedSOId: document.depositReceiptDocument?.linkedSOId || '',
       linkedDIId: document.depositReceiptDocument?.linkedDIId || '',
       linkedDINumber: document.depositReceiptDocument?.linkedDINumber || '',
+      createdBy: document.depositReceiptDocument?.createdBy || '',
     };
   }
 
@@ -398,6 +401,7 @@ const mapDocumentRecord = (
       balanceAmount: toNumber(document.depositInvoiceDocument?.balanceAmount),
       linkedDRId: document.depositInvoiceDocument?.linkedDRId || '',
       linkedDRNumber: document.depositInvoiceDocument?.linkedDRNumber || '',
+      createdBy: document.depositInvoiceDocument?.createdBy || '',
     };
   }
 
@@ -408,6 +412,7 @@ const mapDocumentRecord = (
       supplierName: document.purchaseOrderDocument?.supplierName || '',
       deliveryDate: document.purchaseOrderDocument?.deliveryDate || null,
       vendorQuotationNo: document.purchaseOrderDocument?.vendorQuotationNo || '',
+      createdBy: document.purchaseOrderDocument?.createdBy || '',
     };
   }
 
@@ -425,6 +430,7 @@ const mapDocumentRecord = (
       quotationId: document.deliveryOrderDocument?.quotationId || '',
       quotationNumber: document.deliveryOrderDocument?.quotationNumber || '',
       linkedSOId: document.deliveryOrderDocument?.linkedSOId || '',
+      createdBy: document.deliveryOrderDocument?.createdBy || '',
     };
   }
 
@@ -482,6 +488,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         customerTaxId: parseString(header.customerTaxId),
         customerBranch: parseString(header.customerBranch),
         paymentStatus: parseString(header.paymentStatus) === 'PAID' ? 'PAID' : 'PENDING',
+        createdBy: userName ?? null,
       } as any,
       update: {
         documentNumber,
@@ -529,6 +536,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         linkedSOId: parseString(header.linkedSOId),
         depositAmountDeducted: parseNullableNumber(header.depositAmountDeducted),
         linkedDOId: parseString(header.linkedDOId),
+        createdBy: userName ?? null,
       },
       update: {
         documentNumber,
@@ -557,7 +565,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
     };
     const saved = await prisma.depositReceiptDocument.upsert({
       where: { id: documentId },
-      create: { id: documentId, ...drData },
+      create: { id: documentId, ...drData, createdBy: userName ?? null },
       update: drData,
     });
     // Back-fill DI with the DR reference
@@ -584,7 +592,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
     };
     return prisma.depositInvoiceDocument.upsert({
       where: { documentId },
-      create: { documentId, ...diData },
+      create: { documentId, ...diData, createdBy: userName ?? null },
       update: diData,
     });
   }
@@ -599,6 +607,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         supplierName: parseString(header.supplierName),
         deliveryDate: parseDate(header.deliveryDate),
         vendorQuotationNo: parseString(header.vendorQuotationNo),
+        createdBy: userName ?? null,
       },
       update: {
         documentNumber,
@@ -637,6 +646,7 @@ const buildSubtypeUpsert = async (type: MainDocumentType, header: any, documentI
         quotationNumber: parseString(header.quotationNumber),
         linkedSOId: parseString(header.linkedSOId),
         companyId,
+        createdBy: userName ?? null,
       },
       update: {
         documentNumber,
@@ -1045,7 +1055,7 @@ export const saveDocumentByType = async (typeInput: string, payload: any, compan
             direction,
             companyId,
             docId: documentId,
-            userId: parseString(header.createdBy) ?? undefined,
+            userId: parseString(header.createdBy) || userName || undefined,
           });
         });
       }
@@ -1390,7 +1400,9 @@ export async function payFullSO(
         paymentStatus: 'PAID',
         linkedReceiptId: rcId,
         linkedReceiptNumber: rcNumber,
-      },
+        doNo: doNumber,
+        createdBy: userName ?? null,
+      } as any,
     });
 
     // 2. Create DO
@@ -1415,7 +1427,7 @@ export async function payFullSO(
     });
     await tx.documentItem.createMany({ data: buildItemRows(doId, doNumber, 'DELIVERY_ORDER') });
     await tx.deliveryOrderDocument.create({
-      data: { id: doId, documentNumber: doNumber, linkedSOId: soId, companyId },
+      data: { id: doId, documentNumber: doNumber, linkedSOId: soId, companyId, createdBy: userName ?? null },
     });
 
     // 2b. Mark Serial Numbers as SOLD
@@ -1476,6 +1488,7 @@ export async function payFullSO(
         receivedDate: today,
         linkedSOId: soId,
         linkedDOId: doId,
+        createdBy: userName ?? null,
       },
     });
 

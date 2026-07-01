@@ -839,6 +839,7 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
                   <th className="px-5 py-3 text-left">เลขที่ PR</th>
                   <th className="px-5 py-3 text-left">ชื่อ / เรื่อง</th>
                   <th className="px-5 py-3 text-left">Vendor</th>
+                  <th className="px-5 py-3 text-left">สร้างโดย</th>
                   <th className="px-5 py-3 text-left">วันที่ต้องการ</th>
                   <th className="px-5 py-3 text-center">รายการ</th>
                   <th className="px-5 py-3 text-right">ประมาณ (฿)</th>
@@ -857,6 +858,7 @@ export default function PRTab({ darkMode, isAdmin }: Props) {
                     </td>
                     <td className={`px-5 py-3.5 font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{pr.title}</td>
                     <td className={`px-5 py-3.5 ${textMuted}`}>{vendorLabel(pr.vendorCode)}</td>
+                    <td className={`px-5 py-3.5 ${textMuted}`}>{pr.requestedBy || '-'}</td>
                     <td className={`px-5 py-3.5 ${textMuted}`}>{formatDate(pr.requiredDate)}</td>
                     <td className={`px-5 py-3.5 text-center ${textMuted}`}>{pr.items?.length || 0}</td>
                     <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>

@@ -193,7 +193,7 @@ export default function DODocuments({ onNavigate = () => { }, currentPage = 'doc
                           )}
                         </td>
                         <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.documentDate)}</td>
-                        <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.linkedSOId || record.referenceNo || '-'}</td>
+                        <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.referenceNo || '-'}</td>
                         <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(record.total || record.totalAmount)}</td>
                         <td className="px-5 py-3.5">
                           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${acc.badge}`}>{record.status}</span>

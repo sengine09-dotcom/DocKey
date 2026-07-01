@@ -351,12 +351,15 @@ function DOTab({ darkMode, onNavigate, isAdmin }: { darkMode: boolean; onNavigat
   const handleCreate = () => { setSelectedRecord(null); setEditorState({ type: DO_TYPE, initialData: null }); };
 
   const handleView = async (record: any) => {
-    setEditorState(null);
+    setSelectedRecord(null);
     try {
       const id = record?.documentId || record?.id || record?.documentNumber;
       const res = await documentService.getById(DO_TYPE, id);
-      setSelectedRecord(res?.data?.data || record);
-    } catch { setSelectedRecord(record); }
+      const full = res?.data?.data || record;
+      setEditorState({ type: DO_TYPE, initialData: { ...full, __mode: 'view' } });
+    } catch {
+      setEditorState({ type: DO_TYPE, initialData: { ...record, __mode: 'view' } });
+    }
   };
 
   const handleEdit = (record: any) => {
@@ -398,7 +401,7 @@ function DOTab({ darkMode, onNavigate, isAdmin }: { darkMode: boolean; onNavigat
 
   return (
     <>
-      <div className={`rounded-2xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}>
+      {!editorState && <div className={`rounded-2xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}>
         {/* Toolbar */}
         <div className={`flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between p-5 border-b ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}>
           <div className="flex gap-3 flex-1 w-full">
@@ -440,6 +443,7 @@ function DOTab({ darkMode, onNavigate, isAdmin }: { darkMode: boolean; onNavigat
                   <th className="px-5 py-3 text-left">เลขเอกสาร</th>
                   <th className="px-5 py-3 text-left">วันที่</th>
                   <th className="px-5 py-3 text-left">อ้างอิง SO</th>
+                  <th className="px-5 py-3 text-left">สร้างโดย</th>
                   <th className="px-5 py-3 text-right">ยอดรวม (฿)</th>
                   <th className="px-5 py-3 text-left">สถานะ</th>
                   <th className="px-5 py-3 text-right">จัดการ</th>
@@ -455,7 +459,8 @@ function DOTab({ darkMode, onNavigate, isAdmin }: { darkMode: boolean; onNavigat
                       {record.referenceNo && <p className={`text-xs mt-0.5 ${textMuted}`}>Ref: {record.referenceNo}</p>}
                     </td>
                     <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.documentDate)}</td>
-                    <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.linkedSOId || record.referenceNo || '-'}</td>
+                    <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.referenceNo || '-'}</td>
+                    <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{record.createdBy || '-'}</td>
                     <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(record.total || record.totalAmount)}</td>
                     <td className="px-5 py-3.5">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${acc.badge}`}>{record.status}</span>
@@ -477,39 +482,9 @@ function DOTab({ darkMode, onNavigate, isAdmin }: { darkMode: boolean; onNavigat
             แสดง {filteredRecords.length} จาก {records.length} รายการ
           </div>
         )}
-      </div>
+      </div>}
 
-      {/* View panel */}
-      {selectedRecord && !editorState && (
-        <div className={`mt-6 rounded-2xl border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm p-6`}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>🚚 {selectedRecord.documentNumber}</h2>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => handleEdit(selectedRecord)} className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition ${acc.btn}`}>แก้ไข</button>
-              {isAdmin && <button type="button" onClick={() => handleDelete(selectedRecord)} className="rounded-xl px-4 py-2 text-sm font-semibold bg-red-50 text-red-600 hover:bg-red-100 transition">ลบ</button>}
-              <button type="button" onClick={() => setSelectedRecord(null)} className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>ปิด</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: 'ชื่อเอกสาร', value: selectedRecord.title || '-' },
-              { label: 'อ้างอิง SO', value: selectedRecord.linkedSOId || '-' },
-              { label: 'วันที่', value: formatDate(selectedRecord.documentDate) },
-              { label: 'ยอดรวม', value: `฿${formatCurrency(selectedRecord.total || selectedRecord.totalAmount)}` },
-              { label: 'สถานะ', value: selectedRecord.status || '-' },
-              { label: 'อ้างอิง', value: selectedRecord.referenceNo || '-' },
-              { label: 'หมายเหตุ', value: selectedRecord.remark || '-' },
-            ].map((item) => (
-              <div key={item.label}>
-                <p className={`text-xs uppercase tracking-wide ${textMuted}`}>{item.label}</p>
-                <p className={`mt-1 text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Editor */}
+      {/* Editor / View */}
       {editorState && (
         <div ref={editorRef} className="mt-6">
           <AllDocumentForm documentType={editorState.type} initialData={editorState.initialData} onNavigate={handleEditorNavigate} darkMode={darkMode} />

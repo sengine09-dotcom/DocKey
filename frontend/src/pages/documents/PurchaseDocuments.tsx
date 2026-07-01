@@ -402,6 +402,7 @@ function PoTab({
                   <th className="px-5 py-3 text-left">เลขที่ PO</th>
                   <th className="px-5 py-3 text-left">เลขที่ QU (Vendor)</th>
                   <th className="px-5 py-3 text-left">Vendor</th>
+                  <th className="px-5 py-3 text-left">สร้างโดย</th>
                   <th className="px-5 py-3 text-left">วันที่</th>
                   <th className="px-5 py-3 text-left">กำหนดส่ง</th>
                   <th className="px-5 py-3 text-right">มูลค่า (฿)</th>
@@ -421,6 +422,7 @@ function PoTab({
                     </td>
                     <td className={`px-5 py-3.5 font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{record.vendorQuotationNo || '-'}</td>
                     <td className={`px-5 py-3.5 ${textMuted}`}>{getVendorDisplay(record)}</td>
+                    <td className={`px-5 py-3.5 ${textMuted}`}>{record.createdBy || '-'}</td>
                     <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.documentDate)}</td>
                     <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(record.deliveryDate)}</td>
                     <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(record.total)}</td>

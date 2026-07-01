@@ -377,6 +377,7 @@ export const buildInvoiceFromSO = (
   so: any,
   di?: any,
   customerExtra?: { customerTaxId: string; customerBranch: string },
+  doDoc?: any,
 ) => {
   const soNum = String(so?.soNumber || '').trim();
   const today = toDateInputValue(new Date());
@@ -386,6 +387,7 @@ export const buildInvoiceFromSO = (
   const diNum = di ? String(di?.documentNumber || '').trim() : '';
   const depositAmt = di ? Number(di?.depositAmount || di?.total || 0) : 0;
   const balanceAmt = Math.round((soTotal - depositAmt) * 100) / 100;
+  const doNum = doDoc ? String(doDoc?.documentNumber || '').trim() : '';
 
   return {
     __mode: 'create',
@@ -412,6 +414,7 @@ export const buildInvoiceFromSO = (
     customerTaxId: customerExtra?.customerTaxId || '',
     customerBranch: customerExtra?.customerBranch || '',
     paymentStatus: 'PENDING',
+    doNo: doNum,
     items: (so?.items || []).map((item: any) => ({
       id: '',
       productCode: item?.productCode || '',
@@ -427,10 +430,11 @@ export const buildInvoiceFromSO = (
   };
 };
 
-export const buildBalanceInvoiceFromDP = (dp: any) => {
+export const buildBalanceInvoiceFromDP = (dp: any, doDoc?: any) => {
   const dpNum = String(dp?.documentNumber || '').trim();
   const today = toDateInputValue(new Date());
   const balanceAmount = Number(dp?.balanceAmount || 0);  // stored on DI, passed via dp context
+  const doNum = doDoc ? String(doDoc?.documentNumber || '').trim() : '';
   return {
     __mode: 'create',
     title: `ใบแจ้งหนี้งวดสุดท้าย — ${dp?.title || dpNum}`,
@@ -450,6 +454,7 @@ export const buildBalanceInvoiceFromDP = (dp: any) => {
     linkedSOId: dp?.linkedSOId || '',
     linkedQuotationId: dp?.linkedQuotationId || '',
     linkedQuotationNumber: dp?.linkedQuotationNumber || '',
+    doNo: doNum,
     items: (dp?.items || []).map((item: any) => ({
       id: item?.id || '', productCode: item?.productCode || '',
       productName: item?.productName || '', quantity: item?.quantity || '',

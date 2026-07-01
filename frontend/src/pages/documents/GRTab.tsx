@@ -363,6 +363,7 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                   <th className="px-5 py-3 text-left">เลขที่ GR</th>
                   <th className="px-5 py-3 text-left">อ้างอิง PO</th>
                   <th className="px-5 py-3 text-left">Vendor</th>
+                  <th className="px-5 py-3 text-left">สร้างโดย</th>
                   <th className="px-5 py-3 text-left">วันรับ</th>
                   <th className="px-5 py-3 text-right">มูลค่า (฿)</th>
                   <th className="px-5 py-3 text-left">สถานะ</th>
@@ -380,6 +381,7 @@ export default function GRTab({ darkMode, isAdmin }: Props) {
                     </td>
                     <td className={`px-5 py-3.5 font-medium ${darkMode ? 'text-orange-300' : 'text-orange-600'}`}>{gr.poNumber || '-'}</td>
                     <td className={`px-5 py-3.5 ${textMuted}`}>{gr.vendorCode ? `${gr.vendorCode} - ${vendorName(gr.vendorCode)}` : '-'}</td>
+                    <td className={`px-5 py-3.5 ${textMuted}`}>{gr.receivedBy || '-'}</td>
                     <td className={`px-5 py-3.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{formatDate(gr.receivedDate)}</td>
                     <td className={`px-5 py-3.5 text-right font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                       ฿{formatCurrency(totalReceivedValue(gr))}

@@ -228,6 +228,7 @@ const getEmptyHeader = (documentType: MainDocumentType) => ({
   customerTaxId: '',
   customerBranch: '',
   paymentStatus: 'PENDING',
+  doNo: '',
 });
 
 const getSubtypeFields = (documentType: MainDocumentType) => {
@@ -528,6 +529,7 @@ export default function AllDocumentForm({
       customerTaxId: initialData.customerTaxId || '',
       customerBranch: initialData.customerBranch || '',
       paymentStatus: initialData.paymentStatus || 'PENDING',
+      doNo: initialData.doNo || '',
     });
 
     if (Array.isArray(initialData.items) && initialData.items.length > 0) {
@@ -1503,7 +1505,7 @@ export default function AllDocumentForm({
               <span><strong>Approved</strong> — ราคาขายถูกล็อกแล้ว สามารถเปลี่ยนสถานะเป็น <strong>Sent</strong> เพื่อส่งให้ลูกค้าได้</span>
             </div>
           )}
-          <fieldset disabled={isViewMode || isReceiptLocked} className={`min-w-0 w-full ${(isViewMode || isReceiptLocked) ? 'opacity-95' : ''}`}>
+          <fieldset disabled={isViewMode || isReceiptLocked} className={`min-w-0 w-full ${isViewMode ? `form-view-mode ${darkMode ? 'text-gray-100' : 'text-gray-900'}` : isReceiptLocked ? 'opacity-95' : ''}`}>
             {documentType === 'quotation' ? (
               <div className={`overflow-hidden rounded-2xl border mb-6 ${darkMode ? 'border-blue-500/30 bg-gradient-to-r from-slate-900 via-blue-950/70 to-slate-900' : 'border-blue-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50'}`}>
                 <div className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-start lg:justify-between">
