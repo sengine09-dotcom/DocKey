@@ -84,6 +84,10 @@ export interface SOWorkflowStatus {
     total: number;
     receivedDate: string | null;
   } | null;
+  do: {
+    documentNumber: string;
+    status: string;
+  } | null;
 }
 
 export async function fetchSOWorkflowStatus(soId: string): Promise<SOWorkflowStatus> {
@@ -122,6 +126,10 @@ const soService = {
     axios.post<{ success: boolean; data: { rcId: string; doId: string; invId: string } }>(
       `${BASE}/${encodeURIComponent(id)}/pay-full`,
       { serialNumbers },
+    ),
+  createDO: (id: string) =>
+    axios.post<{ success: boolean; data: { doId: string; doNumber: string } }>(
+      `${BASE}/${encodeURIComponent(id)}/create-do`,
     ),
 };
 

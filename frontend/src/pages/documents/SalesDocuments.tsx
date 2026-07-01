@@ -296,6 +296,11 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
     setIsSnModalOpen(true);
   };
 
+  const handleSOtoDO = async (so: any): Promise<string> => {
+    const res = await soService.createDO(so.id);
+    return res.data.data.doNumber;
+  };
+
   const payingRef = useRef(false);
 
   const handleSnConfirm = async (sns: string[]) => {
@@ -610,6 +615,7 @@ export default function SalesDocuments({ onNavigate = () => { }, currentPage = '
               onCountChange={setSoCount}
               onPayFull={handlePayFull}
               payingFull={isPayingFull}
+              onCreateDO={handleSOtoDO}
             />
           )}
 

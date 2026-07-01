@@ -44,9 +44,10 @@ interface Props {
   onCountChange?: (count: number) => void;
   onPayFull?: (so: any) => void;
   payingFull?: boolean;
+  onCreateDO?: (so: any) => Promise<string>;
 }
 
-export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice, onCountChange, onPayFull, payingFull }: Props) {
+export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onLinkToDI, onLinkToBalanceInvoice, onNavigateToDI, onNavigateToInvoice, onCountChange, onPayFull, payingFull, onCreateDO }: Props) {
   const [sos, setSos] = useState<SaleOrder[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -60,6 +61,7 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
   const [viewing, setViewing] = useState<SaleOrder | null>(null);
   const [form, setForm] = useState<SOPayload>(emptyForm());
   const [isSaving, setIsSaving] = useState(false);
+  const [creatingDO, setCreatingDO] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState<SOWorkflowStatus | null>(null);
   const [itemGRStatus, setItemGRStatus] = useState<Record<string, SOItemGRStatus>>({});
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
@@ -262,6 +264,25 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
       if (mode === 'view') setViewing(updated);
     } catch (e: any) {
       await showAppAlert({ title: 'ไม่สำเร็จ', message: e?.response?.data?.message || 'เกิดข้อผิดพลาด', tone: 'danger' });
+    }
+  };
+
+  const handleCreateDO = async () => {
+    if (!viewing || !onCreateDO) return;
+    setCreatingDO(true);
+    try {
+      const doNumber = await onCreateDO(viewing);
+      await showAppAlert({ title: 'สร้างใบส่งสินค้าสำเร็จ', message: `DO ${doNumber} ถูกสร้างแล้ว`, tone: 'success' });
+      const ws = await fetchSOWorkflowStatus(viewing.id);
+      setWorkflowStatus(ws);
+    } catch (err: any) {
+      await showAppAlert({
+        title: 'เกิดข้อผิดพลาด',
+        message: err?.response?.data?.message || err?.message || 'ไม่สามารถสร้างใบส่งสินค้าได้',
+        tone: 'danger',
+      });
+    } finally {
+      setCreatingDO(false);
     }
   };
 
@@ -540,6 +561,16 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                     ยืนยัน SO
                   </button>
                 )}
+                {viewing.status === 'CONFIRMED' && onCreateDO && !workflowStatus?.do && (
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateDO()}
+                    disabled={creatingDO}
+                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold text-white bg-orange-500 transition ${creatingDO ? 'opacity-50 cursor-not-allowed' : 'hover:bg-orange-600'}`}
+                  >
+                    {creatingDO ? 'กำลังสร้าง...' : '🚚 สร้าง DO'}
+                  </button>
+                )}
                 {viewing.status === 'CONFIRMED' && onLinkToDI && !workflowStatus?.di && (
                   <button type="button" onClick={() => onLinkToDI(viewing)}
                     className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${darkMode ? 'bg-teal-700 hover:bg-teal-600 text-white' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}>
@@ -604,10 +635,19 @@ export default function SOTab({ darkMode, isAdmin = false, initialQuotation, onL
                   ))}
                 </div>
               </div>
-              {workflowStatus && (workflowStatus.di || workflowStatus.dr || workflowStatus.invoice || workflowStatus.receipt) && (
+              {workflowStatus && (workflowStatus.di || workflowStatus.dr || workflowStatus.invoice || workflowStatus.receipt || workflowStatus.do) && (
                 <div className={`border-t px-5 pb-5 pt-4 ${darkMode ? 'border-blue-500/20' : 'border-blue-100'}`}>
                   <p className={`mb-3 text-xs font-semibold uppercase tracking-wider ${darkMode ? 'text-blue-300' : 'text-blue-700'}`}>สถานะการดำเนินการ</p>
                   <div className="space-y-2">
+                    {workflowStatus.do && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                          <span className={textMuted}>ใบส่งสินค้า</span>
+                          <span className={`font-mono font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{workflowStatus.do.documentNumber}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${darkMode ? 'bg-orange-900/40 text-orange-300' : 'bg-orange-100 text-orange-700'}`}>{workflowStatus.do.status}</span>
+                        </div>
+                      </div>
+                    )}
                     {workflowStatus.di && (
                       <div className="flex items-center justify-between">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
